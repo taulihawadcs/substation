@@ -2638,6 +2638,11 @@ let systemGoneTime = '';
 const incomerFailedMap = {};
 function isIncomerFailedActive(station){ return !!incomerFailedMap[station]; }
 
+// Per-station in-flight lock: prevents overlapping async outage operations
+// (Incomer Failed / Restore) from re-entering during a slow cloud round-trip,
+// which was producing duplicate Failed/restored messages on laggy connections.
+const outageOpLock = {};
+
 // Per-feeder local write timestamps (ISO strings).
 // When we push a status change locally, we record its timestamp here.
 // syncFromCloud will only accept a cloud row if its updated_at is strictly
@@ -3046,23 +3051,27 @@ async function applyIncomerFailed(t){
   const st=$('station').value;
   if(!st){ toast('Select a substation first'); return; }
   if(isIncomerFailedActive(st)){ toast('Incomer Failed already active for this substation'); return; }
+  if(outageOpLock[st]){ toast('An outage operation is already in progress for this substation — please wait'); return; }
+  outageOpLock[st]=true;
+  try{
   const all=DATA.feeders.filter(f=>f.station===st).map(f=>f.name);
   if(!all.length){ toast('No feeders for this substation'); return; }
   const time=t||nowHM();
 
-  // Cross-device send-once: check the cloud BEFORE pushing our own state.
-  // If ANY feeder of this substation is already incomer-failed, another user
-  // triggered it → suppress duplicate message. Offline/unknown → treat as not
-  // active (send), since this is the first trigger from this device.
-  const alreadyCloud = await anyFeederAlreadyInState(all, 'incomer-failed');
-
-  // Snapshot this station's feeders BEFORE applying Incomer Failed
+  // Set the local guard IMMEDIATELY (before any await) so a re-entrant call or
+  // a sync-driven reconcile cannot treat this as a fresh trigger mid-flight.
   const snapshot={};
   all.forEach(name=>{
     const cur=feederStatusMap[name]||{status:'normal',time:''};
     snapshot[name]={status:cur.status, time:cur.time};
   });
   incomerFailedMap[st]={snapshot, time};
+
+  // Cross-device send-once: check the cloud BEFORE pushing our own state.
+  // If ANY feeder of this substation is already incomer-failed, another user
+  // triggered it → suppress duplicate message. Offline/unknown → treat as not
+  // active (send), since this is the first trigger from this device.
+  const alreadyCloud = await anyFeederAlreadyInState(all, 'incomer-failed');
 
   // Apply Incomer Failed to all feeders of this substation
   all.forEach(name=>{ feederStatusMap[name]={status:'incomer-failed',time}; });
@@ -3076,14 +3085,22 @@ async function applyIncomerFailed(t){
   const msg=`Incomer of ${st} Failed at ${time}`;
   dispatchBulkMsg(msg,'Incomer Failed',st);
   toast('🛑 Incomer Failed — all feeders of this substation updated. Click "Incomer Restored" to revert.',3500);
+  } finally { delete outageOpLock[st]; }
 }
 
 async function restoreFromIncomerFailed(){
   const st=$('station').value;
   if(!st || !isIncomerFailedActive(st)) return;
+  if(outageOpLock[st]){ toast('An outage operation is already in progress for this substation — please wait'); return; }
+  outageOpLock[st]=true;
+  try{
   const t=nowHM();
   const rec=incomerFailedMap[st];
   const all=DATA.feeders.filter(f=>f.station===st).map(f=>f.name);
+
+  // Commit the local guard removal BEFORE any await so a re-entrant call or a
+  // sync-driven reconcile cannot re-treat this station as still-failed.
+  delete incomerFailedMap[st];
 
   // Cross-device send-once: suppress the restore MESSAGE only if NO feeder of
   // this substation is still incomer-failed in the cloud (another user already
@@ -3099,7 +3116,6 @@ async function restoreFromIncomerFailed(){
       feederStatusMap[name]={status:'normal',time:''};
     }
   });
-  delete incomerFailedMap[st];
   renderFeederStatus();
   for(const name of all){ await sbPushOneFeedStatus(name,feederStatusMap[name]); }
 
@@ -3110,6 +3126,7 @@ async function restoreFromIncomerFailed(){
   const msg=`Incomer of ${st} restored at ${t}`;
   dispatchBulkMsg(msg,'Incomer Restored',st);
   toast('✅ Incomer Restored — substation feeders reverted and notice sent.',3000);
+  } finally { delete outageOpLock[st]; }
 }
 
 // True if ANY of the given feeders is still at `targetStatus` in the cloud.
@@ -3246,6 +3263,13 @@ const BULK_DEDUP_WINDOW = 60000; // 60 seconds
 let lastBulkMsg = '';   // kept for backward-compat references
 let lastBulkTime = 0;
 
+// Event-level cooldown: blocks the SAME event (e.g. "Incomer Failed" for a
+// given substation) from re-firing within the window even when the message
+// text differs only by its timestamp. This is what stops Failed→restored→
+// Failed flapping from emitting a message on every flip.
+const EVENT_DEDUP_WINDOW = 25000; // 25 seconds
+const recentBulkEvents = {};
+
 async function dispatchBulkMsg(msg, label, station){
   const now = Date.now();
   const key = msg.trim();
@@ -3254,11 +3278,22 @@ async function dispatchBulkMsg(msg, label, station){
     toast(`⚠ Duplicate blocked — ${label} message already sent`);
     return;
   }
-  // Prune old entries to keep the map small
+  // Block if the SAME event (label+station) fired very recently, regardless of
+  // the timestamp embedded in the text. Stops rapid flapping spam.
+  const evtKey = (label||'') + '|' + (station||'');
+  if(recentBulkEvents[evtKey] && (now - recentBulkEvents[evtKey]) < EVENT_DEDUP_WINDOW){
+    toast(`⚠ ${label} just sent for ${station||'this substation'} — flap suppressed`);
+    return;
+  }
+  // Prune old entries to keep the maps small
   for(const k in recentBulkMsgs){
     if(now - recentBulkMsgs[k] > BULK_DEDUP_WINDOW) delete recentBulkMsgs[k];
   }
+  for(const k in recentBulkEvents){
+    if(now - recentBulkEvents[k] > EVENT_DEDUP_WINDOW) delete recentBulkEvents[k];
+  }
   recentBulkMsgs[key] = now;
+  recentBulkEvents[evtKey] = now;
   lastBulkMsg = key; lastBulkTime = now;
 
   const t = nowHM();
@@ -4052,6 +4087,7 @@ function reconcileOutageStateFromMap(){
   }
   const stations = [...new Set(DATA.feeders.map(f=>f.station))];
   stations.forEach(st=>{
+    if(outageOpLock[st]) return; // operation in flight — don't fight it
     const stFeeders = DATA.feeders.filter(f=>f.station===st).map(f=>f.name);
     if(!stFeeders.length) return;
     const allFailed = stFeeders.every(n => (feederStatusMap[n]||{}).status === 'incomer-failed');
