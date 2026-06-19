@@ -242,13 +242,22 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .fs-badge.restored   {background:#f0f9ff;color:#0369a1;border:1.5px solid #38bdf8}
 
 .fs-action select{
-  font-size:10px;padding:3px 5px;border-radius:6px;
+  font-size:13px;padding:6px 9px;border-radius:8px;
   border:1.5px solid var(--line2);background:#fff;
   color:var(--txt);cursor:pointer;
   font-family:'Archivo',sans-serif;font-weight:600;
-  max-width:100px;
+  max-width:130px;line-height:1.5;
 }
 .fs-action select:hover{border-color:var(--blue)}
+/* Taller, well-spaced options in the open dropdown list (desktop) */
+.fs-action select option,
+select.big option,
+#condition option{
+  font-size:15px;
+  padding:11px 12px;
+  line-height:2.0;
+  min-height:40px;
+}
 .fs-empty{font-size:12px;color:var(--dim2);font-style:italic;padding:8px 0;text-align:center}
 
 /* ── System Gone Banner ──────────────────────────────── */
@@ -425,7 +434,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   .fs-badge{font-size:9px;padding:2px 8px;min-width:60px}
   .fs-time{font-size:9px}
   .fs-pre{font-size:8px;padding:1px 5px}
-  .fs-action select{font-size:9px;padding:2px 4px;max-width:88px}
+  .fs-action select{font-size:11px;padding:4px 6px;max-width:104px}
   .sg-banner{padding:7px 10px;margin-bottom:5px;border-radius:9px}
   .sg-banner-label{font-size:11px}
   .sg-banner-sub{font-size:9px}
@@ -661,6 +670,16 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
         </div>
 
       </div><!-- /shutdownArea -->
+
+      <!-- SYSTEM GONE / INCOMER FAILED dispatch area -->
+      <div id="outageArea" style="display:none">
+        <div class="outage-ready" style="background:linear-gradient(135deg,#fff7ed,#fffbeb);border:1.5px solid #d97706;border-radius:10px;padding:14px 16px;">
+          <p id="outageReadyText" style="font-size:13px;color:#b45309;margin-bottom:6px;font-weight:600">Outage notice ready.</p>
+          <p style="font-size:12px;color:var(--dim2);margin-bottom:10px">Preview जाँच गर्नुस् र Dispatch थिच्नुस्। (All affected feeders will be set to this condition and ONE message sent.)</p>
+          <button class="btn" id="outageDispatchBtn" style="background:#d97706;color:#fff" onclick="dispatchOutage()">📣 Dispatch</button>
+        </div>
+      </div>
+
 
     </div>
   </div>
@@ -1234,6 +1253,14 @@ let currentLang = 'ne';
 let currentCondition = '';
 let lastDispatchedMsg = '';
 
+// Robust duplicate-send protection for single/multi-feeder Trip & Shutdown
+// dispatches (dispatchToAll). dispatchInFlight is a hard re-entrancy lock;
+// recentDispatched maps exact message content → last-sent ms, so any identical
+// message within the window is blocked even if app/cloud state changed between.
+let dispatchInFlight = false;
+const recentDispatched = {};
+const DISPATCH_DEDUP_WINDOW = 60000; // 60 seconds
+
 /* ============================================================
    DEFAULTS
    ============================================================ */
@@ -1669,6 +1696,8 @@ function onConditionChange(){
   currentCondition = $('condition').value;
   const tripArea     = $('tripArea');
   const shutdownArea = $('shutdownArea');
+  const outageArea   = $('outageArea');
+  if(outageArea) outageArea.style.display='none';
 
   if(currentCondition === 'trip'){
     setTopFieldsVisible(false);
@@ -1682,24 +1711,33 @@ function onConditionChange(){
     shutdownArea.style.display = 'block';
     $('time').value = nowHM();
     autoBuild();
-  } else if(currentCondition === 'system-gone'){
-    // System Gone selected as a Condition → apply immediately (sends one msg),
-    // then reset the dropdown so the form returns to neutral.
+  } else if(currentCondition === 'system-gone' || currentCondition === 'incomer-failed'){
+    // System Gone / Incomer Failed → show a Dispatch area (two-step, like Trip/
+    // Shutdown). Nothing is sent until the user clicks Dispatch.
     tripArea.style.display='none'; shutdownArea.style.display='none';
-    if(!$('station').value){ toast('Select a substation first'); $('condition').value=''; setTopFieldsVisible(true); currentCondition=''; return; }
-    applySystemGone(nowHM());
-    $('condition').value=''; currentCondition=''; setTopFieldsVisible(true);
-    preview.textContent = 'Select substation, staff, feeder and condition — message will appear here.';
-    preview.classList.add('empty'); $('msgTagWrap').innerHTML='';
-  } else if(currentCondition === 'incomer-failed'){
-    // Incomer Failed selected as a Condition → apply immediately (sends one msg),
-    // then reset the dropdown so the form returns to neutral.
-    tripArea.style.display='none'; shutdownArea.style.display='none';
-    if(!$('station').value){ toast('Select a substation first'); $('condition').value=''; setTopFieldsVisible(true); currentCondition=''; return; }
-    applyIncomerFailed(nowHM());
-    $('condition').value=''; currentCondition=''; setTopFieldsVisible(true);
-    preview.textContent = 'Select substation, staff, feeder and condition — message will appear here.';
-    preview.classList.add('empty'); $('msgTagWrap').innerHTML='';
+    if(!$('station').value){
+      toast('Select a substation first');
+      $('condition').value=''; setTopFieldsVisible(true); currentCondition='';
+      if(outageArea) outageArea.style.display='none';
+      return;
+    }
+    // Block if already in this condition (cannot re-enter until restored)
+    if(currentCondition==='system-gone' && isSystemGoneActive()){
+      toast('⚠ System Gone already active — restore before triggering again.',3500);
+      $('condition').value=''; setTopFieldsVisible(true); currentCondition=''; return;
+    }
+    if(currentCondition==='incomer-failed' && isIncomerFailedActive($('station').value)){
+      toast('⚠ Incomer Failed already active for this substation — restore first.',3500);
+      $('condition').value=''; setTopFieldsVisible(true); currentCondition=''; return;
+    }
+    setTopFieldsVisible(false);
+    const isSG = currentCondition==='system-gone';
+    $('outageReadyText').textContent = isSG
+      ? '⛔ System Gone — all feeders (all substations) will be set to System Gone.'
+      : `🛑 Incomer Failed — all feeders of ${$('station').value} will be set to Incomer Failed.`;
+    $('time').value = nowHM();
+    if(outageArea) outageArea.style.display='block';
+    autoBuild();
   } else {
     setTopFieldsVisible(true);
     tripArea.style.display     = 'none';
@@ -1707,6 +1745,34 @@ function onConditionChange(){
     preview.textContent = 'Select substation, staff, feeder and condition — message will appear here.';
     preview.classList.add('empty');
     $('msgTagWrap').innerHTML = '';
+  }
+}
+
+// Dispatch System Gone / Incomer Failed after the user clicks the Dispatch
+// button (two-step flow). Re-checks the "cannot re-enter until restored" rule.
+async function dispatchOutage(){
+  const cond = $('condition').value;
+  const st   = $('station').value;
+  if(!st){ toast('Select a substation first'); return; }
+  const btn = $('outageDispatchBtn');
+  if(btn){ btn.disabled = true; }
+  try{
+    if(cond === 'system-gone'){
+      if(isSystemGoneActive()){ toast('⚠ System Gone already active — restore first.',3500); return; }
+      await applySystemGone(nowHM());
+    } else if(cond === 'incomer-failed'){
+      if(isIncomerFailedActive(st)){ toast('⚠ Incomer Failed already active for this substation — restore first.',3500); return; }
+      await applyIncomerFailed(nowHM());
+    } else {
+      toast('Select System Gone or Incomer Failed first'); return;
+    }
+    // Reset the form back to neutral after dispatch
+    $('condition').value=''; currentCondition=''; setTopFieldsVisible(true);
+    $('outageArea').style.display='none';
+    preview.textContent = 'Select substation, staff, feeder and condition — message will appear here.';
+    preview.classList.add('empty'); $('msgTagWrap').innerHTML='';
+  } finally {
+    if(btn){ btn.disabled = false; }
   }
 }
 
@@ -1993,14 +2059,50 @@ $('site').addEventListener('keydown', async e=>{
    DISPATCH — to all receivers
    ============================================================ */
 async function dispatchToAll(msg, type){
-  // Duplicate guard — block if message is identical to the last dispatched one
-  if(msg.trim() === lastDispatchedMsg.trim() && lastDispatchedMsg.trim() !== ''){
+  const cleanMsg = msg.trim();
+
+  // Hard re-entrancy lock — a double-tap, Enter+click, or rapid resend cannot
+  // start a second send while the first is still in flight (the send loop
+  // awaits, and lastDispatchedMsg was only set AFTER it, leaving a wide gap).
+  if(dispatchInFlight){
+    toast('⚠ A message is already being sent — please wait');
+    return;
+  }
+
+  // Content-keyed cooldown — block ANY message with identical content sent
+  // within the window, regardless of how the previous send updated state.
+  // This is the authoritative "no two consecutive identical messages" guard.
+  const now = Date.now();
+  if(recentDispatched[cleanMsg] && (now - recentDispatched[cleanMsg]) < DISPATCH_DEDUP_WINDOW){
+    toast('⚠ Duplicate blocked — identical message already sent moments ago');
+    return;
+  }
+
+  // Semantic dedup — same substation + same feeder set + same type + same time
+  // is the SAME logical alert, even if the text differs by whitespace/ordering.
+  // Catches the "two identical Trip Alerts minutes apart" case.
+  const _selF = getMultiVal('feeder').slice().sort().join('+');
+  const _semKey = type + '|' + ($('station').value||'') + '|' + _selF + '|' + ($('time').value||'');
+  if(_selF && recentDispatched['SEM:'+_semKey] && (now - recentDispatched['SEM:'+_semKey]) < DISPATCH_DEDUP_WINDOW){
+    toast('⚠ Duplicate blocked — same alert for these feeders already sent');
+    return;
+  }
+
+  // Legacy last-message guard (kept as a fast immediate-repeat check)
+  if(cleanMsg === lastDispatchedMsg.trim() && lastDispatchedMsg.trim() !== ''){
     toast('⚠ Duplicate blocked — this message was already sent');
     return;
   }
 
-  // Already-in-condition guard — if every selected feeder is ALREADY in the
-  // target status (trip/shutdown), do not send the message again.
+  // Claim the lock NOW (before the cloud await below) so no concurrent or
+  // rapid-repeat call can slip through while the cloud check is in flight.
+  dispatchInFlight = true;
+  try{
+
+  // ── State-based duplicate guard (authoritative) ──
+  // A feeder already in trip/shutdown CANNOT be tripped/shut down again until
+  // it is restored. Block if ANY selected feeder is already in the target
+  // condition — locally OR in the cloud (another device may have set it).
   const targetStatus = type.toLowerCase()==='trip' ? 'trip'
                      : type.toLowerCase()==='shutdown' ? 'shutdown' : '';
   if(targetStatus){
@@ -2008,13 +2110,32 @@ async function dispatchToAll(msg, type){
     const isMotipurSel = selFeeders.some(n=>isMotipur33kvName(n));
     // Motipur trip maps to System Gone, so skip this guard for that special case
     if(selFeeders.length && !(isMotipurSel && targetStatus==='trip')){
-      const allAlready = selFeeders.every(n => (feederStatusMap[n]||{}).status === targetStatus);
-      if(allAlready){
-        toast(`⚠ Already ${FS_BADGE[targetStatus]?.label||targetStatus} — no message sent`);
+      // 1. Local check — block any feeder already in the target condition.
+      const localBlocked = selFeeders.filter(n => (feederStatusMap[n]||{}).status === targetStatus);
+      if(localBlocked.length){
+        const lbl = FS_BADGE[targetStatus]?.label || targetStatus;
+        toast(`⚠ Already ${lbl} — ${localBlocked.length>1?'these feeders are':'this feeder is'} already ${lbl}. Restore first.`, 3500);
+        return;
+      }
+      // 2. Cloud check — catch feeders set on another device whose state hasn't
+      //    synced locally yet. anyFeederAlreadyInState returns true if ANY of
+      //    the feeders is already in the target status in the cloud.
+      const cloudBlocked = await anyFeederAlreadyInState(selFeeders, targetStatus);
+      if(cloudBlocked){
+        const lbl = FS_BADGE[targetStatus]?.label || targetStatus;
+        toast(`⚠ Already ${lbl} — already active for one or more of these feeders. Restore first.`, 3500);
         return;
       }
     }
   }
+
+  // Record dedup keys now that all guards have passed.
+  recentDispatched[cleanMsg] = now;
+  if(_selF) recentDispatched['SEM:'+_semKey] = now;
+  for(const k in recentDispatched){
+    if(now - recentDispatched[k] > DISPATCH_DEDUP_WINDOW) delete recentDispatched[k];
+  }
+
 
   // Receiver mute check — log locally but skip actual send
   if(receiversMuted){
@@ -2058,6 +2179,7 @@ async function dispatchToAll(msg, type){
   $('newBanner').classList.add('show');
   setTimeout(()=>$('newBanner').classList.remove('show'),3500);
   toast(`Dispatched to ${okCount}/${enabled.length} receivers`);
+  } finally { dispatchInFlight = false; }
 }
 
 /* ============================================================
@@ -2287,6 +2409,7 @@ function clearForm(){
   currentCondition='';
   $('tripArea').style.display='none';
   $('shutdownArea').style.display='none';
+  if($('outageArea')) $('outageArea').style.display='none';
   setTopFieldsVisible(true);
   preview.textContent='Select substation, staff, feeder and condition — message will appear here.';
   preview.classList.add('empty');
@@ -2805,6 +2928,7 @@ function onFeederStatusAction(feederName,sel){
   const t=nowHM();
   const cur=feederStatusMap[feederName]||{status:'normal',time:''};
   if(action==='charged'){
+    if(cur.status==='charged'){ toast('Already Charged — this feeder is already Charged. No duplicate.'); return; }
     markFeederCharged(feederName);
   } else if(action==='normal'){
     if(cur.status==='normal'){ toast('Already Normal — no change'); return; }
@@ -2868,6 +2992,9 @@ _(auto generated msg)_`;
   }
 
   // Normal feeder charged — status update + one charged msg sent
+  if((feederStatusMap[feederName]||{}).status==='charged'){
+    toast('Already Charged — no duplicate.'); return;
+  }
   feederStatusMap[feederName]={status:'charged',time:t};
   renderFeederStatus();
   sbPushOneFeedStatus(feederName,{status:'charged',time:t});
@@ -2876,6 +3003,17 @@ _(auto generated msg)_`;
 }
 
 async function dispatchChargedMsg(feederName,msg){
+  // Duplicate/double-click guard — block an identical charged notice for the
+  // same feeder within the window (synchronous, before any await).
+  const _now = Date.now();
+  const _ck = 'CHG:' + feederName;
+  if(recentDispatched[_ck] && (_now - recentDispatched[_ck]) < DISPATCH_DEDUP_WINDOW){
+    toast('⚠ Charged notice already sent for this feeder moments ago'); return;
+  }
+  recentDispatched[_ck] = _now;
+  for(const k in recentDispatched){
+    if(_now - recentDispatched[k] > DISPATCH_DEDUP_WINDOW) delete recentDispatched[k];
+  }
   const t=nowHM();
   const station=DATA.feeders.find(f=>f.name===feederName)?.station||$('station').value||'';
   const enabled=DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
