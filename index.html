@@ -241,14 +241,35 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .fs-badge.incomer-failed{background:#ffe4e6;color:#9f1239;border:1.5px solid #e11d48}
 .fs-badge.restored   {background:#f0f9ff;color:#0369a1;border:1.5px solid #38bdf8}
 
+.fs-action{flex-shrink:0}
 .fs-action select{
-  font-size:13px;padding:6px 9px;border-radius:8px;
+  font-size:11px;padding:4px 6px;border-radius:7px;
   border:1.5px solid var(--line2);background:#fff;
   color:var(--txt);cursor:pointer;
   font-family:'Archivo',sans-serif;font-weight:600;
-  max-width:130px;line-height:1.5;
+  width:62px;max-width:62px;line-height:1.4;
 }
 .fs-action select:hover{border-color:var(--blue)}
+
+/* ── Monitoring staff (view-only) ─────────────────────────── */
+/* Hide every entry-form field except the substation selector, hide the
+   condition/trip/shutdown/outage areas, the per-row set dropdown, and the
+   Trip All bar. Status panel + Log stay fully visible. */
+body.monitor-mode #page-main .main-left .card-body > .field{display:none}
+body.monitor-mode #page-main .main-left .card-body > #substationField{display:block !important}
+body.monitor-mode #tripArea,
+body.monitor-mode #shutdownArea,
+body.monitor-mode #outageArea{display:none !important}
+body.monitor-mode .fs-action{display:none}
+body.monitor-mode #tripAllBar{display:none}
+body.monitor-mode .fs-card .card-head #langToggle{display:none}
+/* Monitor: replace Message Preview with recent-sent messages list */
+body.monitor-mode #miniPreviewBody,
+body.monitor-mode #miniBtnRow,
+body.monitor-mode #miniToggleIcon{display:none !important}
+body.monitor-mode #miniPreviewHead{cursor:default}
+body.monitor-mode #monitorRecent{display:block !important}
+body.monitor-mode .card-head .card-title.entry-title::after{content:' (view only)';font-weight:600;color:var(--dim2);font-size:12px}
 /* Taller, well-spaced options in the open dropdown list (desktop) */
 .fs-action select option,
 select.big option,
@@ -434,7 +455,7 @@ select.big option,
   .fs-badge{font-size:9px;padding:2px 8px;min-width:60px}
   .fs-time{font-size:9px}
   .fs-pre{font-size:8px;padding:1px 5px}
-  .fs-action select{font-size:11px;padding:4px 6px;max-width:104px}
+  .fs-action select{font-size:10px;padding:3px 5px;width:54px;max-width:54px}
   .sg-banner{padding:7px 10px;margin-bottom:5px;border-radius:9px}
   .sg-banner-label{font-size:11px}
   .sg-banner-sub{font-size:9px}
@@ -555,22 +576,22 @@ select.big option,
     <!-- LEFT: Entry Form -->
     <div class="main-left">
       <div class="card">
-        <div class="card-head"><span class="card-title">Feeder Notification Entry</span></div>
+        <div class="card-head"><span class="card-title entry-title">Feeder Notification Entry</span></div>
         <div class="card-body">
 
       <!-- Substation -->
-      <div class="field">
+      <div class="field" id="substationField">
         <label>Substation (सबस्टेशन)</label>
         <select id="station" class="big" onchange="onStationChange()">
           <option value="">— select substation —</option>
         </select>
       </div>
 
-      <!-- Substation Staff (दिने) — right after substation -->
+      <!-- Substation Operator (अपरेटर) — right after substation -->
       <div class="field">
-        <label>Substation Staff (दिने)</label>
+        <label>Substation Operator (अपरेटर)</label>
         <select id="givenBy" onchange="onStaffChange()">
-          <option value="">— select staff —</option>
+          <option value="">— select operator —</option>
         </select>
       </div>
 
@@ -723,10 +744,12 @@ select.big option,
 
   <!-- MINI MESSAGE PREVIEW (bottom) -->
   <div class="mini-preview-wrap">
-    <div class="mini-preview-head" onclick="toggleMiniPreview()">
-      <span class="mini-preview-title">📋 Message Preview <span id="miniPreviewTag"></span></span>
+    <div class="mini-preview-head" id="miniPreviewHead" onclick="toggleMiniPreview()">
+      <span class="mini-preview-title" id="miniPreviewTitle">📋 Message Preview <span id="miniPreviewTag"></span></span>
       <span id="miniToggleIcon" style="font-size:11px;color:var(--dim2)">▸</span>
     </div>
+    <!-- Monitor view-only: recent sent messages for the selected substation -->
+    <div id="monitorRecent" style="display:none;padding:10px 12px;max-height:260px;overflow-y:auto"></div>
     <div class="mini-preview-body collapsed" id="miniPreviewBody">
       <div id="msgTagWrap" style="margin-bottom:3px"></div>
       <div class="mini-msg empty" id="miniPreviewText">Select substation, feeder and condition…</div>
@@ -769,8 +792,6 @@ select.big option,
       <button class="btn btn-ghost btn-sm" onclick="closePreviewModal()">✕ Close</button>
     </div>
   </div>
-</div>
-
 </div><!-- /previewModal -->
 </div><!-- /main-cols -->
 </div><!-- /page-main -->
@@ -813,7 +834,7 @@ select.big option,
       <div class="snav-item" onclick="showSection('sec-reasons')">Shutdown Reasons</div>
       <div class="snav-item" onclick="showSection('sec-tripreasons')">Trip Reasons</div>
       <div class="snav-item" onclick="showSection('sec-askedby')">Asked By (माग्ने)</div>
-      <div class="snav-item" onclick="showSection('sec-givenby')">Substation Staff (दिने)</div>
+      <div class="snav-item" onclick="showSection('sec-givenby')">Substation Operator (अपरेटर)</div>
       <div class="snav-item" onclick="showSection('sec-receivers')">Receivers / Contacts</div>
       <div class="snav-item" onclick="showSection('sec-ai')">AI (Gemini)</div>
       <div class="snav-item" onclick="showSection('sec-httpsms')">HttpSMS</div>
@@ -909,7 +930,7 @@ select.big option,
       <!-- GIVEN BY / SUBSTATION STAFF -->
       <div class="s-section" id="sec-givenby">
         <div class="card">
-          <div class="card-head"><span class="card-title">Substation Staff (दिने)</span></div>
+          <div class="card-head"><span class="card-title">Substation Operator (अपरेटर)</span></div>
           <div class="card-body">
             <p class="hint" style="margin-bottom:12px">Each staff member is linked to a substation — only staff for the selected substation appear in the dropdown.</p>
             <div class="tbl-wrap">
@@ -1187,7 +1208,20 @@ gemini-1.5-flash</textarea>
   <div style="background:#fff;border-radius:18px;padding:36px 32px 28px;width:min(360px,92vw);box-shadow:0 16px 60px rgba(0,0,0,.4);text-align:center">
     <div style="font-size:42px;margin-bottom:10px">⚡</div>
     <div style="font-size:20px;font-weight:800;color:var(--txt);margin-bottom:2px;letter-spacing:-.01em">Taulihawa DCS</div>
-    <div style="font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);margin-bottom:24px">Nepal Electricity Authority</div>
+    <div style="font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);margin-bottom:18px">Nepal Electricity Authority</div>
+
+    <!-- Role toggle: Operator (full) vs Monitor (view-only) -->
+    <div id="roleToggle" style="display:flex;gap:6px;background:#f1f5f9;border-radius:10px;padding:4px;margin-bottom:14px">
+      <button type="button" id="roleOperator" onclick="setLoginRole('operator')"
+        style="flex:1;padding:9px 8px;border:none;border-radius:7px;font-family:'Archivo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;background:#fff;color:var(--blue);box-shadow:0 1px 3px rgba(0,0,0,.08)">
+        👷 Operator
+      </button>
+      <button type="button" id="roleMonitor" onclick="setLoginRole('monitor')"
+        style="flex:1;padding:9px 8px;border:none;border-radius:7px;font-family:'Archivo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;background:transparent;color:var(--dim2)">
+        👁 Monitor
+      </button>
+    </div>
+    <div id="roleHint" style="font-size:11px;color:var(--dim2);margin-bottom:12px;line-height:1.5">Full access — enter entry &amp; dispatch alerts.</div>
     <input type="password" id="appLockInput" placeholder="Enter password"
       style="width:100%;padding:12px 16px;border:2px solid var(--line2);border-radius:10px;font-size:16px;font-family:'Archivo',sans-serif;text-align:center;letter-spacing:.15em;margin-bottom:8px;outline:none;transition:border-color .15s"
       onfocus="this.style.borderColor='var(--blue)'"
@@ -1233,10 +1267,10 @@ gemini-1.5-flash</textarea>
 <footer id="siteFooter" style="margin-top:40px;padding:28px 20px 36px;text-align:center;border-top:1px solid var(--line);background:var(--card);max-height:200px;overflow:hidden;transition:max-height .35s ease,opacity .3s ease,padding .3s ease,margin .3s ease">
   <div style="max-width:860px;margin:0 auto">
     <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Designed &amp; Developed by</div>
-    <div style="font-size:18px;font-weight:700;color:var(--txt);letter-spacing:-.01em;margin-bottom:4px">
-      <span style="color:var(--blue)">Er.</span> Ramesh Adhikari
+    <div style="font-size:18px;font-weight:700;color:var(--blue);letter-spacing:-.01em;margin-bottom:4px">
+      Er. Ramesh Adhikari
     </div>
-    <div style="font-size:12px;color:var(--dim2);margin-bottom:10px">Electrical Engineer &nbsp;·&nbsp; Nepal Electricity Authority &nbsp;·&nbsp; Kapilvastu</div>
+    <div style="font-size:12px;color:var(--dim2);margin-bottom:10px">Nepal Electricity Authority &nbsp;·&nbsp; Kapilvastu</div>
     <div style="display:inline-flex;align-items:center;gap:6px;background:var(--blue-lt);border:1px solid #c7d9fb;border-radius:20px;padding:5px 14px">
       <span style="font-size:13px">⚡</span>
       <span style="font-size:12px;color:var(--blue-dk);font-weight:600">Taulihawa DCS Substation Messaging System</span>
@@ -1280,7 +1314,6 @@ const DEFAULTS = {
     {name:"11 KV महिता फिडर",     station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
     {name:"11 KV लुम्बिनी फिडर",  station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
     {name:"11 KV दोहनी फिडर",     station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
-    {name:"33 KV मोतीपुर फिडर",   station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
     {name:"शिबलवा फिडर",   station:"लबनी सबस्टेशन ३३/११ के.भी."},
     {name:"पकडी फिडर",     station:"लबनी सबस्टेशन ३३/११ के.भी."},
     {name:"मेहनिया फिडर",  station:"लबनी सबस्टेशन ३३/११ के.भी."},
@@ -1393,8 +1426,13 @@ async function sha256(str){
    ============================================================ */
 // SHA-256('Peace') — only the hash, not the password
 const ENTRY_HASH_FALLBACK='9faf7e5a6d8c908b34cd8f48def377b9716a63e8df1bdcdff75a70e0334dd84a';
+// SHA-256('11111') — Monitoring staff (view-only): can see Status panel + Log,
+// select a substation to view its feeders, but cannot enter/dispatch anything.
+const MONITOR_HASH='d17f25ecfbcc7857f7bebea469308be0b2580943e96d13a3ad98a13675c4bfc2';
 
 let appUnlocked        = false;
+let monitorMode        = false;   // true when logged in as monitoring staff
+let loginRole          = 'operator'; // selected role on the lock screen
 let settingsUnlocked   = false;
 let cachedEntryHash    = null;
 let cachedSettingsHash = null;
@@ -1421,8 +1459,23 @@ async function appUnlock(){
   err.textContent='Checking…'; errRed.textContent='';
   if(!cachedEntryHash) await fetchPasswordHashes();
   const hash=await sha256(val);
-  if(hash===(cachedEntryHash||ENTRY_HASH_FALLBACK)){
+  const isMonitorPw  = (hash===MONITOR_HASH);
+  const isOperatorPw = (hash===(cachedEntryHash||ENTRY_HASH_FALLBACK));
+
+  // Enforce the role selected on the toggle.
+  let granted=false, asMonitor=false;
+  if(loginRole==='monitor'){
+    if(isMonitorPw){ granted=true; asMonitor=true; }
+    else if(isOperatorPw){ errRed.textContent='That is the Operator password. Switch to Operator, or enter the Monitor password.'; err.textContent=''; input.value=''; input.focus(); return; }
+  } else { // operator
+    if(isOperatorPw){ granted=true; asMonitor=false; }
+    else if(isMonitorPw){ errRed.textContent='That is the Monitor password. Switch to Monitor to view-only.'; err.textContent=''; input.value=''; input.focus(); return; }
+  }
+
+  if(granted){
     appUnlocked=true;
+    monitorMode = asMonitor;
+    applyMonitorMode();   // show/hide UI based on role
     const lock=$('appLock');
     lock.style.transition='opacity .4s'; lock.style.opacity='0';
     setTimeout(()=>lock.style.display='none',420);
@@ -1433,7 +1486,7 @@ async function appUnlock(){
     await sbAutoLoad();
     startSync();
     // Self-test: verify feeder_status table is writable immediately after unlock
-    sbSelfTestFeederWrite();
+    if(!monitorMode) sbSelfTestFeederWrite();
   } else {
     errRed.textContent='Incorrect password. Try again.';
     err.textContent=''; input.value=''; input.focus();
@@ -1442,6 +1495,46 @@ async function appUnlock(){
     [0,1,2,3].forEach(i=>setTimeout(()=>box.style.transform=i%2?'translateX(7px)':'translateX(-7px)',i*80));
     setTimeout(()=>box.style.transform='',360);
   }
+}
+
+// Apply role-based visibility. Monitoring staff (view-only) keep the
+// substation selector + Feeder Status panel + Log, but the entry form, the
+// per-row "set" dropdowns, the Trip All bar, and Settings are hidden.
+function applyMonitorMode(){
+  document.body.classList.toggle('monitor-mode', monitorMode);
+  // If a monitor somehow lands on settings/entry-only areas, send to main.
+  if(monitorMode){
+    const settingsTab = document.querySelector('.nav-tab[onclick*="openSettings"]');
+    if(settingsTab) settingsTab.style.display='none';
+    // Reset any open condition area
+    const cond=$('condition'); if(cond) cond.value='';
+    if($('tripArea')) $('tripArea').style.display='none';
+    if($('shutdownArea')) $('shutdownArea').style.display='none';
+    if($('outageArea')) $('outageArea').style.display='none';
+    renderMonitorRecent();
+  }
+}
+
+// Lock-screen role selector — switches between Operator (full) and Monitor
+// (view-only). The selected role determines which password is accepted.
+function setLoginRole(role){
+  loginRole = role;
+  const opBtn=$('roleOperator'), monBtn=$('roleMonitor'), hint=$('roleHint'), input=$('appLockInput');
+  const active='flex:1;padding:9px 8px;border:none;border-radius:7px;font-family:\'Archivo\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;background:#fff;color:var(--blue);box-shadow:0 1px 3px rgba(0,0,0,.08)';
+  const idle='flex:1;padding:9px 8px;border:none;border-radius:7px;font-family:\'Archivo\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;background:transparent;color:var(--dim2)';
+  if(role==='operator'){
+    if(opBtn) opBtn.style.cssText=active;
+    if(monBtn) monBtn.style.cssText=idle;
+    if(hint) hint.textContent='Full access — enter & dispatch alerts.';
+    if(input) input.placeholder='Operator password';
+  } else {
+    if(monBtn) monBtn.style.cssText=active;
+    if(opBtn) opBtn.style.cssText=idle;
+    if(hint) hint.textContent='View-only — see feeder status & log. No dispatch.';
+    if(input) input.placeholder='Monitor password';
+  }
+  if(input){ input.value=''; input.focus(); }
+  const errRed=$('appLockError'); if(errRed) errRed.textContent='';
 }
 
 function showAppLock(){
@@ -1453,6 +1546,7 @@ function showAppLock(){
 
 /* ── Settings unlock (author only) ── */
 function openSettings(){
+  if(monitorMode){ toast('Monitoring access is view-only — Settings is not available.'); return; }
   if(settingsUnlocked){showPage('settings');return;}
   const overlay=$('pwOverlay');
   overlay.style.display='flex';
@@ -1634,7 +1728,7 @@ function fillSelect(id, arr){
 }
 function fillGivenBy(){
   const sel=$("givenBy"), st=$("station").value, cur=sel.value;
-  sel.innerHTML='<option value="">— select staff —</option>';
+  sel.innerHTML='<option value="">— select operator —</option>';
   DATA.givenby.filter(g=>g.station===st).forEach(g=>{ const o=document.createElement("option"); o.value=g.name; o.textContent=g.name; sel.appendChild(o); });
   if(cur) sel.value=cur;
 }
@@ -1685,7 +1779,7 @@ function restoreLastStation(){
    CONDITION — Trip / Shutdown
    ============================================================ */
 function setTopFieldsVisible(visible){
-  // Hide/show Substation (index 0) and Substation Staff (index 1) fields
+  // Hide/show Substation (index 0) and Substation Operator (index 1) fields
   const fields = document.querySelectorAll('#page-main .main-left .card-body > .field');
   [0, 1].forEach(i => {
     if(fields[i]) fields[i].style.display = visible ? '' : 'none';
@@ -1781,7 +1875,6 @@ async function dispatchOutage(){
    ============================================================ */
 function onFeederChange(){
   if(getMultiVal('feeder').length) $('time').value=nowHM();
-  // Always autoBuild — Motipur feeder will show its message even without condition
   autoBuild();
 }
 
@@ -1851,11 +1944,6 @@ function fmtLine(label, val){
    MESSAGE TEMPLATES
    ============================================================ */
 function buildTemplate(f){
-  // 33 KV Motipur feeder → always use special System Gone message
-  if(hasMotipur33kv(f.feeders)){
-    return buildMotipurMessage(f);
-  }
-
   const t   = f.time ? f.time+' बजे' : '';
   const tEN = f.time || '';
   const multi = f.feeders && f.feeders.length>1;
@@ -1905,7 +1993,7 @@ function buildTemplate(f){
     if(f.site)    m+=fmtLine('Area      ', f.site);
     if(t)         m+=fmtLine('Time      ', t);
     if(f.askedBy) m+=fmtLine('माग गर्ने ', f.askedBy);
-    if(f.givenBy) m+=fmtLine('दिने      ', f.givenBy);
+    if(f.givenBy) m+=fmtLine('अपरेटर    ', f.givenBy);
     if(f.workDetail) m+=fmtLine('Note      ', f.workDetail);
     m+=`${sep}\n`;
     m+=multi
@@ -2005,12 +2093,6 @@ function ready(){ return $('station').value && getMultiVal('feeder').length>0 &&
 let aiTimer=null;
 function autoBuild(){
   const f = getFields();
-  // Special case: 33 KV Motipur feeder selected → show System Gone message immediately,
-  // regardless of whether a condition has been picked yet
-  if(f.station && hasMotipur33kv(f.feeders)){
-    setMessage(buildMotipurMessage(f), 'trip');
-    return;
-  }
   if(!ready()) return;
   const key=$('geminiKey')?.value?.trim()||'';
   if(key){ clearTimeout(aiTimer); aiTimer=setTimeout(runAI,700); }
@@ -2107,9 +2189,7 @@ async function dispatchToAll(msg, type){
                      : type.toLowerCase()==='shutdown' ? 'shutdown' : '';
   if(targetStatus){
     const selFeeders = getMultiVal('feeder');
-    const isMotipurSel = selFeeders.some(n=>isMotipur33kvName(n));
-    // Motipur trip maps to System Gone, so skip this guard for that special case
-    if(selFeeders.length && !(isMotipurSel && targetStatus==='trip')){
+    if(selFeeders.length){
       // 1. Local check — block any feeder already in the target condition.
       const localBlocked = selFeeders.filter(n => (feederStatusMap[n]||{}).status === targetStatus);
       if(localBlocked.length){
@@ -2387,7 +2467,7 @@ async function runAI(){
   if(!key){setMessage(tmpl, f.condition==='trip'?'trip':'tpl');return;}
   const langName=currentLang==='ne'?'Nepali':'English';
   const condType=f.condition==='trip'?'TRIP alert':'SHUTDOWN notice';
-  const prompt=`You are drafting an official electricity ${condType} for Nepal Electricity Authority (NEA), Kapilvastu. Write ONE concise, professional notice in ${langName} only. No preamble, no markdown, no translation.\nDetails:\n- Substation: ${f.station}\n- Feeder: ${f.feeder}\n- Condition: ${f.condition==='trip'?'Trip (automatic fault)':'Planned Shutdown'}\n- Reason: ${f.reason||'N/A'}\n- Affected area: ${f.site||'N/A'}\n- Time: ${f.time||'N/A'}\n- Requested by: ${f.askedBy||'N/A'}\n- Substation Staff: ${f.givenBy||'N/A'}\nFormat: use ⚡ for trip or 🔌 for shutdown as first line header, then key details neatly, then one formal closing sentence. End with: _(auto generated msg)_`;
+  const prompt=`You are drafting an official electricity ${condType} for Nepal Electricity Authority (NEA), Kapilvastu. Write ONE concise, professional notice in ${langName} only. No preamble, no markdown, no translation.\nDetails:\n- Substation: ${f.station}\n- Feeder: ${f.feeder}\n- Condition: ${f.condition==='trip'?'Trip (automatic fault)':'Planned Shutdown'}\n- Reason: ${f.reason||'N/A'}\n- Affected area: ${f.site||'N/A'}\n- Time: ${f.time||'N/A'}\n- Requested by: ${f.askedBy||'N/A'}\n- Substation Operator: ${f.givenBy||'N/A'}\nFormat: use ⚡ for trip or 🔌 for shutdown as first line header, then key details neatly, then one formal closing sentence. End with: _(auto generated msg)_`;
   const models=($('modelList')?.value||'').split('\n').map(m=>m.trim()).filter(Boolean);
   status.style.color='var(--dim2)';
   for(const model of models){
@@ -2709,44 +2789,6 @@ window.addEventListener('resize', setTopbarH);
 setTopbarH();
 
 /* ============================================================
-   MOTIPUR 33KV — helper
-   ============================================================ */
-function isMotipur33kvName(name){
-  return name.includes('33 KV मोतीपुर') || name.includes('33KV मोतीपुर') || /33\s*kv\s*मोती?पुर/i.test(name);
-}
-function hasMotipur33kv(feeders){
-  return !!(feeders && feeders.some(f=>isMotipur33kvName(f)));
-}
-
-function buildMotipurMessage(f){
-  const sep='━━━━━━━━━━━━━━━━━━━━';
-  const footer='Taulihawa DCS, NEA';
-  if(currentLang==='ne'){
-    let m=`⚡ SYSTEM GONE ALERT\n${sep}\n`;
-    m+=`Substation : ${f.station}\n`;
-    m+=`Feeder     : Incomer\n`;
-    if(f.time) m+=`Time       : ${f.time} बजे\n`;
-    if(f.givenBy) m+=`कर्मचारी   : ${f.givenBy}\n`;
-    m+=`${sep}\n`;
-    m+=`प्रणाली अवरुद्ध भएको जानकारी गराइन्छ।\n\n`;
-    m+=`विद्युत आपूर्ति पुनःस्थापना हुन अनुमानित १५ देखि ४५ मिनेट लाग्न सक्नेछ।`;
-    m+=`\n\n${footer}\n_(auto generated msg)_`;
-    return m;
-  } else {
-    let m=`⚡ SYSTEM GONE ALERT\n${sep}\n`;
-    m+=`Substation : ${f.station}\n`;
-    m+=`Feeder     : Incomer\n`;
-    if(f.time) m+=`Time       : ${f.time}\n`;
-    if(f.givenBy) m+=`Staff      : ${f.givenBy}\n`;
-    m+=`${sep}\n`;
-    m+=`System Gone — power supply has been disrupted.\n\n`;
-    m+=`Restoration is expected within 15 to 45 minutes.`;
-    m+=`\n\n${footer}\n_(auto generated msg)_`;
-    return m;
-  }
-}
-
-/* ============================================================
    FEEDER STATUS TRACKER
    ============================================================ */
 // status: 'normal' | 'trip' | 'shutdown' | 'system-gone' | 'incomer-failed' | 'charged' | 'restored'
@@ -2813,7 +2855,53 @@ function isSystemGoneActive(){
   return preSystemGoneSnapshot !== null;
 }
 
+// A charged feeder silently reverts to Normal after 12 hours (no message —
+// Charged and Normal are functionally the same; Charged only marks recent
+// recovery from trip/shutdown). Entries without a ts (e.g. from older cloud
+// rows) get one stamped now so they expire 12h from first sight.
+const CHARGED_TTL_MS = 12*60*60*1000;
+function expireChargedFeeders(){
+  const now=Date.now();
+  let changed=false;
+  for(const name in feederStatusMap){
+    const e=feederStatusMap[name];
+    if(e && e.status==='charged'){
+      if(!e.ts){ e.ts=now; continue; }
+      if(now - e.ts >= CHARGED_TTL_MS){
+        feederStatusMap[name]={status:'normal',time:''};
+        sbPushOneFeedStatus(name,{status:'normal',time:''}); // silent, no dispatch
+        changed=true;
+      }
+    }
+  }
+  return changed;
+}
+
+// Monitor view-only: show recent sent messages for the selected substation in
+// place of the message-preview composer. Small font, latest first.
+function renderMonitorRecent(){
+  if(!monitorMode) return;
+  const box=$('monitorRecent'); if(!box) return;
+  const titleEl=$('miniPreviewTitle');
+  const st=$('station').value;
+  if(titleEl) titleEl.innerHTML='📨 Recent Messages' + (st?` — <span style="color:var(--dim2);font-weight:600">${esc(st)}</span>`:'');
+  if(!st){ box.innerHTML='<div style="font-size:11px;color:var(--dim2)">Select a substation to view its recent sent messages.</div>'; return; }
+  const items=LOG.filter(r=>r.station===st && r.msg).slice(0,8);
+  if(!items.length){ box.innerHTML='<div style="font-size:11px;color:var(--dim2)">No messages sent for this substation yet.</div>'; return; }
+  box.innerHTML=items.map(r=>{
+    const when=r.ts||'';
+    const cond=(r.condition||'').toString();
+    const snippet=(r.msg||'').replace(/\s+/g,' ').trim();
+    return `<div style="border-left:2px solid var(--line2);padding:5px 0 6px 9px;margin-bottom:7px">
+      <div style="font-size:9.5px;color:var(--dim2);font-family:'JetBrains Mono',monospace;margin-bottom:2px">${esc(when)} ${cond?'· '+esc(cond):''}</div>
+      <div style="font-size:10.5px;color:var(--txt);line-height:1.5;white-space:pre-wrap;word-break:break-word">${esc(snippet)}</div>
+    </div>`;
+  }).join('');
+}
+
 function renderFeederStatus(){
+  expireChargedFeeders();
+  if(monitorMode) renderMonitorRecent();
   const panel=$('feederStatusPanel');
   if(!panel) return;
   updateTripAllToggleUI();
@@ -2909,7 +2997,7 @@ function renderFeederStatus(){
       <span class="fs-badge ${badge.cls}">${badge.label}</span>
       <span class="fs-action">
         <select onchange="onFeederStatusAction('${esc(name)}',this)" title="Change status">
-          <option value="">— set —</option>
+          <option value="">Set</option>
           <option value="trip">⚡ Trip</option>
           <option value="shutdown">🔌 Shutdown</option>
           <option value="incomer-failed">🛑 Incomer Failed</option>
@@ -2939,9 +3027,6 @@ function onFeederStatusAction(feederName,sel){
     applySystemGone(t);
   } else if(action==='incomer-failed'){
     applyIncomerFailed(t);
-  } else if(action==='trip' && isMotipur33kvName(feederName)){
-    // Motipur trip = System Gone (status update only, no msg per rule 2)
-    applySystemGone(t);
   } else {
     // trip / shutdown on any feeder — silent status update only, no message.
     // Skip if the feeder is already in this exact status (no duplicate write).
@@ -2955,49 +3040,13 @@ function onFeederStatusAction(feederName,sel){
 function markFeederCharged(feederName){
   const t=nowHM();
 
-  // Motipur charged = System Restored:
-  // Revert all feeders to their pre-system-gone snapshot state.
-  // If no snapshot exists (system-gone was not active), just mark Motipur charged
-  // and send system-restored msg.
-  if(isMotipur33kvName(feederName)){
-    const st=$('station').value;
-    const all=st?DATA.feeders.filter(f=>f.station===st).map(f=>f.name):[];
-    all.forEach(name=>{
-      if(preSystemGoneSnapshot && preSystemGoneSnapshot[name]){
-        const pre=preSystemGoneSnapshot[name];
-        // Restore to pre-outage state; 'system-gone' reverts to 'normal'
-        const rs=(pre.status==='system-gone')?'normal':pre.status;
-        feederStatusMap[name]={status:rs,time:pre.time||''};
-      } else {
-        // No snapshot — mark feeder as charged
-        feederStatusMap[name]={status:'charged',time:t};
-      }
-    });
-    // Motipur itself always becomes charged (it was the incomer that restored)
-    feederStatusMap[feederName]={status:'charged',time:t};
-    preSystemGoneSnapshot=null;
-    systemGoneTime='';
-    renderFeederStatus();
-    sbPushFeederStatusSilent();
-    // Send ONE system-restored message
-    const restoreMsg=`✅ System Restored at ${t}
-━━━━━━━━━━━━━━━━━━━━
-सबै फिडर पुनर्स्थापन भएको जानकारी गराइन्छ्।
-
-Taulihawa DCS, NEA
-_(auto generated msg)_`;
-    dispatchBulkMsg(restoreMsg,'System Restored',st);
-    toast('✅ Motipur Charged — feeders restored to pre-outage state, System Restored msg sent.',3500);
-    return;
-  }
-
   // Normal feeder charged — status update + one charged msg sent
   if((feederStatusMap[feederName]||{}).status==='charged'){
     toast('Already Charged — no duplicate.'); return;
   }
-  feederStatusMap[feederName]={status:'charged',time:t};
+  feederStatusMap[feederName]={status:'charged',time:t,ts:Date.now()};
   renderFeederStatus();
-  sbPushOneFeedStatus(feederName,{status:'charged',time:t});
+  sbPushOneFeedStatus(feederName,{status:'charged',time:t,ts:Date.now()});
   const msg=`${feederName} Charged at ${t}`;
   dispatchChargedMsg(feederName,msg);
 }
@@ -3045,17 +3094,12 @@ async function dispatchChargedMsg(feederName,msg){
 // Called after every Trip / Shutdown dispatch
 function updateFeederStatusFromDispatch(type, feederNames){
   const t=nowHM();
-  const isMotipur=feederNames.some(n=>isMotipur33kvName(n));
-  if(isMotipur && type.toLowerCase()==='trip'){
-    applySystemGone(t);
-  } else {
-    const status=type.toLowerCase()==='trip'?'trip':'shutdown';
-    feederNames.forEach(name=>{
-      feederStatusMap[name]={status,time:t};
-      sbPushOneFeedStatus(name,{status,time:t});
-    });
-    renderFeederStatus();
-  }
+  const status=type.toLowerCase()==='trip'?'trip':'shutdown';
+  feederNames.forEach(name=>{
+    feederStatusMap[name]={status,time:t};
+    sbPushOneFeedStatus(name,{status,time:t});
+  });
+  renderFeederStatus();
 }
 
 /* ============================================================
@@ -4289,6 +4333,7 @@ async function syncFromCloud(){
         changed=true;
       }
     });
+    if(expireChargedFeeders()) changed=true;
     if(changed) renderFeederStatus();
 
     // ── Reconstruct outage-banner state from synced statuses ──
@@ -4321,6 +4366,7 @@ async function syncFromCloud(){
       if(added){
         LOG.sort((a,b)=>new Date(b.date)-new Date(a.date));
         if($('page-log').classList.contains('active')) renderLogPage();
+        if(monitorMode) renderMonitorRecent();
       }
     }
     updateSbSyncStatus(`Last sync: ${nowHM()} — ${logRows.length} log entries`);
