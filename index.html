@@ -2512,10 +2512,15 @@ let logActiveStation='__all__';
 
 function _recordLogBase(type,recipients,status){
   const f=getFields(), msg=getMessage();
+  // Trip reason and Shutdown reason come from different pickers — pick the one
+  // that matches the dispatch type so the log shows it in both cases.
+  const logReason = (type && type.toLowerCase()==='trip')
+    ? (f.tripReason || f.reason || '')
+    : (f.reason || f.tripReason || '');
   _pushToLog({
     condition:type, recipients, status,
     station:f.station, feeder:f.feeder,
-    reason:f.reason, time:f.time, msg
+    reason:logReason, time:f.time, msg
   });
 }
 
