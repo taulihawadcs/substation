@@ -263,12 +263,36 @@ body.monitor-mode #outageArea{display:none !important}
 body.monitor-mode .fs-action{display:none}
 body.monitor-mode #tripAllBar{display:none}
 body.monitor-mode .fs-card .card-head #langToggle{display:none}
-/* Monitor: replace Message Preview with recent-sent messages list */
-body.monitor-mode #miniPreviewBody,
-body.monitor-mode #miniBtnRow,
-body.monitor-mode #miniToggleIcon{display:none !important}
-body.monitor-mode #miniPreviewHead{cursor:default}
-body.monitor-mode #monitorRecent{display:block !important}
+/* Monitor: Recent Messages moves to the LEFT column (just below the substation
+   dropdown). JS relocates #monitorRecent into #monitorRecentSlot on monitor
+   entry, so the empty mini-preview-wrap on the right is hidden entirely and
+   the Feeder Status card can expand to fill the full column height. */
+body.monitor-mode #monitorRecentSlot{
+  display:block !important;
+  margin-top:14px;
+  background:var(--card,#fff);
+  border:1.5px solid var(--line2,#e6ebf1);
+  border-radius:10px;
+  overflow:hidden;
+}
+body.monitor-mode #monitorRecentSlot::before{
+  content:'📋 RECENT MESSAGES';
+  display:block;
+  padding:8px 12px;
+  background:#f8fafc;
+  border-bottom:1px solid var(--line,#e6ebf1);
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.07em;
+  color:var(--dim,#64748b);
+  text-transform:uppercase;
+}
+body.monitor-mode #monitorRecentSlot #monitorRecent{
+  display:block !important;
+  max-height:none;      /* left column already scrolls; no inner cap needed */
+  padding:8px 12px;
+}
+body.monitor-mode .mini-preview-wrap{display:none !important}
 body.monitor-mode .card-head .card-title.entry-title::after{content:' (view only)';font-weight:600;color:var(--dim2);font-size:12px}
 /* Taller, well-spaced options in the open dropdown list (desktop) */
 .fs-action select option,
@@ -446,8 +470,9 @@ select.big option,
   .main-right{flex:1;display:flex;flex-direction:column;gap:8px}
   .main-right .fs-card{flex:1;display:flex;flex-direction:column;overflow:hidden;margin-bottom:0!important;min-height:0}
   .main-right .fs-card .card-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:5px 8px 6px;min-height:0}
-  /* In monitor mode, keep monitorRecent from squeezing the feeder list too much */
-  body.monitor-mode #monitorRecent{max-height:200px}
+  /* Recent Messages moves to the LEFT column in monitor mode (see the
+     #monitorRecentSlot rules above), so the fs-card on the right is now free
+     to fill the entire column height without competing for space. */
   /* Feeder status — compact enough to fit all without scroll */
   .feeder-status-panel{gap:4px}
   .fs-row{padding:5px 9px 5px 8px;border-radius:9px;gap:7px}
@@ -556,15 +581,32 @@ select.big option,
    ============================================================ */
 #navTransformer{display:none}
 body.monitor-mode #navTransformer{display:inline-flex}
+
+/* When the transformer tab is open, hide EVERYTHING outside the transformer
+   page — this makes it a truly dedicated view instead of a narrow page sitting
+   on top of the rest of the app's layout. */
+body.tfx-page-open .page:not(#page-transformer){display:none !important}
+body.tfx-page-open #page-transformer{
+  display:block !important;
+  max-width:none !important;   /* override .page{max-width:860px} */
+  padding:0 !important;
+  margin:0 !important;
+  width:100% !important;
+}
+
 #page-transformer{
   --tfx-nea-blue:#0d3b8c; --tfx-nea-blue-dark:#082a66; --tfx-nea-blue-light:#e8eefb;
   --tfx-paper:#f6f4ee; --tfx-ink:#1c2230; --tfx-ink-soft:#4a5066;
   --tfx-line:#cdd3e0; --tfx-accent:#b5402a; --tfx-good:#1e7d4a; --tfx-warn:#b9831a; --tfx-bad:#b5402a;
   --tfx-card:#ffffff; --tfx-radius:10px;
   --tfx-shadow:0 1px 3px rgba(20,30,60,.08), 0 1px 2px rgba(20,30,60,.06);
+  /* Full-viewport background: extends the paper tone from edge to edge so the
+     tab feels like its own page, not a card floating on the main-page bg. */
   background:var(--tfx-paper);
   color:var(--tfx-ink);
+  max-width:none;         /* override the .page{max-width:860px} constraint */
   padding:18px;
+  margin:0;
   min-height:calc(100vh - 60px);
   font-family:"Segoe UI","Noto Sans Devanagari","Mangal","Kalimati",Arial,sans-serif;
 }
@@ -795,6 +837,12 @@ body.monitor-mode #navTransformer{display:inline-flex}
           <option value="">— select substation —</option>
         </select>
       </div>
+
+      <!-- Slot where Recent Messages moves in monitor mode.
+           Empty (and CSS-hidden) in operator mode; JS relocates #monitorRecent
+           here whenever monitor mode is active so the substation dropdown and
+           the recent alerts sit together in the same column. -->
+      <div id="monitorRecentSlot" style="display:none"></div>
 
       <!-- Substation Operator (अपरेटर) — right after substation -->
       <div class="field">
@@ -1083,7 +1131,8 @@ body.monitor-mode #navTransformer{display:inline-flex}
           </select>
           <input type="date" id="dtReportDate" style="width:auto;padding:6px 9px;font-size:12px" onchange="dtRenderSummary()">
           <button class="btn btn-ghost btn-sm" onclick="dtDownloadExcel()">↓ Download Excel (.xlsx)</button>
-          <button class="btn btn-sm" style="background:#18a34a;color:#fff;border:none" onclick="dtSendReport()">📤 Send Report Now</button>
+          <button class="btn btn-sm" style="background:#18a34a;color:#fff;border:none" onclick="dtSendReport()" title="Send text-only summary to all receivers">📤 Send Text Report</button>
+          <button class="btn btn-sm" style="background:#0d3b8c;color:#fff;border:none" onclick="dtSendReport({sendExcel:true})" title="WhatsApp receivers get Excel file + text; others get text">📎 Send with Excel</button>
         </span>
       </div>
       <div class="card-body top0">
@@ -1093,7 +1142,7 @@ body.monitor-mode #navTransformer{display:inline-flex}
             Auto-send daily report at
           </label>
           <input type="time" id="dtAutoTime" onchange="dtAutoTimeChanged()" style="width:auto;padding:4px 7px;font-size:12px">
-          <span style="font-size:10px;color:var(--dim2)">(this time is also the 24-hr window boundary)</span>
+          <span style="font-size:10px;color:var(--dim2)">(this time is also the 24-hr window boundary — auto sends are always text-only)</span>
           <button class="btn btn-ghost btn-sm" onclick="dtImportHistory()">⟲ Import Past History</button>
           <span id="dtSyncStat" style="font-size:10px;color:var(--dim2)"></span>
         </div>
@@ -1104,8 +1153,8 @@ body.monitor-mode #navTransformer{display:inline-flex}
           Each daily window covers exactly 24 hours ending at the auto-send time above (default 10:00 AM); weekly and monthly reports combine those windows and add a
           per-day breakdown sheet. Downtime entries sync through the cloud, so <b>every operator's entries — even ones recorded while this device was offline — are
           included</b>. Durations are tracked automatically from every feeder status change (Trip / Shutdown / System Gone / 11 KV Incomer Failed → Charged / Normal /
-          Restored); rows marked ⚠ have an assumed end time from history import — verify before sending. WhatsApp (Green API) receivers get the Excel file <b>plus</b>
-          the text summary; SMS / CallMeBot receivers get the text summary.
+          Restored); rows marked ⚠ have an assumed end time from history import — verify before sending. <b>📤 Send Text Report</b> and the scheduled auto-send send the
+          text summary only. <b>📎 Send with Excel</b> attaches the .xlsx file for WhatsApp receivers in addition to the text.
         </div>
       </div>
     </div>
@@ -1852,6 +1901,25 @@ async function appUnlock(){
 // per-row "set" dropdowns, the Trip All bar, and Settings are hidden.
 function applyMonitorMode(){
   document.body.classList.toggle('monitor-mode', monitorMode);
+  // Move Recent Messages between its two homes:
+  //   • Monitor mode → #monitorRecentSlot on the left (below substation).
+  //   • Operator mode → back inside the .mini-preview-wrap on the right
+  //     (right after the #miniPreviewHead so the operator's message-preview
+  //     block sits above the recent list, as before).
+  const rec = document.getElementById('monitorRecent');
+  if(rec){
+    if(monitorMode){
+      const leftSlot = document.getElementById('monitorRecentSlot');
+      if(leftSlot && rec.parentNode !== leftSlot) leftSlot.appendChild(rec);
+    } else {
+      const head = document.getElementById('miniPreviewHead');
+      const origWrap = head ? head.parentNode : document.querySelector('.mini-preview-wrap');
+      if(origWrap && rec.parentNode !== origWrap){
+        if(head && head.parentNode === origWrap) head.insertAdjacentElement('afterend', rec);
+        else origWrap.appendChild(rec);
+      }
+    }
+  }
   // If a monitor somehow lands on settings/entry-only areas, send to main.
   if(monitorMode){
     const settingsTab = document.querySelector('.nav-tab[onclick*="openSettings"]');
@@ -1993,6 +2061,9 @@ function showPage(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   $('page-'+name).classList.add('active');
+  // Toggle a body class while the transformer page is open so its CSS can hide
+  // every other page and lift the app-wide .page{max-width:860px} constraint.
+  document.body.classList.toggle('tfx-page-open', name==='transformer');
   if(name==='main')     document.querySelector('.nav-tab[onclick*="main"]').classList.add('active');
   else if(name==='log') { $('navLog').classList.add('active'); renderLogPage(); }
   else if(name==='transformer') { $('navTransformer').classList.add('active'); tfxRenderAll(); }
@@ -4366,7 +4437,7 @@ async function dtSendReport(opts){
   // ── REVIEW STEP (manual sends): the report must be checked/corrected first so
   // only a VALID log report is dispatched to the group. Daily entries can be
   // edited at ANY time in the table; weekly/monthly must pass this review too.
-  if(!auto && !opts.confirmed){ dtEnterReview(date, period); return false; }
+  if(!auto && !opts.confirmed){ dtEnterReview(date, period, !!opts.sendExcel); return false; }
   await dtSyncNow();   // pull every operator's entries (other devices, offline periods) first
   const rng=dtRangeFor(period, date);
   const a=dtAggregateRange(rng.startMs, rng.endMs);
@@ -4386,23 +4457,27 @@ async function dtSendReport(opts){
   dtSendInFlight=true;
   const wrap=$('dtSendStatus');
   try{
-    // 1. Build the Excel file; if the library can't load (offline), fall back to CSV
+    const sendExcel = !!opts.sendExcel;
     const tag=period==='weekly'?'Weekly':period==='monthly'?'Monthly':'Daily';
     let blob=null, fileName=`NEA_Downtime_${tag}_Report_${date}.xlsx`, isXlsx=true;
-    try{
-      await loadXlsxLib();
-      const {wb}=dtBuildWorkbook(date, period);
-      const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
-      blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    }catch(e){
-      isXlsx=false; fileName=`NEA_Downtime_${tag}_Report_${date}.csv`;
-      blob=dtCsvBlob(date, period);
-      toast('Excel library unavailable — sending CSV file instead',3000);
+    // Only build the Excel workbook when Excel will actually be sent.
+    // Auto (scheduled) sends and default manual sends are TEXT ONLY — no
+    // build, no local download, no attachment.
+    if(sendExcel){
+      try{
+        await loadXlsxLib();
+        const {wb}=dtBuildWorkbook(date, period);
+        const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+        blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      }catch(e){
+        isXlsx=false; fileName=`NEA_Downtime_${tag}_Report_${date}.csv`;
+        blob=dtCsvBlob(date, period);
+        toast('Excel library unavailable — sending CSV file instead',3000);
+      }
+      // Keep a local copy FIRST (manual sends only — browsers may block
+      // non-gesture downloads in auto mode anyway).
+      if(!auto){ try{ dtDownloadBlob(blob, fileName); }catch(e){} }
     }
-
-    // 2. Keep a local copy FIRST (manual sends, or auto sends that end up failing
-    //    — browsers may block non-gesture downloads, so it's best-effort in auto mode).
-    if(!auto){ try{ dtDownloadBlob(blob, fileName); }catch(e){} }
 
     const caption=`📊 ${rng.name} Downtime Report\n🗓 ${rng.label}\nTotal: ${a.totalCount} events, ${fmtDur(a.totalDur)} downtime`;
     const textSummary=dtBuildTextSummary(date, period);
@@ -4418,10 +4493,13 @@ async function dtSendReport(opts){
     }
 
     let ok=0; const failedNames=[];
+    // Excel is only attached when explicitly requested via the "Send with Excel"
+    // button. Automatic (10:00 daily) sends and the plain "Send Report Now"
+    // button send TEXT ONLY — no Excel/CSV attachment.
     for(const r of enabled){
       const stEl=$(`dts_${r.id}`);
       let sent=false;
-      if(r.type==='greenapi'){
+      if(r.type==='greenapi' && sendExcel){
         // WhatsApp via Green API → send the Excel/CSV FILE (3 retries) AND the
         // full text summary. If the file cannot be delivered at all, the text
         // summary alone still goes out so the report is never lost.
@@ -4435,8 +4513,9 @@ async function dtSendReport(opts){
           stEl.className='send-state st-ok';
         }
       }else{
-        // SMS / CallMeBot / group-link receivers can't take attachments →
-        // deliver the full text summary (with retries).
+        // Text-only path — used for auto-sends, manual text sends, and every
+        // non-greenapi receiver (SMS / CallMeBot / group-link cannot take
+        // attachments anyway).
         if(stEl){stEl.textContent='sending summary…';stEl.className='send-state st-s';}
         sent=await dtWithRetry(()=>sendSilent(r, textSummary, stEl), 3);
       }
@@ -4465,15 +4544,18 @@ async function dtSendReport(opts){
    Manual sends first show a review banner: the operator checks/edits the
    entries in the table below (start/end times, delete, add missed), then
    presses Confirm & Dispatch. Only then is anything sent to the group. ── */
-function dtEnterReview(date, period){
+function dtEnterReview(date, period, sendExcel){
   const wrap=$('dtSendStatus'); if(!wrap) return;
   const rng=dtRangeFor(period, date);
   const a=dtAggregateRange(rng.startMs, rng.endMs);
   const warn=a.events.filter(e=>e.assumed).length;
   dtRenderSummary();   // make sure the editable table reflects the same period/date
+  const excelBadge = sendExcel
+    ? '<span style="background:#0d3b8c;color:#fff;padding:2px 8px;border-radius:20px;font-size:10px;margin-left:6px">📎 with Excel</span>'
+    : '<span style="background:#18a34a;color:#fff;padding:2px 8px;border-radius:20px;font-size:10px;margin-left:6px">📤 Text only</span>';
   wrap.innerHTML=`
     <div style="background:#fffbeb;border:1.5px solid #d97706;border-radius:10px;padding:12px 14px;margin-top:6px">
-      <div style="font-size:13px;font-weight:800;color:#b45309;margin-bottom:4px">🔍 समीक्षा — Review before dispatch</div>
+      <div style="font-size:13px;font-weight:800;color:#b45309;margin-bottom:4px">🔍 समीक्षा — Review before dispatch${excelBadge}</div>
       <div style="font-size:12px;color:#78350f;line-height:1.6;margin-bottom:8px">
         कृपया माथिको तालिकामा <b>${esc(rng.name)}</b> रिपोर्ट (${esc(rng.label)}) जाँच गर्नुहोस् —
         गलत समय भए सिधै सच्याउनुहोस्, गल्ती प्रविष्टि 🗑 बाट हटाउनुहोस्, छुटेको घटना ＋ बाट थप्नुहोस्।
@@ -4483,7 +4565,7 @@ function dtEnterReview(date, period){
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-sm" style="background:#18a34a;color:#fff;border:none"
-          onclick="dtSendReport({confirmed:true, date:'${esc(date)}', period:'${esc(period)}'})">✔ Confirm &amp; Dispatch (पठाउनुहोस्)</button>
+          onclick="dtSendReport({confirmed:true, date:'${esc(date)}', period:'${esc(period)}', sendExcel:${!!sendExcel}})">✔ Confirm &amp; Dispatch (पठाउनुहोस्)</button>
         <button class="btn btn-ghost btn-sm" onclick="$('dtSendStatus').innerHTML=''">✖ Cancel (रद्द)</button>
       </div>
     </div>`;
@@ -7245,6 +7327,7 @@ function tfxRenderForm(){
       <div class="tfx-btn-row">
         <button class="tfx-btn" id="tfxSubmitBtn">💾 फारम सेभ गर्नुहोस् र Word डाउनलोड गर्नुहोस्</button>
         <button class="tfx-btn tfx-secondary" id="tfxSaveOnlyBtn">💾 सेभ मात्र (Word नगर्ने)</button>
+        <button class="tfx-btn tfx-ghost" id="tfxPrintBtn">🖨 प्रिन्ट गर्नुहोस्</button>
       </div>
       <div class="tfx-hint" style="margin-top:8px">💡 प्रत्येक फिल्डमा क्लिक गर्दा वा टाइप गर्न सुरु गर्दा अघिल्ला ७ प्रविष्टिहरु सुझाव देखिन्छन्। जहाँ लागू हुन्छ, हो/छ/छैन जस्ता विकल्प पनि देखिन्छन् (तर तपाईं फरक पनि टाइप गर्न सक्नुहुन्छ)।</div>
       <div id="tfxDatalistsContainer" style="display:none"></div>
@@ -7287,6 +7370,7 @@ function tfxBindFormEvents(){
 
   $('tfxSubmitBtn').addEventListener('click', ()=> tfxSaveForm({downloadWord:true}));
   $('tfxSaveOnlyBtn').addEventListener('click', ()=> tfxSaveForm({downloadWord:false}));
+  if($('tfxPrintBtn')) $('tfxPrintBtn').addEventListener('click', ()=> tfxPrintCurrentForm());
 }
 
 // Read all form fields into the current draft
@@ -7405,6 +7489,7 @@ function tfxRenderSavedList(){
         <td>
           <button class="tfx-btn tfx-small tfx-secondary" onclick="tfxLoadInspection('${d.id}')">खोल्नुहोस्</button>
           <button class="tfx-btn tfx-small tfx-ghost" onclick="tfxDownloadWordById('${d.id}')">Word</button>
+          <button class="tfx-btn tfx-small tfx-ghost" onclick="tfxPrintInspectionById('${d.id}')">🖨 Print</button>
           <button class="tfx-btn tfx-small tfx-danger" onclick="tfxDeleteInspection('${d.id}')">मेट्नुहोस्</button>
         </td>
       </tr>`).join('')}
@@ -7441,16 +7526,17 @@ function tfxDownloadWordById(id){
 function tfxBuildWordHtml(d){
   const style = `
     <style>
-      body{font-family:'Mangal','Kalimati','Noto Sans Devanagari','Segoe UI',serif;font-size:12pt;color:#000;}
-      h1,h2,h3{margin:0 0 6pt 0;}
-      table{border-collapse:collapse;width:100%;font-size:11pt;margin:6pt 0;}
-      th,td{border:1px solid #000;padding:4pt 6pt;text-align:left;}
+      body{font-family:'Mangal','Kalimati','Noto Sans Devanagari','Segoe UI',serif;font-size:9.5pt;color:#000;line-height:1.25;}
+      h1,h2,h3{margin:0 0 3pt 0;}
+      table{border-collapse:collapse;width:100%;font-size:8.5pt;margin:3pt 0;}
+      th,td{border:1px solid #000;padding:2pt 4pt;text-align:left;}
       th{background:#eee;font-weight:bold;}
       .center{text-align:center;}
-      .subject{text-align:center;font-weight:bold;text-decoration:underline;font-size:14pt;margin:10pt 0;}
-      .row{margin-bottom:4pt;}
+      .subject{text-align:center;font-weight:bold;text-decoration:underline;font-size:11pt;margin:5pt 0;}
+      .row{margin-bottom:2pt;}
       .lbl{font-weight:bold;}
-      .sig-row td{border:none;padding-top:40pt;}
+      .sig-row td{border:none;padding-top:16pt;}
+      hr{margin:3pt 0;}
     </style>
   `;
   const laTbl = `
@@ -7510,10 +7596,10 @@ function tfxBuildWordHtml(d){
 
   const body = `
     <div class="center">
-      <h1 style="font-size:20pt;">नेपाल विद्युत प्राधिकरण</h1>
-      <div style="font-size:11pt;">वितरण तथा ग्राहक सेवा निर्देशनालय</div>
-      <div style="font-size:11pt;">लुम्बिनी प्रादेशिक कार्यालय, बुटवल</div>
-      <h2 style="font-size:14pt;margin-top:6pt;">तौलिहवा वितरण केन्द्र, कपिलवस्तु</h2>
+      <h1 style="font-size:15pt;">नेपाल विद्युत प्राधिकरण</h1>
+      <div style="font-size:9pt;">वितरण तथा ग्राहक सेवा निर्देशनालय</div>
+      <div style="font-size:9pt;">लुम्बिनी प्रादेशिक कार्यालय, बुटवल</div>
+      <h2 style="font-size:11pt;margin-top:2pt;">तौलिहवा वितरण केन्द्र, कपिलवस्तु</h2>
     </div>
     <hr>
     <div class="subject">विषय : - ${d.sthiti==='नयाँ' ? 'नयाँ' : 'बिग्रेको'} ट्रान्सफर्मर विवरण</div>
@@ -7531,7 +7617,7 @@ function tfxBuildWordHtml(d){
     <div class="row"><span class="lbl">(१३) एच. टी. / एल. टी. फ्यूज :</span></div>
     ${htFuseTbl} ${ltFuseTbl}
 
-    <div class="row" style="margin-top:8pt;"><span class="lbl">(१४) लाइटिङ एरेष्टर :</span></div>
+    <div class="row" style="margin-top:3pt;"><span class="lbl">(१४) लाइटिङ एरेष्टर :</span></div>
     ${laTbl}
 
     <div class="row"><span class="lbl">(१५) अर्थिङ विवरण :</span></div>
@@ -7547,10 +7633,10 @@ function tfxBuildWordHtml(d){
       <span class="lbl">एच. टी. फ्यूज भित्रबाट आवाज आउने :</span> <b>${tfxEscapeHtml(d.transformerProblem.htFuseAwaj)}</b>
     </div>
 
-    <div class="row" style="margin-top:8pt;"><span class="lbl">जल्नु/बिग्रनुको कारण :</span> ${tfxEscapeHtml(d.causeOfBurning)}</div>
+    <div class="row" style="margin-top:3pt;"><span class="lbl">जल्नु/बिग्रनुको कारण :</span> ${tfxEscapeHtml(d.causeOfBurning)}</div>
     <div class="row"><span class="lbl">कैफियत :</span> ${tfxEscapeHtml(d.remarks)}</div>
 
-    <table class="sig-row" style="margin-top:30pt;border:none;">
+    <table class="sig-row" style="margin-top:10pt;border:none;">
       <tr>
         <td style="border:none;">निरीक्षण गर्ने व्यक्ति : <b>${tfxEscapeHtml(d.inspectorName)}</b></td>
         <td style="border:none;">पद : <b>${tfxEscapeHtml(d.designation)}</b></td>
@@ -7574,7 +7660,7 @@ function tfxBuildWordHtml(d){
 </xml>
 <![endif]-->
 <style>
-@page WordSection1 { size:8.5in 11.0in; margin:1.0in 1.0in 1.0in 1.0in; }
+@page WordSection1 { size:8.5in 11.0in; margin:0.5in 0.6in 0.5in 0.6in; }
 div.WordSection1 { page:WordSection1; }
 </style>
 ${style}
@@ -7601,6 +7687,97 @@ function tfxDownloadWord(d){
   setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
 }
 
+/* ── PRINT SUPPORT ─────────────────────────────────────────────────
+   Reuses the same nicely-formatted HTML as the Word export, opens it
+   in a hidden popup window, and fires window.print() there — so the
+   printed page shows ONLY the report (no app chrome, no nav tabs).
+   Also used from the "🖨 Print Register" button below the burnt table. */
+function tfxPrintInspection(insp){
+  if(!insp) return;
+  const html = tfxBuildWordHtml(insp);
+  const win = window.open('', '_blank', 'width=900,height=1100');
+  if(!win){ tfxToast('Popup blocked — allow popups to print'); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  // Give the browser a moment to parse fonts/tables before printing
+  const doPrint = ()=>{
+    try{ win.focus(); win.print(); }catch(e){}
+  };
+  if(win.document.readyState === 'complete') setTimeout(doPrint, 250);
+  else win.addEventListener('load', ()=>setTimeout(doPrint, 250));
+}
+
+function tfxPrintInspectionById(id){
+  const rec = TFX_DB.inspections.find(x=>x.id===id);
+  if(rec) tfxPrintInspection(rec);
+}
+
+// Print the current draft (whatever is on-screen in the form right now,
+// even if unsaved) — reads the DOM the same way tfxSaveForm does.
+function tfxPrintCurrentForm(){
+  const d = tfxReadFormFromDOM();
+  tfxPrintInspection(d);
+}
+
+// Print the जलेको ट्रान्सफर्मर रेकर्ड (burnt register) as a full-page table.
+function tfxPrintBurntRegister(){
+  const rows = [...TFX_DB.burnt].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const today = new Date().toLocaleDateString();
+  const tableRows = rows.length
+    ? rows.map((r,i)=>`<tr>
+        <td>${i+1}</td>
+        <td>${tfxEscapeHtml(r.burntDate||'')}</td>
+        <td>${tfxEscapeHtml(r.capacity||'')}</td>
+        <td>${tfxEscapeHtml(r.location||'')}</td>
+        <td>${tfxEscapeHtml(r.make||'')}</td>
+        <td>${tfxEscapeHtml(r.serialNo||'')}</td>
+        <td>${tfxEscapeHtml(r.replacedCapacity||'')} ${r.replacedType?('('+tfxEscapeHtml(r.replacedType)+')'):''}</td>
+        <td>${tfxEscapeHtml(r.replacedMake||'')}</td>
+        <td>${tfxEscapeHtml(r.replacedSerialNo||'')}</td>
+        <td>${tfxEscapeHtml(r.replacedDate||'')}</td>
+        <td>${tfxEscapeHtml(r.cause||'')}</td>
+        <td>${tfxEscapeHtml(r.remarks||'')}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="12" style="text-align:center;padding:20pt;color:#666">कुनै रेकर्ड छैन</td></tr>';
+  const html = `<!doctype html><html><head><meta charset="utf-8">
+<title>जलेको ट्रान्सफर्मर रेकर्ड</title>
+<style>
+  @page { size: A4 landscape; margin: 12mm; }
+  body { font-family:'Mangal','Kalimati','Noto Sans Devanagari','Segoe UI',serif; font-size:10pt; color:#000; margin:0; }
+  h1 { text-align:center; font-size:16pt; margin:0 0 4pt 0; }
+  .sub { text-align:center; font-size:11pt; margin:0 0 2pt 0; }
+  .meta { text-align:center; font-size:9pt; color:#555; margin-bottom:8pt; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { border:1px solid #333; padding:4pt 5pt; text-align:left; vertical-align:top; }
+  th { background:#e8eefb; color:#082a66; font-weight:700; font-size:10pt; }
+  tr:nth-child(even) td { background:#f8fafd; }
+  @media print { body{ margin:0; } }
+</style>
+</head><body>
+  <h1>नेपाल विद्युत प्राधिकरण</h1>
+  <div class="sub">तौलिहवा वितरण केन्द्र, कपिलवस्तु</div>
+  <div class="sub"><b>जलेको ट्रान्सफर्मर रेकर्ड</b></div>
+  <div class="meta">प्रिन्ट मिति: ${today} · कुल रेकर्ड: ${rows.length}</div>
+  <table>
+    <thead><tr>
+      <th>क्र.सं.</th><th>जलेको मिति</th><th>क्षमता KVA</th><th>जडित स्थान</th>
+      <th>Make</th><th>S.No.</th><th>बदली क्षमता</th><th>बदली Make</th>
+      <th>बदली S.No.</th><th>बदली मिति</th><th>कारण</th><th>कैफियत</th>
+    </tr></thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+</body></html>`;
+  const win = window.open('', '_blank', 'width=1200,height=900');
+  if(!win){ tfxToast('Popup blocked — allow popups to print'); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  const doPrint = ()=>{ try{ win.focus(); win.print(); }catch(e){} };
+  if(win.document.readyState === 'complete') setTimeout(doPrint, 250);
+  else win.addEventListener('load', ()=>setTimeout(doPrint, 250));
+}
+
 // -------------------------- Burnt register (जलेको रेकर्ड) ------------------
 function tfxRenderBurntCard(){
   $('tfxBurntRoot').innerHTML = `
@@ -7613,12 +7790,14 @@ function tfxRenderBurntCard(){
       <div id="tfxBurntTableWrap"></div>
       <div class="tfx-btn-row">
         <button class="tfx-btn tfx-ghost" id="tfxBurntExportCsvBtn">⭳ CSV एक्सपोर्ट</button>
+        <button class="tfx-btn tfx-secondary" id="tfxBurntPrintBtn">🖨 सम्पूर्ण रेकर्ड प्रिन्ट गर्नुहोस्</button>
       </div>
     </div>
   `;
   $('tfxBurntAddBtn').addEventListener('click', ()=>tfxOpenBurntModal(null));
   $('tfxBurntSearch').addEventListener('input', tfxRenderBurntTable);
   $('tfxBurntExportCsvBtn').addEventListener('click', tfxExportBurntCsv);
+  $('tfxBurntPrintBtn').addEventListener('click', tfxPrintBurntRegister);
   tfxRenderBurntTable();
 }
 
@@ -7776,6 +7955,9 @@ function tfxRenderAll(){
 window.tfxLoadInspection    = tfxLoadInspection;
 window.tfxDeleteInspection  = tfxDeleteInspection;
 window.tfxDownloadWordById  = tfxDownloadWordById;
+window.tfxPrintInspectionById = tfxPrintInspectionById;
+window.tfxPrintCurrentForm  = tfxPrintCurrentForm;
+window.tfxPrintBurntRegister = tfxPrintBurntRegister;
 window.tfxOpenBurntModal    = tfxOpenBurntModal;
 window.tfxDeleteBurntRecord = tfxDeleteBurntRecord;
 window.tfxSyncCycle         = tfxSyncCycle;
