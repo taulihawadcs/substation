@@ -27,7 +27,9 @@ body{background:var(--bg);color:var(--txt);font-family:'Archivo',sans-serif;line
   max-height:40px;overflow:hidden;transition:max-height .35s ease,opacity .3s ease,padding .3s ease}
 .topbar.hdr-compact .topbar-brand{max-height:0;opacity:0;padding-top:0;padding-bottom:0}
 .topbar.hdr-compact .topbar-subtitle{max-height:0;opacity:0;padding-bottom:0}
-.topbar-nav{display:flex;align-items:center;justify-content:center;gap:0;border-top:1px solid var(--line);padding:0 20px}
+.topbar-nav{display:flex;align-items:center;justify-content:center;gap:0;border-top:1px solid var(--line);padding:0 20px;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.topbar-nav::-webkit-scrollbar{display:none}
 .nav-tab{background:none;border:none;font-family:'Archivo',sans-serif;font-size:14px;font-weight:500;color:var(--dim);cursor:pointer;padding:10px 20px;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;flex:none}
 .nav-tab:hover{color:var(--txt)}
 .nav-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
@@ -291,8 +293,36 @@ body.monitor-mode #monitorRecentSlot::before{
 body.monitor-mode #monitorRecentSlot #monitorRecent{
   display:block !important;
   max-height:none;      /* left column already scrolls; no inner cap needed */
-  padding:8px 12px;
+  padding:8px 8px;
 }
+/* ── WhatsApp-style chat bubbles for monitor Recent Messages ──
+   Beige chat backdrop + light-green sent bubbles, timestamp bottom-right,
+   full multi-line alert text preserved — matches the WhatsApp group look. */
+#monitorRecent .mr-chat{
+  display:flex;flex-direction:column;gap:8px;
+  background:#ece5dd;                 /* WhatsApp chat backdrop */
+  padding:10px 9px;border-radius:8px;
+}
+#monitorRecent .mr-bubble{
+  background:#dcf8c6;                 /* WhatsApp sent-message green */
+  border-radius:9px;
+  padding:7px 9px 4px;
+  box-shadow:0 1px 1px rgba(0,0,0,.13);
+  max-width:100%;
+}
+#monitorRecent .mr-station{
+  font-size:10px;font-weight:800;color:#0d6e5f;margin-bottom:2px;
+}
+#monitorRecent .mr-msg{
+  font-size:11.5px;color:#111b21;line-height:1.45;
+  white-space:pre-wrap;word-break:break-word;
+  font-family:'Segoe UI','Noto Sans Devanagari','Mangal','Kalimati',sans-serif;
+}
+#monitorRecent .mr-meta{
+  font-size:9px;color:#667781;text-align:right;margin-top:3px;
+  font-family:'JetBrains Mono',monospace;
+}
+#monitorRecent .mr-tick{color:#53bdeb;font-size:9.5px;}
 body.monitor-mode .mini-preview-wrap{display:none !important}
 body.monitor-mode .card-head .card-title.entry-title::after{content:' (view only)';font-weight:600;color:var(--dim2);font-size:12px}
 /* Taller, well-spaced options in the open dropdown list (desktop) */
@@ -449,7 +479,11 @@ select.big option,
   /* Compact topbar */
   .topbar-brand{font-size:18px;padding:7px 20px 1px}
   .topbar-subtitle{font-size:10px;padding-bottom:5px}
-  .nav-tab{padding:7px 18px;font-size:13px}
+  .nav-tab{padding:7px 12px;font-size:13px;white-space:nowrap}
+  /* justify-content:center clips BOTH ends when tabs overflow a narrow screen
+     ("Entry" was cut off on the left) — left-align on mobile so every tab is
+     reachable with a horizontal swipe. */
+  .topbar-nav{justify-content:flex-start;padding:0 8px}
 
   /* Page fills viewport below topbar */
   #page-main{
@@ -597,6 +631,21 @@ body.tfx-page-open #page-transformer{
   padding:0 !important;
   margin:0 !important;
   width:100% !important;
+}
+
+/* When the Log tab is open, hide EVERYTHING outside the log page — same
+   dedicated-view treatment as the transformer page, so the message log +
+   downtime report open as their own unique full-width page instead of a
+   narrow page sitting inside the main feeder-entry layout. */
+body.log-page-open .page:not(#page-log){display:none !important}
+body.log-page-open #page-log{
+  display:block !important;
+  max-width:none !important;   /* override .page{max-width:860px} */
+  padding:0 !important;
+  margin:0 !important;
+  width:100% !important;
+  min-height:calc(100vh - 60px);
+  background:var(--bg,#f6f7fa);
 }
 
 #page-transformer{
@@ -1124,6 +1173,8 @@ body.tfx-page-open #page-transformer{
         <button class="log-stab all active" onclick="setLogStation('__all__')">All Substations</button>
       </div>
       <div class="log-export-btns">
+        <button class="btn btn-ghost btn-sm" id="msgAlertTgl" onclick="toggleMsgAlert()" title="Play a chime + browser notification when a new message arrives from any device">🔔 Alert Tone: On</button>
+        <button class="btn btn-ghost btn-sm" id="pushTgl" onclick="togglePush()" title="Receive alerts on this device even when the app is closed">📲 Push: Off</button>
         <button class="btn btn-ghost btn-sm" onclick="sbPullLog()" title="Load log from Supabase">☁ Pull from Cloud</button>
         <button class="btn btn-ghost btn-sm" onclick="exportLogCsvActive()">↓ Export Active CSV</button>
         <button class="btn btn-ghost btn-sm" onclick="exportLogAllSheets()">↓ Export All (Multi-sheet)</button>
@@ -2254,6 +2305,8 @@ function showPage(name){
   // Toggle a body class while the transformer page is open so its CSS can hide
   // every other page and lift the app-wide .page{max-width:860px} constraint.
   document.body.classList.toggle('tfx-page-open', name==='transformer');
+  // Same dedicated-page treatment for the Log (messages + downtime report) page.
+  document.body.classList.toggle('log-page-open', name==='log');
   if(name==='main')     document.querySelector('.nav-tab[onclick*="main"]').classList.add('active');
   else if(name==='log') { $('navLog').classList.add('active'); renderLogPage(); }
   else if(name==='transformer') { $('navTransformer').classList.add('active'); tfxRenderAll(); }
@@ -3588,8 +3641,11 @@ function setLogStation(st){
 
 function renderLogStationTabs(){
   const tabs = $('logStationTabs');
-  // Collect unique stations from log
-  const stations = [...new Set(LOG.map(r=>r.station).filter(Boolean))];
+  // Collect unique stations from log — exclude the pseudo-station
+  // 'All Substations' (used by report / system-gone entries), which was
+  // creating a duplicate "All Substations" pill next to the real one.
+  const stations = [...new Set(LOG.map(r=>r.station).filter(Boolean))]
+    .filter(st=>st!=='All Substations' && st!=='__all__');
   tabs.innerHTML = `<button class="log-stab all${logActiveStation==='__all__'?' active':''}" data-st="__all__" onclick="setLogStation('__all__')">All Substations</button>`;
   stations.forEach(st=>{
     const active = logActiveStation===st?' active':'';
@@ -5498,26 +5554,32 @@ function expireChargedFeeders(){
   return changed;
 }
 
-// Monitor view-only: show recent sent messages for the selected substation in
-// place of the message-preview composer. Small font, latest first.
+// Monitor view-only: show recent sent messages as WhatsApp-style chat bubbles.
+// Newest messages appear at TOP, older below. Shows the selected substation's
+// messages when one is chosen; otherwise recent messages of EVERY substation.
+// The full multi-line alert text (⚡ FEEDER TRIP ALERT, separators, rows) is
+// preserved exactly as sent — same look as the WhatsApp group.
 function renderMonitorRecent(){
   if(!monitorMode) return;
   const box=$('monitorRecent'); if(!box) return;
   const titleEl=$('miniPreviewTitle');
   const st=$('station').value;
-  if(titleEl) titleEl.innerHTML='📨 Recent Messages' + (st?` — <span style="color:var(--dim2);font-weight:600">${esc(st)}</span>`:'');
-  if(!st){ box.innerHTML='<div style="font-size:11px;color:var(--dim2)">Select a substation to view its recent sent messages.</div>'; return; }
-  const items=LOG.filter(r=>r.station===st && r.msg).slice(0,8);
-  if(!items.length){ box.innerHTML='<div style="font-size:11px;color:var(--dim2)">No messages sent for this substation yet.</div>'; return; }
-  box.innerHTML=items.map(r=>{
-    const when=r.ts||'';
-    const cond=(r.condition||'').toString();
-    const snippet=(r.msg||'').replace(/\s+/g,' ').trim();
-    return `<div style="border-left:2px solid var(--line2);padding:5px 0 6px 9px;margin-bottom:7px">
-      <div style="font-size:9.5px;color:var(--dim2);font-family:'JetBrains Mono',monospace;margin-bottom:2px">${esc(when)} ${cond?'· '+esc(cond):''}</div>
-      <div style="font-size:10.5px;color:var(--txt);line-height:1.5;white-space:pre-wrap;word-break:break-word">${esc(snippet)}</div>
+  if(titleEl) titleEl.innerHTML='📨 Recent Messages' + (st?` — <span style="color:var(--dim2);font-weight:600">${esc(st)}</span>`:' — All Substations');
+  // Newest first (recent at top, older below) across the whole log
+  const items=LOG.filter(r=>r.msg && (!st || r.station===st))
+    .slice()
+    .sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))
+    .slice(0,20);
+  if(!items.length){ box.innerHTML='<div style="font-size:11px;color:var(--dim2)">No messages sent yet.</div>'; return; }
+  box.innerHTML = '<div class="mr-chat">' + items.map(r=>{
+    const when=(r.ts||'').toString();
+    const full=(r.msg||'').replace(/\r\n/g,'\n').trim();
+    return `<div class="mr-bubble">
+      ${st ? '' : `<div class="mr-station">${esc(r.station||'')}</div>`}
+      <div class="mr-msg">${esc(full)}</div>
+      <div class="mr-meta">${esc(when)} <span class="mr-tick">✓</span></div>
     </div>`;
-  }).join('');
+  }).join('') + '</div>';
 }
 
 function renderFeederStatus(){
@@ -7357,6 +7419,173 @@ function recordLog(type, recipients, status){
 }
 
 /* ============================================================
+   WEB PUSH — alerts even when the app is CLOSED
+   Requires: app + sw.js hosted on HTTPS, `push_subscriptions`
+   table, and the `push-notify` Edge Function wired to a
+   Database Webhook on message_log INSERT (see PUSH_SETUP_README).
+   ============================================================ */
+const PUSH_VAPID_PUBLIC = 'BMByydmzv6ocCKnKYWvAC5CMAnw2GKRj6CWOJ0mh8sBCmbk5i3WzisfTCKiwvvEhOdIEIbwc_o10xFtI49_cCQk';
+
+function urlBase64ToUint8Array(s){
+  const pad='='.repeat((4-s.length%4)%4);
+  const b64=(s+pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(b64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+function pushSupported(){
+  return 'serviceWorker' in navigator && 'PushManager' in window
+      && (location.protocol==='https:' || location.hostname==='localhost');
+}
+async function getPushSubscription(){
+  try{
+    const reg = await navigator.serviceWorker.getRegistration();
+    return reg ? await reg.pushManager.getSubscription() : null;
+  }catch(e){ return null; }
+}
+async function updatePushUI(){
+  const b=$('pushTgl'); if(!b) return;
+  if(!pushSupported()){
+    b.innerHTML='📲 Push: N/A';
+    b.title='Push requires the app to be hosted on HTTPS (e.g. GitHub Pages) — not opened from Downloads/file';
+    b.style.color='var(--dim2)';
+    return;
+  }
+  const sub = await getPushSubscription();
+  b.innerHTML = sub ? '📲 Push: On' : '📲 Push: Off';
+  b.style.color = sub ? '#18a34a' : '';
+  b.title = sub ? 'This device receives alerts even when the app is closed. Tap to turn off.'
+                : 'Turn on to receive alerts on this device even when the app is closed.';
+}
+async function togglePush(){
+  if(!pushSupported()){
+    toast('📲 Push needs the app hosted on HTTPS (GitHub Pages / Netlify) — it can\'t work when opened from Downloads', 5000);
+    return;
+  }
+  try{
+    let sub = await getPushSubscription();
+    if(sub){
+      // ── Turn OFF: unsubscribe + remove from cloud ──
+      const endpoint = sub.endpoint;
+      await sub.unsubscribe();
+      try{
+        await fetch(getSbUrl()+'/rest/v1/push_subscriptions?endpoint=eq.'+encodeURIComponent(endpoint),
+          { method:'DELETE', headers: sbHeaders() });
+      }catch(e){}
+      toast('📲 Push notifications OFF for this device');
+    } else {
+      // ── Turn ON: register SW → permission → subscribe → save ──
+      const reg = await navigator.serviceWorker.register('./sw.js');
+      const perm = await Notification.requestPermission();
+      if(perm!=='granted'){ toast('⚠ Notification permission denied — enable it in browser site settings'); await updatePushUI(); return; }
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly:true,
+        applicationServerKey:urlBase64ToUint8Array(PUSH_VAPID_PUBLIC)
+      });
+      await fetch(getSbUrl()+'/rest/v1/push_subscriptions?on_conflict=endpoint', {
+        method:'POST',
+        headers:{...sbHeaders(), 'Prefer':'resolution=merge-duplicates,return=minimal'},
+        body: JSON.stringify([{
+          endpoint: sub.endpoint,
+          subscription: sub.toJSON(),
+          device: (navigator.userAgent||'').slice(0,140),
+          updated_at: new Date().toISOString()
+        }])
+      });
+      toast('✅ Push ON — this device will get alerts even when the app is closed', 4500);
+    }
+  }catch(e){
+    console.warn('Push toggle failed:', e);
+    toast('⚠ Push setup failed: '+(e.message||e), 4500);
+  }
+  await updatePushUI();
+}
+window.togglePush = togglePush;
+
+/* ============================================================
+   NEW-MESSAGE ALERT — plays a chime + shows a browser
+   notification whenever a NEW message appears in the log
+   (i.e. a message sent from any other operator device).
+   Toggle with the 🔔 button on the Log page (saved locally).
+   ============================================================ */
+let msgAlertFirstSync = true;   // don't blast a chime for the initial log load
+let msgAlertCtx = null;
+
+function msgAlertEnabled(){ return localStorage.getItem('nea_msg_alert') !== 'off'; }
+
+function updateMsgAlertUI(){
+  const b = $('msgAlertTgl');
+  if(!b) return;
+  const on = msgAlertEnabled();
+  b.innerHTML = on ? '🔔 Alert Tone: On' : '🔕 Alert Tone: Off';
+  b.style.color = on ? '' : 'var(--red)';
+}
+function toggleMsgAlert(){
+  localStorage.setItem('nea_msg_alert', msgAlertEnabled() ? 'off' : 'on');
+  updateMsgAlertUI();
+  if(msgAlertEnabled()){
+    msgAlertInitAudio();
+    playMsgAlertTone();                      // preview the tone
+    if('Notification' in window && Notification.permission==='default'){
+      Notification.requestPermission().catch(()=>{});
+    }
+    toast('🔔 नयाँ सन्देश आउँदा टोन बज्नेछ');
+  } else {
+    toast('🔕 Alert tone muted');
+  }
+}
+window.toggleMsgAlert = toggleMsgAlert;
+
+// Browsers block audio until a user gesture — create/resume the
+// AudioContext on any tap/click so the poll-driven chime can play later.
+function msgAlertInitAudio(){
+  try{
+    if(!msgAlertCtx) msgAlertCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(msgAlertCtx && msgAlertCtx.state==='suspended') msgAlertCtx.resume().catch(()=>{});
+  }catch(e){}
+}
+document.addEventListener('pointerdown', msgAlertInitAudio);
+
+function playMsgAlertTone(){
+  try{
+    msgAlertInitAudio();
+    if(!msgAlertCtx || msgAlertCtx.state!=='running') return;
+    const t0 = msgAlertCtx.currentTime;
+    // Pleasant two-note "ding-dong" chime (A5 → D6)
+    [[880,0],[1174.66,0.18]].forEach(([freq,off])=>{
+      const o = msgAlertCtx.createOscillator();
+      const g = msgAlertCtx.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, t0+off);
+      g.gain.exponentialRampToValueAtTime(0.28, t0+off+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0+off+0.45);
+      o.connect(g); g.connect(msgAlertCtx.destination);
+      o.start(t0+off); o.stop(t0+off+0.5);
+    });
+  }catch(e){}
+}
+
+function notifyNewMessages(count, latest){
+  if(!msgAlertEnabled()) return;
+  playMsgAlertTone();
+  const detail = latest
+    ? `${latest.station||''}${latest.feeder ? ' · '+latest.feeder : ''}${latest.condition ? ' — '+latest.condition : ''}`
+    : '';
+  try{ toast(`🔔 ${count>1 ? count+' नयाँ सन्देश' : 'नयाँ सन्देश'}${detail ? ' — '+detail : ''}`, 4000); }catch(e){}
+  try{
+    if('Notification' in window){
+      const show = ()=>{ try{
+        new Notification(`⚡ ${count>1 ? count+' new messages' : 'New message'}`, {
+          body: detail || 'नयाँ सन्देश आयो',
+          tag: 'nea-new-msg'
+        });
+      }catch(e){} };
+      if(Notification.permission==='granted') show();
+      else if(Notification.permission==='default') Notification.requestPermission().then(p=>{ if(p==='granted') show(); });
+    }
+  }catch(e){}
+}
+
+/* ============================================================
    REAL-TIME SYNC — poll Supabase every 15s for feeder status
    and every 30s for log updates so all users see live changes
    ============================================================ */
@@ -7501,8 +7730,11 @@ async function syncFromCloud(){
         LOG.sort((a,b)=>new Date(b.date)-new Date(a.date));
         if($('page-log').classList.contains('active')) renderLogPage();
         if(monitorMode) renderMonitorRecent();
+        // 🔔 Alert tone + notification for messages sent from other devices
+        if(!msgAlertFirstSync) notifyNewMessages(added, logRows[0]);
       }
     }
+    msgAlertFirstSync = false;   // initial log load done — alert from now on
     updateSbSyncStatus(`Last sync: ${nowHM()} — ${logRows.length} log entries`);
   }catch(e){
     anyError=true;
@@ -7565,6 +7797,8 @@ try{ refreshDcsUI(); }catch(e){ console.warn('refreshDcsUI init failed:', e.mess
 try{ showAppLock(); }catch(e){ console.warn('showAppLock failed:', e.message); }
 try{ updateSbConnUI(); }catch(e){ console.warn('updateSbConnUI failed:', e.message); }
 try{ updateRcvMuteUI(); }catch(e){ console.warn('updateRcvMuteUI failed:', e.message); }
+try{ updateMsgAlertUI(); }catch(e){ console.warn('updateMsgAlertUI failed:', e.message); }
+try{ updatePushUI(); }catch(e){ console.warn('updatePushUI failed:', e.message); }
 
 // Absolute fallback: make sure the lock screen is visible and the role toggle
 // is clickable no matter what happened above. Direct listeners are added as a
@@ -8148,11 +8382,12 @@ function tfxRenderForm(){
       </h2>
       <div class="tfx-flexbar">
         <div style="font-size:12.5px;color:var(--tfx-ink-soft)">
-          फारम भरेर सेभ गर्नुहोस् — रेकर्ड तल <b>जलेको ट्रान्सफर्मर रेकर्ड</b> मा स्वतः थपिन्छ र Word (.doc) फाइल पनि डाउनलोड हुन्छ।
+          फारम भरेर सेभ गर्नुहोस् — रेकर्ड <b>जलेको ट्रान्सफर्मर रेकर्ड</b> पेजमा स्वतः थपिन्छ र Word (.doc) फाइल पनि डाउनलोड हुन्छ।
         </div>
         <div class="tfx-btn-row" style="margin-top:0;">
           <button class="tfx-btn tfx-ghost" id="tfxNewBtn">🆕 नयाँ फारम</button>
           <button class="tfx-btn tfx-secondary" id="tfxLoadBtn">📂 पुरानो फारम खोल्नुहोस्</button>
+          <button class="tfx-btn" onclick="tfxShowView('burnt')">⚡ जलेको रेकर्ड →</button>
         </div>
       </div>
 
@@ -8496,31 +8731,34 @@ function tfxDownloadWordById(id){
 function tfxBuildWordHtml(d){
   const style = `
     <style>
-      /* ── PAGE SETUP ── A4 with narrow margins so everything fits on one sheet */
-      @page { size:A4; margin:0.35in 0.5in 0.35in 0.5in; }
-      body{font-family:'Mangal','Kalimati','Noto Sans Devanagari','Segoe UI',serif;font-size:8.5pt;color:#000;margin:0;line-height:1.12;mso-line-height-rule:exactly;}
-      h1,h2,h3,h4{margin:0 0 1pt 0;}
-      table{border-collapse:collapse;width:100%;font-size:7.5pt;margin:1pt 0;page-break-inside:avoid;}
+      /* ── PAGE SETUP ── A4 portrait, proper margins, sized/spaced to fill
+         one full sheet without spilling to a second page. */
+      @page { size:A4 portrait; margin:0.5in; }
+      body{font-family:'Mangal','Kalimati','Noto Sans Devanagari','Segoe UI',serif;font-size:10.5pt;color:#000;margin:0;line-height:130%;mso-line-height-rule:at-least;}
+      h1,h2,h3,h4{margin:0;}
+      p{margin:0;}
+      table{border-collapse:collapse;width:100%;font-size:9.5pt;margin:3pt 0;page-break-inside:avoid;mso-table-lspace:0;mso-table-rspace:0;}
       /* Outer layout tables (used only for side-by-side layouts) must NOT prevent
          page breaks — they're wrappers, not data tables, and their avoid-rules
          cascade too aggressively and force premature page breaks. */
       table.layout-tbl{page-break-inside:auto;margin:0;}
       table.layout-tbl > tbody > tr > td{page-break-inside:auto;}
-      th,td{border:1px solid #000;padding:0.5pt 3pt;text-align:left;line-height:1.05;}
+      th,td{border:1px solid #000;padding:3pt 5pt;text-align:left;line-height:130%;}
       th{background:#eee;font-weight:bold;}
       .center{text-align:center;}
-      .subject{text-align:center;font-weight:bold;text-decoration:underline;font-size:10pt;margin:1pt 0 2pt;}
-      .row{margin-bottom:0.5pt;}
+      .subject{text-align:center;font-weight:bold;text-decoration:underline;font-size:12pt;margin:6pt 0 7pt;}
+      .row{margin-bottom:4pt;}
       .lbl{font-weight:bold;}
-      .header-band{text-align:center;padding-bottom:1pt;border-bottom:1.2pt solid #000;margin-bottom:1pt;}
-      .header-band h1{font-size:12pt;font-weight:bold;letter-spacing:0.3pt;line-height:1.05;margin:0;}
-      .header-band .sub1{font-size:8pt;margin:0;line-height:1.05;}
-      .header-band .sub2{font-size:9.5pt;font-weight:bold;margin:0;line-height:1.1;}
-      .compact-grid{width:100%;border:none;margin:0;font-size:8.5pt;}
-      .compact-grid td{border:none;padding:0.3pt 4pt 0.3pt 0;vertical-align:top;line-height:1.15;}
-      .sect-hdr{font-weight:bold;margin:1.5pt 0 0.3pt 0;font-size:8.5pt;}
-      .sig-row{margin-top:3pt;border:none;}
-      .sig-row td{border:none;padding-top:8pt;font-size:8.5pt;}
+      .header-band-cell{border:none;border-bottom:1.5pt solid #000;text-align:center;padding:0 0 6pt 0;}
+      .header-band-cell h1{font-size:16pt;font-weight:bold;letter-spacing:0.4pt;line-height:125%;margin:0;text-align:center;}
+      .header-band-cell .sub1{font-size:9.5pt;margin:2pt 0;line-height:125%;text-align:center;}
+      .header-band-cell .sub2{font-size:11pt;font-weight:bold;margin:2pt 0 0;line-height:125%;text-align:center;}
+      .compact-grid{width:100%;border:none;margin:4pt 0;font-size:10.5pt;}
+      .compact-grid td{border:none;padding:3pt 6pt 3pt 0;vertical-align:top;line-height:130%;}
+      .sect-hdr{font-weight:bold;margin:7pt 0 4pt 0;font-size:10.5pt;}
+      .sig-row{margin:10pt 0 0 0;border:none;page-break-after:avoid;}
+      .sig-row td{border:none;padding:12pt 0 0 0;font-size:10.5pt;}
+      @media print{ html,body{height:auto !important;overflow:visible !important;} }
     </style>
   `;
 
@@ -8631,12 +8869,15 @@ function tfxBuildWordHtml(d){
   `;
 
   const body = `
-    <div class="header-band">
-      <h1>नेपाल विद्युत प्राधिकरण</h1>
-      <div class="sub1">वितरण तथा ग्राहक सेवा निर्देशनालय · लुम्बिनी प्रादेशिक कार्यालय, बुटवल</div>
-      <div class="sub2">${tfxEscapeHtml(currentDcs().center || 'तौलिहवा वितरण केन्द्र')}${currentDcs().location ? ', '+tfxEscapeHtml(currentDcs().location) : ''}</div>
-    </div>
-    <div class="subject">विषय : ${d.sthiti==='नयाँ' ? 'नयाँ' : 'बिग्रेको'} ट्रान्सफर्मर विवरण</div>
+    <table class="layout-tbl" style="border:none;margin:0 0 6pt 0;">
+      <tr><td class="header-band-cell">
+        <h1>नेपाल विद्युत प्राधिकरण</h1>
+        <p class="sub1">वितरण तथा ग्राहक सेवा निर्देशनालय</p>
+        <p class="sub1">लुम्बिनी प्रादेशिक कार्यालय, बुटवल</p>
+        <p class="sub2">${tfxEscapeHtml(currentDcs().center || 'तौलिहवा वितरण केन्द्र')}${currentDcs().location ? ', '+tfxEscapeHtml(currentDcs().location) : ''}</p>
+      </td></tr>
+    </table>
+    <div class="subject">विषय : विग्रेको ट्रान्सफर्मर विवरण</div>
 
     ${idGrid}
 
@@ -8682,7 +8923,7 @@ function tfxBuildWordHtml(d){
 <![endif]-->
 <style>
 /* Word-specific page section: A4 with narrow margins */
-@page WordSection1 { size:8.27in 11.69in; margin:0.35in 0.5in 0.35in 0.5in; mso-page-orientation:portrait; }
+@page WordSection1 { size:8.27in 11.69in; margin:0.5in 0.5in 0.5in 0.5in; mso-page-orientation:portrait; }
 div.WordSection1 { page:WordSection1; }
 </style>
 ${style}
@@ -8804,7 +9045,9 @@ function tfxPrintBurntRegister(){
 function tfxRenderBurntCard(){
   $('tfxBurntRoot').innerHTML = `
     <div class="tfx-card">
-      <h2>⚡ जलेको ट्रान्सफर्मर रेकर्ड <span class="tfx-badge">${TFX_DB.burnt.length} रेकर्ड</span></h2>
+      <h2>⚡ जलेको ट्रान्सफर्मर रेकर्ड <span class="tfx-badge">${TFX_DB.burnt.length} रेकर्ड</span>
+        <button class="tfx-btn tfx-ghost tfx-small" style="margin-left:auto" onclick="tfxShowView('form')">← फारममा फर्कनुहोस्</button>
+      </h2>
       <div class="tfx-flexbar">
         <div class="tfx-search-box"><span class="tfx-search-icon">🔍</span><input type="text" id="tfxBurntSearch" placeholder="स्थान, सि.नं., कारण खोज्नुहोस्..."></div>
         <button class="tfx-btn" id="tfxBurntAddBtn">+ मैनुअल रेकर्ड थप्नुहोस्</button>
@@ -8964,9 +9207,24 @@ function tfxExportBurntCsv(){
 }
 
 // Master renderer (called by showPage('transformer'))
+/* ── VIEW SWITCHER ──────────────────────────────────────────────
+   The जलेको ट्रान्सफर्मर रेकर्ड opens as its OWN page (like the
+   transformer page itself) instead of stacking below the entry form. */
+let tfxView = 'form';   // 'form' | 'burnt'
+function tfxShowView(v){
+  tfxView = v;
+  const f = $('tfxFormRoot'), b = $('tfxBurntRoot');
+  if(f) f.style.display = (v==='form')  ? '' : 'none';
+  if(b) b.style.display = (v==='burnt') ? '' : 'none';
+  if(v==='burnt') tfxRenderBurntTable();
+  try{ window.scrollTo(0,0); }catch(e){}
+}
+window.tfxShowView = tfxShowView;
+
 function tfxRenderAll(){
   tfxRenderForm();
   tfxRenderBurntCard();
+  tfxShowView(tfxView);
   tfxUpdateSyncUI();
   tfxStartPeriodicSync();
   // Kick a sync ~200ms after render so the UI is visible first
