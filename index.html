@@ -5,6 +5,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Substation Messaging — NEA Taulihawa</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0d3b66">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -135,7 +139,20 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 /* Settings */
 .settings-grid{display:grid;grid-template-columns:220px 1fr;gap:20px;align-items:start}
 .settings-content{min-width:0;overflow:hidden}
-@media(max-width:640px){.settings-grid{grid-template-columns:1fr}}
+.snav-toggle{display:none}
+@media(max-width:640px){
+  .settings-grid{grid-template-columns:1fr;gap:12px}
+  /* Collapsible menu: only the toggle bar shows; tapping it pulls the
+     menu open. Selecting an item collapses it again. */
+  .snav-toggle{display:flex;align-items:center;gap:8px;padding:13px 14px;font-size:13.5px;font-weight:700;
+    color:var(--blue);cursor:pointer;user-select:none}
+  .snav-caret{margin-left:auto;transition:transform .18s;font-size:12px;color:var(--dim)}
+  .settings-nav.open .snav-caret{transform:rotate(180deg)}
+  .settings-nav .snav-item{display:none}
+  .settings-nav.open .snav-item{display:block}
+  .settings-nav.open .snav-toggle{border-bottom:1px solid var(--line)}
+  .settings-nav{position:sticky;top:60px;z-index:30;box-shadow:0 2px 8px rgba(15,23,42,.06)}
+}
 .settings-nav{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;position:sticky;top:70px}
 .snav-item{padding:10px 14px;cursor:pointer;font-size:13px;font-weight:500;color:var(--dim);border-bottom:1px solid var(--line);transition:background .12s,color .12s}
 .snav-item:last-child{border-bottom:none}
@@ -153,6 +170,16 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .data-table input:hover,.data-table select:hover{border-color:var(--line2);background:#fff}
 .data-table input:focus,.data-table select:focus{border-color:var(--blue);background:#fff;outline:none;box-shadow:0 0 0 3px rgba(26,110,245,.1)}
 .del-btn{background:none;border:none;color:var(--dim2);cursor:pointer;padding:4px 6px;border-radius:6px;font-size:14px;transition:color .12s}
+/* ── Asked By: card + chip layout ── */
+.ab-card{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fff}
+.ab-top{display:flex;gap:8px;align-items:center;margin-bottom:9px}
+.ab-top input{flex:1;min-width:0;font-weight:600}
+.ab-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ab-chip{padding:5px 13px;border-radius:20px;border:1.5px solid var(--line);font-size:12px;font-weight:600;
+  cursor:pointer;user-select:none;white-space:nowrap;color:var(--dim);background:#fff;transition:all .12s}
+.ab-chip:active{transform:scale(.96)}
+.ab-chip.on{background:#dbeafe;border-color:#60a5fa;color:#1e40af}
+.ab-chip.general.on{background:#dcfce7;border-color:#4ade80;color:#166534}
 .del-btn:hover{color:var(--red);background:var(--red-lt)}
 .add-row-btn{margin-top:10px}
 .tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:9px;background:#fff}
@@ -1053,6 +1080,9 @@ body.log-page-open #page-log{
             <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:5px;letter-spacing:.03em">Affected substations (untick the ones that are NOT gone):</div>
             <div id="sgStationPicker" style="display:flex;flex-wrap:wrap;gap:6px"></div>
           </div>
+          <!-- Live preview of the EXACT message that Dispatch will send -->
+          <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:4px">📨 Message Preview — यो सन्देश पठाइनेछ:</div>
+          <div id="outagePreview" style="background:#fff;border:1.5px dashed #d97706;border-radius:8px;padding:9px 11px;font-size:12.5px;font-family:'JetBrains Mono',monospace;color:#7c2d12;margin-bottom:10px;word-break:break-word;line-height:1.5;white-space:pre-wrap"></div>
           <p style="font-size:12px;color:var(--dim2);margin-bottom:10px">Preview जाँच गर्नुस् र Dispatch थिच्नुस्। (All affected feeders will be set to this condition and ONE message sent.)</p>
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
             <button class="btn" id="outageDispatchBtn" style="background:#d97706;color:#fff" onclick="dispatchOutage()">📣 Dispatch</button>
@@ -1238,6 +1268,7 @@ body.log-page-open #page-log{
   <div class="settings-grid">
 
     <div class="settings-nav">
+      <div class="snav-toggle" onclick="toggleSnav()">☰ <span id="snavCurrent">Distribution Centers (DCS)</span> <span class="snav-caret">▾</span></div>
       <div class="snav-item active" onclick="showSection('sec-dcs')">Distribution Centers (DCS)</div>
       <div class="snav-item" onclick="showSection('sec-substations')">Substations</div>
       <div class="snav-item" onclick="showSection('sec-feeders')">Feeders</div>
@@ -1251,6 +1282,7 @@ body.log-page-open #page-log{
       <div class="snav-item" onclick="showSection('sec-httpsms')">HttpSMS</div>
       <div class="snav-item" onclick="showSection('sec-greenapi')">Green API (WA Group)</div>
       <div class="snav-item" onclick="showSection('sec-supabase')">☁ Supabase (Sync)</div>
+      <div class="snav-item" onclick="showSection('sec-devices');renderDeviceRegistry()">🔐 Device Access</div>
       <div class="snav-item" onclick="showSection('sec-changepw')">🔑 Change Password</div>
     </div>
 
@@ -1378,15 +1410,11 @@ body.log-page-open #page-log{
         <div class="card">
           <div class="card-head"><span class="card-title">Who Asked Shutdown (माग्ने)</span></div>
           <div class="card-body">
-            <p style="font-size:12px;color:var(--dim);margin-bottom:8px;line-height:1.5">
-              प्रत्येक Asker लाई सम्बन्धित सबस्टेशन(हरू) मा tag गर्नुहोस्। <b>General (all)</b> टिक गरेमा सबै सबस्टेशनका लागि देखिन्छ; अन्यथा केवल छानेको substation पिक गर्दा मात्र माग्ने dropdown मा देखिन्छ। एउटा asker लाई धेरै सबस्टेशनमा tag गर्न सकिन्छ।
+            <p style="font-size:12px;color:var(--dim);margin-bottom:10px;line-height:1.5">
+              कुन-कुन सबस्टेशनका लागि यो नाम देखिने हो, chip थिचेर छान्नुहोस् — chip थिच्नेबित्तिकै scope लागू हुन्छ।
+              <b>General — सबै</b> = सबै सबस्टेशनमा देखिन्छ। एक वा बढी सबस्टेशन छान्दा ती सबस्टेशन पिक गर्दा मात्र माग्ने dropdown मा देखिन्छ।
             </p>
-            <div class="tbl-wrap">
-              <table class="data-table">
-                <thead><tr><th style="width:180px">Name</th><th>Substations (multi)</th><th style="width:44px"></th></tr></thead>
-                <tbody id="tbl-askedby"></tbody>
-              </table>
-            </div>
+            <div id="tbl-askedby"></div>
             <button class="btn btn-ghost btn-sm add-row-btn" onclick="addAskedByRow()">+ Add Name</button>
           </div>
         </div>
@@ -1624,6 +1652,23 @@ gemini-1.5-flash</textarea>
       </div><!-- /sec-supabase -->
 
       <!-- CHANGE PASSWORD -->
+      <!-- DEVICE ACCESS (sync approval) -->
+      <div class="s-section" id="sec-devices">
+        <div class="card">
+          <div class="card-head"><span class="card-title">🔐 Device Access — Sync Approval</span></div>
+          <div class="card-body">
+            <p style="font-size:12px;color:var(--dim);margin-bottom:8px;line-height:1.6">
+              नयाँ डिभाइस — वा नयाँ app file चलाइरहेको कुनै पनि डिभाइस — ले Supabase sync गर्नुअघि यहाँ approval लिनुपर्छ।
+              Pending request तल देखिन्छ; <b>✔ Approve</b> थिचेपछि त्यसको sync ~२० सेकेन्डभित्र सुरु हुन्छ।
+              हरेक डिभाइसको <b>code</b> उसले पठाएका सन्देशहरूसँग Log मा जोडिन्छ — कसले के गर्‍यो, code बाट थाहा हुन्छ।
+            </p>
+            <p style="font-size:12px;margin-bottom:10px">This device: <b id="myDeviceCode" style="font-family:monospace"></b></p>
+            <button class="btn btn-ghost btn-sm" style="margin-bottom:10px" onclick="renderDeviceRegistry()">⟳ Refresh Requests</button>
+            <div id="deviceRegistryList"></div>
+          </div>
+        </div>
+      </div>
+
       <div class="s-section" id="sec-changepw">
         <div class="card">
           <div class="card-head"><span class="card-title">🔑 Change Password</span></div>
@@ -2313,11 +2358,30 @@ function showPage(name){
   else if(name==='settings') document.querySelector('.nav-tab[onclick*="openSettings"]').classList.add('active');
   if(name==='settings'){ refreshAllTables(); setTimeout(testSupabase, 300); updateSbConnUI(); updateRcvMuteUI(); }
 }
+function toggleSnav(){
+  const nav=document.querySelector('.settings-nav');
+  if(nav) nav.classList.toggle('open');
+}
+window.toggleSnav = toggleSnav;
+
 function showSection(id){
   document.querySelectorAll('.s-section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.snav-item').forEach(n=>n.classList.remove('active'));
-  $(id).classList.add('active');
-  event.currentTarget.classList.add('active');
+  const sec=$(id); if(sec) sec.classList.add('active');
+  // Highlight the matching menu item (works whether called from the menu
+  // itself or from elsewhere e.g. the 🔕 MUTED / ⏸ SYNC OFF badges)
+  const item=[...document.querySelectorAll('.snav-item')]
+    .find(n=>(n.getAttribute('onclick')||'').includes(`'${id}'`));
+  if(item){
+    item.classList.add('active');
+    const lbl=$('snavCurrent'); if(lbl) lbl.textContent=item.textContent.trim();
+  }
+  // Mobile: collapse the pulled-down menu and bring the section into view
+  const nav=document.querySelector('.settings-nav');
+  if(nav) nav.classList.remove('open');
+  if(window.innerWidth<=640 && sec){
+    setTimeout(()=>{ try{ sec.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){} }, 60);
+  }
 }
 
 /* ============================================================
@@ -2474,12 +2538,39 @@ function setTopFieldsVisible(visible){
   });
 }
 
+/* ── MINI PREVIEW VISIBILITY ─────────────────────────────────────────
+   The bottom "📋 Message Preview" card stays HIDDEN until a condition
+   is selected (trip / shutdown / System Gone / 11 KV / 33 KV Incomer
+   Failed) or a Trip All / Restore All message is prepared. */
+function updateMiniPreviewVisibility(){
+  const wrap=document.querySelector('.mini-preview-wrap'); if(!wrap) return;
+  wrap.style.display = currentCondition ? '' : 'none';
+}
+function miniPreviewExpand(){
+  const body=$('miniPreviewBody');
+  if(body && body.classList.contains('collapsed')){
+    try{ toggleMiniPreview(); }catch(e){}
+  }
+}
+// Show the preview card (expanded) carrying a specific message — used by
+// the group-outage conditions and Trip All / Restore All.
+function showMiniPreviewWith(msg){
+  setMessage(msg,'tpl');
+  const wrap=document.querySelector('.mini-preview-wrap');
+  if(wrap) wrap.style.display='';
+  miniPreviewExpand();
+}
+
 function onConditionChange(){
   currentCondition = $('condition').value;
   const tripArea     = $('tripArea');
   const shutdownArea = $('shutdownArea');
   const outageArea   = $('outageArea');
   if(outageArea) outageArea.style.display='none';
+  // Preview card visibility follows the selection; re-checked at the end
+  // too because guard failures inside the branches reset currentCondition.
+  updateMiniPreviewVisibility();
+  setTimeout(updateMiniPreviewVisibility, 0);
 
   if(currentCondition === 'trip'){
     setTopFieldsVisible(false);
@@ -2537,6 +2628,8 @@ function onConditionChange(){
     if($('outageTime')) $('outageTime').value = nowHM();
     if(outageArea) outageArea.style.display='block';
     autoBuild();
+    updateOutagePreview();
+    miniPreviewExpand();
   } else {
     setTopFieldsVisible(true);
     tripArea.style.display     = 'none';
@@ -2570,6 +2663,48 @@ function getSgSelectedStations(){
   return [...document.querySelectorAll('#sgStationPicker .sg-st-check:checked')].map(c=>c.value);
 }
 
+/* ── LIVE OUTAGE MESSAGE PREVIEW ────────────────────────────────────
+   Shows the EXACT message dispatchOutage will send, updating live as
+   the operator edits actual time, est. restore, or (for System Gone)
+   the ticked substations. Mirrors applySystemGone / applyIncomerFailed
+   / applyKv33Failed message construction 1:1. */
+function buildOutagePreviewMsg(){
+  const cond = $('condition') ? $('condition').value : '';
+  const st   = $('station') ? $('station').value : '';
+  const tRaw = $('outageTime') ? $('outageTime').value : '';
+  const time = /^\d{1,2}:\d{2}$/.test(tRaw) ? tRaw : nowHM();
+  const eta  = ($('outageEta')?.value||'').trim();
+  const etaSuffix = eta ? ` (Est. restore: ${eta})` : '';
+  if(cond==='system-gone'){
+    const targets = getSgSelectedStations();
+    if(!targets.length) return '⚠ कुनै सबस्टेशन छानिएको छैन — कम्तीमा एउटा ✔ गर्नुहोस्।';
+    const allStations=[...new Set(DATA.feeders.map(f=>f.station))];
+    const isAll = targets.length===allStations.length && allStations.every(s=>targets.includes(s));
+    return (isAll ? `System Gone at ${time}` : `System Gone of ${targets.join(', ')} at ${time}`) + etaSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+  }
+  if(cond==='incomer-failed') return `11 KV Incomer of ${st} Failed at ${time}` + etaSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+  if(cond==='kv33-failed')    return `33 KV Incomer of ${st} Failed at ${time}` + etaSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+  return '';
+}
+function updateOutagePreview(){
+  const el=$('outagePreview'); if(!el) return;
+  const m = buildOutagePreviewMsg();
+  el.textContent = m;
+  // Mirror into the bottom Message Preview card so it also shows the
+  // exact outgoing message for these group conditions.
+  const cond=$('condition') ? $('condition').value : '';
+  if(m && ['system-gone','incomer-failed','kv33-failed'].includes(cond) && !m.startsWith('⚠')){
+    setMessage(m,'tpl');
+  }
+}
+// Live hooks: time / eta edits and substation tick changes
+['outageTime','outageEta'].forEach(id=>{
+  const el=$(id); if(!el) return;
+  el.addEventListener('input',  updateOutagePreview);
+  el.addEventListener('change', updateOutagePreview);
+});
+(function(){ const p=$('sgStationPicker'); if(p) p.addEventListener('change', updateOutagePreview); })();
+
 // Dispatch System Gone / Incomer Failed / 33 KV Incomer Failed after the user
 // clicks the Dispatch button (two-step flow). Re-checks the
 // "cannot re-enter until restored" rule.
@@ -2602,6 +2737,7 @@ async function dispatchOutage(){
     if($('outageEta')) $('outageEta').value='';
     preview.textContent = 'Select substation, staff, feeder and condition — message will appear here.';
     preview.classList.add('empty'); $('msgTagWrap').innerHTML='';
+    updateMiniPreviewVisibility();
   } finally {
     if(btn){ btn.disabled = false; }
   }
@@ -2704,8 +2840,8 @@ function buildTemplate(f){
       if(f.eta) m+=fmtLine('Est. restore', f.eta);
       m+=`${sep}\n`;
       m+=multi
-        ?`माथि उल्लेखित फिडरहरू ट्रिप भई विद्युत आपूर्ति अवरुद्ध भएको व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। अविलम्ब मर्मत कार्य सुरु गरिएको छ।`
-        :`माथि उल्लेखित फिडर ट्रिप भई विद्युत आपूर्ति अवरुद्ध भएको व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। अविलम्ब मर्मत कार्य सुरु गरिएको छ।`;
+        ?`माथि उल्लेखित फिडरहरू ट्रिप भई विद्युत आपूर्ति अवरुद्ध भएको व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। अविलम्ब मर्मत कार्य सुरु गरिएको छ। असुविधाका लागि क्षमाप्रार्थी छौं।`
+        :`माथि उल्लेखित फिडर ट्रिप भई विद्युत आपूर्ति अवरुद्ध भएको व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। अविलम्ब मर्मत कार्य सुरु गरिएको छ। असुविधाका लागि क्षमाप्रार्थी छौं।`;
       if(f.askedByTrip||f.givenBy) m+='\n';
       if(f.askedByTrip) m+=fmtLine('माग गर्ने ', f.askedByTrip);
       if(f.givenBy)     m+=fmtLine('Operator  ', f.givenBy);
@@ -2720,8 +2856,8 @@ function buildTemplate(f){
       if(f.eta) m+=fmtLine('Est. restore', f.eta);
       m+=`${sep}\n`;
       m+=multi
-        ?`The above feeders have tripped and power supply is disrupted. Restoration work has been initiated immediately.`
-        :`The above feeder has tripped and power supply is disrupted. Restoration work has been initiated immediately.`;
+        ?`The above feeders have tripped and power supply is disrupted. Restoration work has been initiated immediately. We apologize for the inconvenience.`
+        :`The above feeder has tripped and power supply is disrupted. Restoration work has been initiated immediately. We apologize for the inconvenience.`;
       if(f.askedByTrip||f.givenBy) m+='\n';
       if(f.askedByTrip) m+=`\n`+fmtLine('Reported by', f.askedByTrip);
       if(f.givenBy)     m+=fmtLine('Staff      ', f.givenBy);
@@ -3038,6 +3174,11 @@ async function dispatchToAll(msg, type){
    SEND — per receiver
    ============================================================ */
 async function sendSilent(r, msg, stEl){
+  // HARD MUTE GUARD — while All Muted, NOTHING leaves this device on any channel
+  if(receiversMuted){
+    if(stEl){ stEl.textContent='muted'; stEl.className='send-state st-f'; }
+    return false;
+  }
   try{
     if(r.type==='httpsms'){
       return await sendHttpSms(r.contact, msg, stEl);
@@ -3541,7 +3682,7 @@ async function runAI(){
   if(!key){setMessage(tmpl, f.condition==='trip'?'trip':'tpl');return;}
   const langName=currentLang==='ne'?'Nepali':'English';
   const condType=f.condition==='trip'?'TRIP alert':'SHUTDOWN notice';
-  const prompt=`You are drafting an official electricity ${condType} for Nepal Electricity Authority (NEA), ${currentDcs().shortName || 'Taulihawa'}. Write ONE concise, professional notice in ${langName} only. No preamble, no markdown, no translation.\nDetails:\n- Substation: ${f.station}\n- Feeder: ${f.feeder}\n- Condition: ${f.condition==='trip'?'Trip (automatic fault)':'Planned Shutdown'}\n- Reason: ${f.reason||'N/A'}\n- Affected area: ${f.site||'N/A'}\n- Time: ${f.time||'N/A'}\n- Estimated restore time: ${f.eta||'N/A'}\n- Requested by: ${f.askedBy||'N/A'}\n- Substation Operator: ${f.givenBy||'N/A'}\nFormat: use ⚡ for trip or 🔌 for shutdown as first line header, then key details neatly, then one formal closing sentence. If the estimated restore time is provided, include it in the notice. End with: _(auto generated msg)_${currentLang==='ne'?`\nNepali orthography rules — STRICTLY follow standard Nepali (नेपाली वर्णविन्यास, not Hindi):\n• Use "सुरु" (NOT "शुरु" or "शुरू") for "start/begin".\n• Use "का लागि" (NOT "को लागि") after nouns before the postposition "लागि".\n• Use "सबैलाई" (NOT "सबैमा") when addressing "to all".\n• Use "व्यहोरा" (NOT "बेहोरा").\n• Formal words: अवरुद्ध, अविलम्ब, गराइन्छ, गरिएको छ, क्षमाप्रार्थी, असुविधा — spell exactly as given.`:''}`;
+  const prompt=`You are drafting an official electricity ${condType} for Nepal Electricity Authority (NEA), ${currentDcs().shortName || 'Taulihawa'}. Write ONE concise, professional notice in ${langName} only. No preamble, no markdown, no translation.\nDetails:\n- Substation: ${f.station}\n- Feeder: ${f.feeder}\n- Condition: ${f.condition==='trip'?'Trip (automatic fault)':'Planned Shutdown'}\n- Reason: ${f.reason||'N/A'}\n- Affected area: ${f.site||'N/A'}\n- Time: ${f.time||'N/A'}\n- Estimated restore time: ${f.eta||'N/A'}\n- Requested by: ${f.askedBy||'N/A'}\n- Substation Operator: ${f.givenBy||'N/A'}\nFormat: use ⚡ for trip or 🔌 for shutdown as first line header, then key details neatly, then one formal closing sentence. If the estimated restore time is provided, include it in the notice. The body must END with the apology sentence: ${langName==='Nepali'||currentLang==='ne'?'"असुविधाका लागि क्षमाप्रार्थी छौं।"':'"We apologize for the inconvenience."'} End with: _(auto generated msg)_${currentLang==='ne'?`\nNepali orthography rules — STRICTLY follow standard Nepali (नेपाली वर्णविन्यास, not Hindi):\n• Use "सुरु" (NOT "शुरु" or "शुरू") for "start/begin".\n• Use "का लागि" (NOT "को लागि") after nouns before the postposition "लागि".\n• Use "सबैलाई" (NOT "सबैमा") when addressing "to all".\n• Use "व्यहोरा" (NOT "बेहोरा").\n• Formal words: अवरुद्ध, अविलम्ब, गराइन्छ, गरिएको छ, क्षमाप्रार्थी, असुविधा — spell exactly as given.`:''}`;
   const models=($('modelList')?.value||'').split('\n').map(m=>m.trim()).filter(Boolean);
   status.style.color='var(--dim2)';
   for(const model of models){
@@ -3576,6 +3717,7 @@ function clearForm(){
   const mini=$('miniPreviewText');
   if(mini){ mini.classList.add('empty'); mini.textContent='Select substation, feeder and condition…'; }
   const miniTag=$('miniPreviewTag'); if(miniTag) miniTag.innerHTML='';
+  updateMiniPreviewVisibility();
   renderFeederStatus();
   fillFeeder(); $('station').focus();
   expandHeader();
@@ -3703,7 +3845,7 @@ function renderLogTable(){
       <td style="font-size:11px;color:var(--dim)">${esc(r.reason||'—')}</td>
       <td class="log-ts">${esc(r.time||'—')}</td>
       <td style="font-size:11px">${esc(r.recipients)}</td>
-      <td class="${stCls}">${esc(r.status)}</td>
+      <td class="${stCls}">${esc(r.status)}${r.device_code?`<div style="font-size:9px;color:var(--dim2);font-family:monospace;margin-top:2px" title="Sent from device ${esc(r.device_code)}">${esc(r.device_code)}</div>`:''}</td>
       <td class="msgcell">${esc((r.msg||'').substring(0,120)+(r.msg&&r.msg.length>120?'…':''))}</td>
       ${canEdit?`<td><button onclick="deleteLogEntry(${i})" title="Delete this log entry" style="background:none;border:none;cursor:pointer;font-size:14px;opacity:.65">🗑</button></td>`:''}
     </tr>`;
@@ -3943,67 +4085,70 @@ function addStaffRow(){
   rows[rows.length-1].querySelector('input').focus();
 }
 
-/* ── Asked By table (multi-substation) ─────────────────────────────
+/* ── Asked By (multi-substation) — card + chip design ───────────────
    Each asker has:
      • name       — display name
      • stations[] — [] means "shown for every substation in this DCS"
                    populated array means "shown only for these stations"
-   The UI shows checkboxes for each station in the current DCS, plus a
-   "General (all)" convenience toggle. */
+   UI: one card per asker. Scope is chosen by tapping chips:
+     • Tapping a substation chip selects it AND automatically leaves
+       General mode (the old design disabled the checkboxes while
+       General was on — taps did nothing, so scoping never applied).
+     • Deselecting the last substation chip returns to General.       */
+function abShortName(name){
+  // chip label: "तौलिहवा सबस्टेशन ३३/११ के.भी." → "तौलिहवा"
+  const s = String(name).split('सबस्टेशन')[0].trim();
+  return s || name;
+}
 function renderAskedByTable(){
   const tb=$('tbl-askedby'); if(!tb) return;
   tb.innerHTML='';
   const stNames = stationNamesForCurrentDcs();
   DATA.askedby.forEach((a,i)=>{
     if(!a) return;
-    // Only show askers relevant to the current DCS. An asker is relevant
-    // if it has NO scope (general — visible in every DCS) OR at least one
-    // of its scoped stations belongs to the current DCS.
+    // Only show askers relevant to the current DCS: general, or scoped to
+    // at least one station of this DCS.
     if(a.stations && a.stations.length && !a.stations.some(n => stNames.includes(n))) return;
     const generalOn = !a.stations || a.stations.length === 0;
     const chips = stNames.map(name => {
       const on = !generalOn && a.stations.includes(name);
-      return `<label class="tfx-pill" style="display:inline-flex;gap:5px;align-items:center;margin:2px 3px 2px 0;padding:3px 9px;font-size:11.5px;cursor:pointer;background:${on?'#dbeafe':'#fff'};color:${on?'#1e40af':'var(--dim)'};border:1px solid ${on?'#93c5fd':'var(--line)'};border-radius:20px;font-weight:600">
-        <input type="checkbox" ${on?'checked':''} ${generalOn?'disabled':''} style="margin:0" onchange="askedByToggleStation(${i}, '${esc(name).replace(/'/g,"\\'")}', this.checked)"> ${esc(name)}
-      </label>`;
+      return `<span class="ab-chip ${on?'on':''}" title="${esc(name)}"
+        onclick="askedByToggleStation(${i}, '${esc(name).replace(/'/g,"\\'")}', ${on?'false':'true'})">${esc(abShortName(name))}</span>`;
     }).join('');
-    const tr=document.createElement('tr');
-    tr.innerHTML=`
-      <td><input value="${esc(a.name)}" placeholder="Asker name" onchange="DATA.askedby[${i}].name=this.value;saveData('askedby');fillAskedBy()"></td>
-      <td>
-        <label style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;margin-right:8px">
-          <input type="checkbox" ${generalOn?'checked':''} onchange="askedByToggleGeneral(${i}, this.checked)"> General (all)
-        </label>
-        <div style="display:inline-block">${chips}</div>
-      </td>
-      <td><button class="del-btn" onclick="delAskedBy(${i})">✕</button></td>`;
-    tb.appendChild(tr);
+    const card=document.createElement('div');
+    card.className='ab-card';
+    card.innerHTML=`
+      <div class="ab-top">
+        <input value="${esc(a.name)}" placeholder="Asker name" onchange="DATA.askedby[${i}].name=this.value;saveData('askedby');fillAskedBy()">
+        <button class="del-btn" onclick="delAskedBy(${i})" title="Remove">✕</button>
+      </div>
+      <div class="ab-chips">
+        <span class="ab-chip general ${generalOn?'on':''}" onclick="askedBySetGeneral(${i})">✓ General — सबै सबस्टेशन</span>
+        ${chips}
+      </div>`;
+    tb.appendChild(card);
   });
-}
-function askedByToggleGeneral(i, general){
-  if(general){ DATA.askedby[i].stations = []; }
-  else {
-    // Turning general OFF without any station picked → default to current selected station
-    if(!DATA.askedby[i].stations || !DATA.askedby[i].stations.length){
-      const first = ($('station')?.value) || stationNamesForCurrentDcs()[0] || '';
-      DATA.askedby[i].stations = first ? [first] : [];
-    }
+  if(!tb.children.length){
+    tb.innerHTML='<div style="font-size:12px;color:var(--dim);padding:6px 2px">No askers yet — tap <b>+ Add Name</b>.</div>';
   }
+}
+function askedBySetGeneral(i){
+  DATA.askedby[i].stations = [];
   saveData('askedby'); renderAskedByTable(); fillAskedBy();
 }
 function askedByToggleStation(i, name, on){
   if(!DATA.askedby[i].stations) DATA.askedby[i].stations = [];
   const arr = DATA.askedby[i].stations;
-  if(on && !arr.includes(name)) arr.push(name);
-  if(!on) DATA.askedby[i].stations = arr.filter(x => x !== name);
+  if(on && !arr.includes(name)) arr.push(name);            // picking a chip leaves General automatically
+  if(!on) DATA.askedby[i].stations = arr.filter(x => x !== name); // last one removed → [] = General again
   saveData('askedby'); renderAskedByTable(); fillAskedBy();
 }
 function delAskedBy(i){ DATA.askedby.splice(i,1); saveData('askedby'); renderAskedByTable(); fillAskedBy(); }
 function addAskedByRow(){
   DATA.askedby.push({name:'', stations:[]});
   saveData('askedby'); renderAskedByTable(); fillAskedBy();
-  const rows=$('tbl-askedby').querySelectorAll('tr');
-  const last=rows[rows.length-1]; if(last){ const inp=last.querySelector('input'); if(inp) inp.focus(); }
+  const cards=$('tbl-askedby').querySelectorAll('.ab-card');
+  const last=cards[cards.length-1]; if(last){ const inp=last.querySelector('input'); if(inp) inp.focus(); }
 }
 
 /* ── DCS management table ─────────────────────────────────────────
@@ -5785,6 +5930,16 @@ async function dispatchChargedMsg(feederName,msg){
   }
   const t=nowHM();
   const station=DATA.feeders.find(f=>f.name===feederName)?.station||$('station').value||'';
+  // Receiver mute check — Charged notices are ALSO blocked while muted
+  if(receiversMuted){
+    toast('🔕 All Muted — Charged notice logged but NOT sent', 3000);
+    recordLogDirect({
+      type:'Charged',
+      recipients: DATA.receivers.filter(r=>r.enabled).map(r=>r.name).join(', ') || 'None',
+      status:'MUTED — not sent', station, feeder:feederName, time:t, msg
+    });
+    return;
+  }
   const enabled=DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
   if(!enabled.length){toast('Charged noted — no receivers configured');return;}
   toast(`Sending Charged notice for ${feederName}…`,2000);
@@ -5907,7 +6062,7 @@ async function applySystemGone(t, stations){
   const etaSuffix = eta ? ` (Est. restore: ${eta})` : '';
   const msg = (isAll
     ? `System Gone at ${time}`
-    : `System Gone of ${targets.join(', ')} at ${time}`) + etaSuffix;
+    : `System Gone of ${targets.join(', ')} at ${time}`) + etaSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   dispatchBulkMsg(msg,'System Gone', isAll?'All Substations':targets.join(', '));
   toast(`⛔ System Gone — ${isAll?'all substations':targets.join(', ')} updated. Click "System Restored" on each affected substation to revert.`,3500);
 }
@@ -5990,7 +6145,7 @@ async function applyKv33Failed(t){
   for(const name of all){ await sbPushOneFeedStatus(name,{status:'trip',time}); }
 
   const eta33 = ($('outageEta')?.value||'').trim();
-  const msg=`33 KV Incomer of ${st} Failed at ${time}` + (eta33 ? ` (Est. restore: ${eta33})` : '');
+  const msg=`33 KV Incomer of ${st} Failed at ${time}` + (eta33 ? ` (Est. restore: ${eta33})` : '') + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   dispatchBulkMsg(msg,'33KV Incomer Failed',st);
   toast('⚡ 33 KV Incomer Failed — all feeders of '+st+' tripped. Click "33 KV Incomer Restored" to revert.',3500);
   } finally { delete outageOpLock[st]; }
@@ -6086,7 +6241,7 @@ async function applyIncomerFailed(t){
     return;
   }
   const eta11 = ($('outageEta')?.value||'').trim();
-  const msg=`11 KV Incomer of ${st} Failed at ${time}` + (eta11 ? ` (Est. restore: ${eta11})` : '');
+  const msg=`11 KV Incomer of ${st} Failed at ${time}` + (eta11 ? ` (Est. restore: ${eta11})` : '') + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   dispatchBulkMsg(msg,'11KV Incomer Failed',st);
   toast('🛑 11 KV Incomer Failed — all feeders of this substation updated. Click "11 KV Incomer Restored" to revert.',3500);
   } finally { delete outageOpLock[st]; }
@@ -6196,6 +6351,11 @@ function applyTripAll(st){
   const all = groupAffectedFeeders(st,'tripall');
   if(!all.length){ toast('No feeders found for this substation'); return; }
 
+  // Confirmation with exact message preview — nothing changes until OK
+  const msg = `All feeders of ${st} tripped at ${t}\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+  if(!confirm(`⚡ TRIP ALL — ${st}\n\n${all.length} वटा फिडर सबै Trip हुनेछन् र यो सन्देश पठाइनेछ:\n\n"${msg}"\n\nपक्का गर्नुहुन्छ?`)) return;
+  showMiniPreviewWith(msg);   // show the exact message in the bottom preview card
+
   // 1. Snapshot BEFORE changing anything
   const snapshot = {};
   all.forEach(name => {
@@ -6210,8 +6370,7 @@ function applyTripAll(st){
   updateTripAllToggleUI();
   sbPushFeederStatus();   // one bulk push
 
-  // 3. Send exactly ONE message instantly
-  const msg = `All feeders of ${st} tripped at ${t}`;
+  // 3. Send exactly ONE message instantly (same msg shown in the confirmation)
   dispatchBulkMsg(msg, 'Trip All', st);
   toast(`⚡ Trip All — all feeders tripped. Click "Restore All" banner to revert.`, 3500);
 }
@@ -6222,6 +6381,11 @@ function restoreTripAll(st){
   const t   = dtAskTime('✅ Restore All — '+st+' का फिडरहरू कति बजे पुनर्स्थापना भए?');
   if(t===null) return;   // operator cancelled
   const all = rec.snapshot?Object.keys(rec.snapshot):groupAffectedFeeders(st,'tripall');
+
+  // Confirmation with exact message preview — nothing changes until OK
+  const msg = `All feeders of ${st} restored at ${t}`;
+  if(!confirm(`✅ RESTORE ALL — ${st}\n\nसबै फिडर पहिलेकै अवस्थामा फर्किनेछन् र यो सन्देश पठाइनेछ:\n\n"${msg}"\n\nपक्का गर्नुहुन्छ?`)) return;
+  showMiniPreviewWith(msg);   // show the exact message in the bottom preview card
 
   // 1. Restore every feeder to its pre-Trip-All state (downtime ends at ACTUAL time)
   dtCloseTimeOverride=t;
@@ -6239,8 +6403,7 @@ function restoreTripAll(st){
   updateTripAllToggleUI();
   sbPushFeederStatus();   // one bulk push
 
-  // 2. Send exactly ONE restore message
-  const msg = `All feeders of ${st} restored at ${t}`;
+  // 2. Send exactly ONE restore message (same msg shown in the confirmation)
   dispatchBulkMsg(msg, 'Restore All', st);
   toast(`✅ Restore All — all feeders reverted to previous state.`, 3000);
 }
@@ -6537,6 +6700,21 @@ create policy "anon_all_downtime" on downtime_events for all to anon using (true
 create policy "anon_all_tfx_insp"  on transformer_inspections for all to anon using (true) with check (true);
 create policy "anon_all_tfx_burnt" on transformer_burnt       for all to anon using (true) with check (true);
 
+-- ── Device Access (sync approval) ─────────────────────────────────
+create table if not exists device_registry (
+  code         text primary key,
+  device       text,
+  version      text,
+  status       text default 'pending',   -- pending | approved | blocked
+  requested_at timestamptz default now(),
+  approved_at  timestamptz
+);
+alter table device_registry enable row level security;
+drop policy if exists "anon_all_devices" on device_registry;
+create policy "anon_all_devices" on device_registry for all to anon using (true) with check (true);
+-- Per-device attribution of sent messages
+alter table message_log add column if not exists device_code text;
+
 -- ── Performance indexes ───────────────────────────────────────────
 create index if not exists idx_feeder_status_updated on feeder_status(updated_at desc);
 create index if not exists idx_app_settings_updated  on app_settings(updated_at desc);
@@ -6652,6 +6830,9 @@ function toggleSupabaseConn(){
   // (pause state is session-only — not persisted to localStorage)
   updateSbConnUI();
   if(!supabasePaused){
+    // Reconnected — clear the fresh-device/new-version lock so future
+    // reloads of THIS version start connected again
+    try{ localStorage.removeItem('nea_fresh_lock'); }catch(e){}
     // Reconnected — immediately sync
     toast('☁ Supabase sync resumed', 2000);
     syncFromCloud();
@@ -6726,10 +6907,14 @@ function toggleReceiverMute(){
   receiversMuted = !receiversMuted;
   try{ localStorage.setItem('sms2_rcv_muted', receiversMuted ? '1' : '0'); }catch(e){}
   updateRcvMuteUI();
-  toast(receiversMuted
-    ? '🔕 Receivers muted — messages will not be sent'
-    : '🔔 Receivers unmuted — messages will be sent normally',
-    2500);
+  if(receiversMuted){
+    // All Muted → also stop all cloud sync immediately
+    if(typeof syncInterval!=='undefined' && syncInterval){ clearInterval(syncInterval); syncInterval=null; }
+    toast('🔕 All Muted — no messages will be sent (Charged included) and cloud sync is STOPPED', 3500);
+  } else {
+    toast('🔔 Unmuted — sending र cloud sync पुनः सुरु भयो', 2500);
+    try{ startSync(); }catch(e){}
+  }
 }
 
 function updateRcvMuteUI(){
@@ -6763,6 +6948,18 @@ function sbHeaders(){
 
 // Generic Supabase REST call
 async function sbFetch(path, method='GET', body=null){
+  // ── DEVICE AUTHORIZATION GATE ──
+  // A pending/blocked device may only touch the auth + password endpoints;
+  // all data sync is refused until a settings-password holder approves it.
+  if((deviceAuthStatus==='pending' || deviceAuthStatus==='blocked')
+      && !/^(device_registry|app_config)/.test(path)){
+    throw new Error('Sync locked — device '+getDeviceCode()+' not approved ('+deviceAuthStatus+')');
+  }
+  // ── ALL-MUTED GATE — while receivers are muted, no cloud sync either
+  // (password + device-approval endpoints stay reachable).
+  if(receiversMuted && !/^(device_registry|app_config)/.test(path)){
+    throw new Error('Sync locked — All Muted is active');
+  }
   const url=getSbUrl()+'/rest/v1/'+path;
   const headers={...sbHeaders()};
   if(method==='GET') headers['Accept']='application/json';
@@ -6834,7 +7031,8 @@ async function sbInsertLog(entry){
       sent_at:    entry.time||'',
       recipients: entry.recipients||'',
       status:     entry.status||'',
-      msg:        entry.msg||''
+      msg:        entry.msg||'',
+      device_code: getDeviceCode()
     });
   }catch(e){
     console.warn('Supabase log insert failed:',e.message);
@@ -7419,6 +7617,177 @@ function recordLog(type, recipients, status){
 }
 
 /* ============================================================
+   DEVICE AUTHORIZATION — controlled Supabase sync
+   ─────────────────────────────────────────────────────────────
+   • Every device gets a permanent CODE (shown in banner + Settings).
+   • A new device — or ANY device running a NEW/updated app file
+     (APP_VERSION bump) — must request approval before it can sync.
+   • The request appears in Settings → 🔐 Device Access; anyone who
+     holds the SETTINGS password can Approve / Block / Remove it.
+   • Every message this device sends carries its code (device_code
+     column in message_log), so changes are attributable per device.
+   • If the device_registry table doesn't exist yet (setup SQL not
+     run), the gate stays open — legacy behavior — so nothing bricks.
+   ============================================================ */
+const APP_VERSION = 'v14.3';   // ← bump this on every released file update
+
+function getDeviceCode(){
+  let c = localStorage.getItem('nea_device_code');
+  if(!c){
+    c = 'D-' + Math.random().toString(36).slice(2,6).toUpperCase()
+             + Math.random().toString(36).slice(2,4).toUpperCase();
+    localStorage.setItem('nea_device_code', c);
+  }
+  return c;
+}
+
+/* ── FRESH DEVICE / UPDATED FILE DEFAULTS ──────────────────────────
+   The first time this device runs a given APP_VERSION (new device OR
+   newly updated file), it starts with:
+     • Supabase sync PAUSED (until the operator resumes it once)
+     • All receivers MUTED (until manually unmuted in Settings)
+   so a fresh/updated setup can never send or sync anything by accident. */
+(function(){
+  try{
+    const seen = localStorage.getItem('nea_seen_version');
+    if(seen !== APP_VERSION){
+      localStorage.setItem('nea_seen_version', APP_VERSION);
+      localStorage.setItem('nea_fresh_lock', '1');
+      localStorage.setItem('sms2_rcv_muted', '1');
+      receiversMuted = true;
+    }
+    if(localStorage.getItem('nea_fresh_lock') === '1'){
+      supabasePaused = true;   // stays paused across reloads until resumed once
+    }
+  }catch(e){}
+})();
+
+// unknown → not yet checked · approved · pending · blocked · legacy (no table)
+let deviceAuthStatus = 'unknown';
+let authPollTimer = null;
+
+async function checkDeviceAuth(){
+  if(!sbReady()){ return; }
+  const code = getDeviceCode();
+  try{
+    const rows = await sbFetch(`device_registry?code=eq.${encodeURIComponent(code)}&select=code,version,status`);
+    if(!rows || !rows.length){
+      // First contact from this device → file a pending request
+      await sbFetch('device_registry','POST',{
+        code, version: APP_VERSION,
+        device: (navigator.userAgent||'').slice(0,140),
+        status: 'pending'
+      });
+      deviceAuthStatus = 'pending';
+    } else {
+      const r = rows[0];
+      if(r.status === 'approved' && r.version !== APP_VERSION){
+        // Updated app file on an approved device → must be re-approved
+        await sbFetch(`device_registry?code=eq.${encodeURIComponent(code)}`,'PATCH',{
+          version: APP_VERSION, status: 'pending',
+          requested_at: new Date().toISOString(), approved_at: null
+        });
+        deviceAuthStatus = 'pending';
+      } else {
+        deviceAuthStatus = r.status || 'pending';
+      }
+    }
+  }catch(e){
+    // Table missing / unreachable → don't lock the whole system out.
+    // Enforcement starts once the setup SQL has been run.
+    console.warn('device_registry unavailable — sync gate open (legacy):', e.message);
+    deviceAuthStatus = 'legacy';
+  }
+  updateDeviceAuthBanner();
+  if(deviceAuthStatus==='approved' || deviceAuthStatus==='legacy'){
+    if(authPollTimer){ clearInterval(authPollTimer); authPollTimer=null; }
+    startSync();
+  } else {
+    // keep polling until a settings-password holder approves
+    if(!authPollTimer) authPollTimer = setInterval(checkDeviceAuth, 20000);
+  }
+}
+function deviceSyncAllowed(){
+  return deviceAuthStatus==='approved' || deviceAuthStatus==='legacy' || deviceAuthStatus==='unknown';
+}
+
+/* Banner shown while pending / blocked (created lazily, fixed at top) */
+function updateDeviceAuthBanner(){
+  let b = $('deviceAuthBanner');
+  if(deviceAuthStatus==='pending' || deviceAuthStatus==='blocked'){
+    if(!b){
+      b=document.createElement('div');
+      b.id='deviceAuthBanner';
+      b.style.cssText='position:sticky;top:0;z-index:200;padding:9px 14px;font-size:12.5px;font-weight:600;text-align:center;line-height:1.5';
+      document.body.prepend(b);
+    }
+    if(deviceAuthStatus==='pending'){
+      b.style.background='#fef3c7'; b.style.color='#92400e'; b.style.borderBottom='1.5px solid #f59e0b';
+      b.innerHTML=`⏳ यो डिभाइस sync approval पर्खिरहेको छ — Code: <b style="font-family:monospace;letter-spacing:.5px">${esc(getDeviceCode())}</b> (${esc(APP_VERSION)}) · Settings password भएको व्यक्तिले <b>Settings → 🔐 Device Access</b> बाट Approve गरेपछि sync सुरु हुन्छ।`;
+    } else {
+      b.style.background='#fee2e2'; b.style.color='#991b1b'; b.style.borderBottom='1.5px solid #ef4444';
+      b.innerHTML=`⛔ यो डिभाइस (Code: <b style="font-family:monospace">${esc(getDeviceCode())}</b>) sync बाट block गरिएको छ। Settings → 🔐 Device Access बाट unblock गर्न सकिन्छ।`;
+    }
+  } else if(b){ b.remove(); }
+  const my=$('myDeviceCode');
+  if(my) my.textContent = getDeviceCode()+' · '+APP_VERSION+' · '+deviceAuthStatus;
+}
+
+/* ── Settings → Device Access registry UI ─────────────────────── */
+async function renderDeviceRegistry(){
+  const box=$('deviceRegistryList'); if(!box) return;
+  box.innerHTML='<div style="font-size:12px;color:var(--dim)">Loading…</div>';
+  let rows=[];
+  try{
+    rows=await sbFetch('device_registry?select=*&order=requested_at.desc&limit=100');
+  }catch(e){
+    box.innerHTML='<div style="font-size:12px;color:var(--red)">device_registry table not found — run the Device Access SQL first (📋 Setup SQL मा समावेश छ).</div>';
+    return;
+  }
+  if(!rows.length){ box.innerHTML='<div style="font-size:12px;color:var(--dim)">No devices have requested access yet.</div>'; return; }
+  const myCode=getDeviceCode();
+  box.innerHTML = rows.map(r=>{
+    const st=r.status||'pending';
+    const col = st==='approved' ? ['#dcfce7','#166534'] : st==='blocked' ? ['#fee2e2','#991b1b'] : ['#fef3c7','#92400e'];
+    const when=(r.requested_at||'').replace('T',' ').slice(0,16);
+    return `<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#fff${st==='pending'?';border-color:#f59e0b':''}">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:5px">
+        <b style="font-family:monospace;font-size:13px;letter-spacing:.5px">${esc(r.code)}</b>
+        ${r.code===myCode?'<span style="font-size:10px;background:var(--blue-lt);color:var(--blue);border-radius:8px;padding:1px 7px;font-weight:700">this device</span>':''}
+        <span style="font-size:10px;background:${col[0]};color:${col[1]};border-radius:8px;padding:2px 8px;font-weight:700;text-transform:uppercase">${esc(st)}</span>
+        <span style="font-size:10.5px;color:var(--dim2)">${esc(r.version||'')} · ${esc(when)}</span>
+      </div>
+      <div style="font-size:10.5px;color:var(--dim2);word-break:break-all;margin-bottom:7px">${esc((r.device||'').slice(0,110))}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${st!=='approved'?`<button class="btn btn-sm" style="background:#16a34a;color:#fff" onclick="deviceRegistryAction('${esc(r.code)}','approve')">✔ Approve</button>`:''}
+        ${st!=='blocked'?`<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deviceRegistryAction('${esc(r.code)}','block')">⛔ Block</button>`:''}
+        <button class="btn btn-ghost btn-sm" onclick="deviceRegistryAction('${esc(r.code)}','remove')">🗑 Remove</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function deviceRegistryAction(code, action){
+  try{
+    if(action==='remove'){
+      if(!confirm('Remove device '+code+' from the registry? यसले फेरि request गर्नुपर्नेछ।')) return;
+      await sbFetch(`device_registry?code=eq.${encodeURIComponent(code)}`,'DELETE');
+    } else {
+      await sbFetch(`device_registry?code=eq.${encodeURIComponent(code)}`,'PATCH',
+        action==='approve'
+          ? { status:'approved', approved_at:new Date().toISOString() }
+          : { status:'blocked' });
+    }
+    toast(action==='approve' ? '✅ Device '+code+' approved — त्यसको sync २० सेकेन्डभित्र सुरु हुन्छ'
+        : action==='block'   ? '⛔ Device '+code+' blocked'
+        : '🗑 Device '+code+' removed');
+    renderDeviceRegistry();
+    if(code===getDeviceCode()) checkDeviceAuth();
+  }catch(e){ toast('⚠ Action failed: '+e.message, 4000); }
+}
+window.renderDeviceRegistry=renderDeviceRegistry;
+window.deviceRegistryAction=deviceRegistryAction;
+
+/* ============================================================
    WEB PUSH — alerts even when the app is CLOSED
    Requires: app + sw.js hosted on HTTPS, `push_subscriptions`
    table, and the `push-notify` Edge Function wired to a
@@ -7666,6 +8035,8 @@ function reconcileOutageStateFromMap(){
 
 async function syncFromCloud(){
   if(!appUnlocked) return;
+  if(receiversMuted) return;   // All Muted → no cloud sync at all
+  if(deviceAuthStatus!=='approved' && deviceAuthStatus!=='legacy') return;   // device not approved
   const dot=$('syncDotIcon'), lbl=$('syncDotLabel');
   let anyError = false;
 
@@ -7709,7 +8080,7 @@ async function syncFromCloud(){
 
   // ── Sync log (every call) ──
   try{
-    const logRows = await sbFetch('message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg&order=id.desc&limit=200');
+    const logRows = await sbFetch('message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code&order=id.desc&limit=200');
     if(logRows.length !== lastLogCount){
       lastLogCount = logRows.length;
       const existing = new Set(LOG.map(e=>e.ts+'|'+e.station+'|'+e.feeder));
@@ -7721,6 +8092,7 @@ async function syncFromCloud(){
             ts:r.ts, station:r.station, feeder:r.feeder,
             condition:r.condition, reason:r.reason, time:r.sent_at,
             recipients:r.recipients, status:r.status, msg:r.msg,
+            device_code:r.device_code||'',
             date:new Date(r.created_at||Date.now())
           });
           added++;
@@ -7778,6 +8150,12 @@ function startSync(){
     updateSbConnUI();
     return;
   }
+  // All-Muted gate: no sync loop while muted (resumes on unmute)
+  if(receiversMuted){ updateRcvMuteUI(); return; }
+  // Device approval gate: check first; checkDeviceAuth re-calls startSync
+  // once approved (or immediately in legacy mode when no registry exists).
+  if(deviceAuthStatus==='unknown'){ checkDeviceAuth(); return; }
+  if(deviceAuthStatus==='pending' || deviceAuthStatus==='blocked'){ updateDeviceAuthBanner(); return; }
   if(syncInterval) return;
   syncInterval = setInterval(syncFromCloud, 15000); // every 15 seconds
   syncFromCloud(); // immediate first run
@@ -7799,6 +8177,7 @@ try{ updateSbConnUI(); }catch(e){ console.warn('updateSbConnUI failed:', e.messa
 try{ updateRcvMuteUI(); }catch(e){ console.warn('updateRcvMuteUI failed:', e.message); }
 try{ updateMsgAlertUI(); }catch(e){ console.warn('updateMsgAlertUI failed:', e.message); }
 try{ updatePushUI(); }catch(e){ console.warn('updatePushUI failed:', e.message); }
+try{ updateMiniPreviewVisibility(); }catch(e){ console.warn('updateMiniPreviewVisibility failed:', e.message); }
 
 // Absolute fallback: make sure the lock screen is visible and the role toggle
 // is clickable no matter what happened above. Direct listeners are added as a
@@ -8264,6 +8643,8 @@ async function tfxFlushPendingWords(){
 // Best-effort sync: push local changes, upload pending Word files, then pull remote deltas.
 async function tfxSyncCycle(silent){
   if(tfxSyncBusy) return;
+  if(deviceAuthStatus==='pending' || deviceAuthStatus==='blocked') return;   // device not approved
+  if(receiversMuted) return;   // All Muted → no cloud sync at all
   if(!tfxSbUsable()){
     tfxSyncState.lastError = 'Supabase paused';
     tfxUpdateSyncUI();
