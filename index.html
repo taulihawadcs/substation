@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -573,6 +574,10 @@ select.big option,
 .rcv-mute-off:hover{background:var(--green);color:#fff}
 .rcv-mute-on {background:#fef2f2;border-color:var(--red);color:var(--red)}
 .rcv-mute-on:hover{background:var(--red);color:#fff}
+/* TTS "Speak" button — subtle pulse while reading aloud so the user
+   sees the audio is still playing even if their volume is muted. */
+.tts-btn.tts-playing{background:#fef3c7;color:#92400e;border-color:#fbbf24;animation:tts-pulse 1.4s ease-in-out infinite}
+@keyframes tts-pulse{0%,100%{opacity:1}50%{opacity:.62}}
 
 /* ============================================================
    विग्रेको ट्रान्सफर्मर फारम PAGE (monitor-mode add-on)
@@ -775,8 +780,8 @@ body.tfx-page-open #page-transformer{
 <body>
 
 <div class="topbar">
-  <div class="topbar-brand">Taulihawa <span>DCS Substation</span></div>
-  <div class="topbar-subtitle">Nepal Electricity Authority · Taulihawa</div>
+  <div class="topbar-brand"><span class="js-dcs-shortname">Taulihawa</span> <span>DCS Substation</span></div>
+  <div class="topbar-subtitle">Nepal Electricity Authority · <span class="js-dcs-shortname">Taulihawa</span></div>
   <div class="topbar-nav">
     <button class="nav-tab active" onclick="showPage('main')">📋 Entry</button>
     <button class="nav-tab" id="navLog" onclick="showPage('log')">📊 Log</button>
@@ -796,7 +801,7 @@ body.tfx-page-open #page-transformer{
 <div id="helpGuide" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9000;overflow:auto;padding:24px 12px" onclick="if(event.target===this)toggleHelpGuide()">
   <div style="max-width:720px;margin:0 auto;background:#fff;border-radius:14px;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <h3 style="font-size:16px;font-weight:800">📖 प्रयोग निर्देशन — NEA Taulihawa DCS</h3>
+      <h3 style="font-size:16px;font-weight:800">📖 प्रयोग निर्देशन — NEA <span class="js-dcs-shortname">Taulihawa</span> DCS</h3>
       <button class="btn btn-ghost btn-sm" onclick="toggleHelpGuide()">✖ बन्द गर्नुहोस्</button>
     </div>
     <div style="font-size:12.5px;line-height:1.75;color:#334155">
@@ -1000,7 +1005,11 @@ body.tfx-page-open #page-transformer{
             <div id="sgStationPicker" style="display:flex;flex-wrap:wrap;gap:6px"></div>
           </div>
           <p style="font-size:12px;color:var(--dim2);margin-bottom:10px">Preview जाँच गर्नुस् र Dispatch थिच्नुस्। (All affected feeders will be set to this condition and ONE message sent.)</p>
-          <button class="btn" id="outageDispatchBtn" style="background:#d97706;color:#fff" onclick="dispatchOutage()">📣 Dispatch</button>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+            <button class="btn" id="outageDispatchBtn" style="background:#d97706;color:#fff" onclick="dispatchOutage()">📣 Dispatch</button>
+            <button class="btn btn-ghost btn-sm tts-btn" onclick="speakMsg()" title="ग्राहकलाई सुनाइने announcement play">🔊 Speak</button>
+            <button class="btn btn-ghost btn-sm" onclick="downloadVoiceMsg()" title="Voice मेसेज डाउनलोड — WhatsApp बाट पठाउनका लागि">⬇ Voice</button>
+          </div>
         </div>
       </div>
 
@@ -1038,6 +1047,8 @@ body.tfx-page-open #page-transformer{
             <span class="ta-sublabel">Revert to before</span>
           </span>
         </button>
+        <button class="btn btn-ghost btn-sm tts-btn" style="margin-left:8px" onclick="speakMsg('tripall')" title="Trip All announcement (consumer voice)">🔊 Speak</button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadVoiceMsg('tripall')" title="Voice मेसेज डाउनलोड">⬇ Voice</button>
       </div>
       <div class="feeder-status-panel" id="feederStatusPanel">
         <div class="fs-empty">Select a substation to see feeder statuses.</div>
@@ -1061,6 +1072,8 @@ body.tfx-page-open #page-transformer{
     <div class="mini-btn-row collapsed" id="miniBtnRow">
       <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px" onclick="setMessage(buildTemplate(getFields()),currentCondition==='trip'?'trip':'tpl');$('aiStatus').textContent=''">↺ Rebuild</button>
       <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px" onclick="copyMsg()">⎘ Copy</button>
+      <button class="btn btn-ghost btn-sm tts-btn" style="font-size:10px;padding:3px 8px" onclick="speakMsg()" title="ग्राहकलाई सुनाइने announcement play">🔊 Speak</button>
+      <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px" onclick="downloadVoiceMsg()" title="Voice मेसेज MP3 डाउनलोड — WhatsApp बाट पठाउनका लागि">⬇ Voice</button>
       <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px" onclick="openPreviewModal()">⤢ Expand</button>
     </div>
   </div>
@@ -1089,9 +1102,11 @@ body.tfx-page-open #page-transformer{
     <div style="padding:10px 16px;flex:1;overflow-y:auto">
       <div class="msg-preview" id="modalPreviewText" contenteditable="true" spellcheck="false" style="min-height:110px;font-size:13px" oninput="syncModalToPreview()"></div>
     </div>
-    <div style="padding:8px 16px 13px;display:flex;gap:7px;border-top:1px solid var(--line)">
+    <div style="padding:8px 16px 13px;display:flex;gap:7px;border-top:1px solid var(--line);flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="setMessage(buildTemplate(getFields()),currentCondition==='trip'?'trip':'tpl');$('aiStatus').textContent=''">↺ Rebuild</button>
       <button class="btn btn-ghost btn-sm" onclick="copyMsg()">⎘ Copy</button>
+      <button class="btn btn-ghost btn-sm tts-btn" onclick="speakMsg()" title="ग्राहकलाई सुनाइने announcement play">🔊 Speak</button>
+      <button class="btn btn-ghost btn-sm" onclick="downloadVoiceMsg()" title="Voice मेसेज MP3 डाउनलोड">⬇ Voice</button>
       <button class="btn btn-ghost btn-sm" onclick="closePreviewModal()">✕ Close</button>
     </div>
   </div>
@@ -1172,7 +1187,8 @@ body.tfx-page-open #page-transformer{
   <div class="settings-grid">
 
     <div class="settings-nav">
-      <div class="snav-item active" onclick="showSection('sec-substations')">Substations</div>
+      <div class="snav-item active" onclick="showSection('sec-dcs')">Distribution Centers (DCS)</div>
+      <div class="snav-item" onclick="showSection('sec-substations')">Substations</div>
       <div class="snav-item" onclick="showSection('sec-feeders')">Feeders</div>
       <div class="snav-item" onclick="showSection('sec-groupfeeders')">Group Outage Feeders</div>
       <div class="snav-item" onclick="showSection('sec-reasons')">Shutdown Reasons</div>
@@ -1189,15 +1205,48 @@ body.tfx-page-open #page-transformer{
 
     <div class="settings-content">
 
-      <!-- SUBSTATIONS -->
-      <div class="s-section active" id="sec-substations">
+      <!-- DCS -->
+      <div class="s-section active" id="sec-dcs">
         <div class="card">
-          <div class="card-head"><span class="card-title">Substations</span></div>
+          <div class="card-head"><span class="card-title">Distribution Centers (DCS)</span></div>
           <div class="card-body">
-            <p class="hint" style="margin-bottom:12px">Names end at के.भी. only (e.g. मोतीपुर ग्रिड सबस्टेशन १३२/३३/११ के.भी.)</p>
+            <p class="hint" style="margin-bottom:12px;line-height:1.5">
+              प्रत्येक DCS को आफ्नै substations, feeders, staff र askers हुन्छ। तल <b>Switch →</b> थिच्दा त्यो DCS active हुन्छ र सम्पूर्ण UI (topbar, message footer, Word/print header) त्यसमा अनुकूलित हुन्छ। <b>Short name</b> = topbar; <b>Full name</b> = message footer; <b>Center + Location</b> = Nepali letterhead।
+            </p>
             <div class="tbl-wrap">
               <table class="data-table">
-                <thead><tr><th>Substation Name</th><th style="width:44px"></th></tr></thead>
+                <thead><tr>
+                  <th style="width:120px">ID</th>
+                  <th style="width:140px">Short name</th>
+                  <th style="width:180px">Full name</th>
+                  <th>Center (Nepali)</th>
+                  <th style="width:140px">Location</th>
+                  <th style="width:180px">Own Supabase project<br><span style="font-weight:400;font-size:10px;color:var(--dim2)">URL + anon key (blank = shared)</span></th>
+                  <th style="width:150px">Action</th>
+                </tr></thead>
+                <tbody id="tbl-dcs"></tbody>
+              </table>
+            </div>
+            <button class="btn btn-ghost btn-sm add-row-btn" onclick="addDcsRow()">+ Add DCS</button>
+            <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="sbBackupDcs().then(ok=>toast(ok?'✓ Backup saved to cloud':'⚠ Backup failed'))" title="Save a snapshot of the ACTIVE DCS's data to Supabase now">💾 Backup active DCS now</button>
+            <button class="btn btn-ghost btn-sm" style="margin-left:6px;color:var(--amber)" onclick="revertDcsFromBackup()" title="Restore the active DCS from a previous Supabase backup — overwrites local and cloud">↺ Revert active DCS from backup…</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUBSTATIONS -->
+      <div class="s-section" id="sec-substations">
+        <div class="card">
+          <div class="card-head"><span class="card-title">Substations — <span class="js-dcs-name" style="color:var(--blue)">DCS</span></span></div>
+          <div class="card-body">
+            <p class="hint" style="margin-bottom:12px">Names end at के.भी. only (e.g. मोतीपुर ग्रिड सबस्टेशन १३२/३३/११ के.भी.). Only substations of the <b>active DCS</b> are listed. Change the DCS column to move a substation to a different DCS.</p>
+            <div class="tbl-wrap">
+              <table class="data-table">
+                <thead><tr>
+                  <th>Substation Name</th>
+                  <th style="width:200px">Belongs to DCS</th>
+                  <th style="width:44px"></th>
+                </tr></thead>
                 <tbody id="tbl-substations"></tbody>
               </table>
             </div>
@@ -1278,13 +1327,16 @@ body.tfx-page-open #page-transformer{
         <div class="card">
           <div class="card-head"><span class="card-title">Who Asked Shutdown (माग्ने)</span></div>
           <div class="card-body">
+            <p style="font-size:12px;color:var(--dim);margin-bottom:8px;line-height:1.5">
+              प्रत्येक Asker लाई सम्बन्धित सबस्टेशन(हरू) मा tag गर्नुहोस्। <b>General (all)</b> टिक गरेमा सबै सबस्टेशनका लागि देखिन्छ; अन्यथा केवल छानेको substation पिक गर्दा मात्र माग्ने dropdown मा देखिन्छ। एउटा asker लाई धेरै सबस्टेशनमा tag गर्न सकिन्छ।
+            </p>
             <div class="tbl-wrap">
               <table class="data-table">
-                <thead><tr><th>Name</th><th style="width:44px"></th></tr></thead>
+                <thead><tr><th style="width:180px">Name</th><th>Substations (multi)</th><th style="width:44px"></th></tr></thead>
                 <tbody id="tbl-askedby"></tbody>
               </table>
             </div>
-            <button class="btn btn-ghost btn-sm add-row-btn" onclick="addSimpleRow('askedby','Name')">+ Add Name</button>
+            <button class="btn btn-ghost btn-sm add-row-btn" onclick="addAskedByRow()">+ Add Name</button>
           </div>
         </div>
       </div>
@@ -1593,7 +1645,7 @@ gemini-1.5-flash</textarea>
 <div id="appLock" style="display:flex;position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#1a1f27 0%,#1a3a6e 100%);align-items:center;justify-content:center;flex-direction:column">
   <div style="background:#fff;border-radius:18px;padding:36px 32px 28px;width:min(360px,92vw);box-shadow:0 16px 60px rgba(0,0,0,.4);text-align:center">
     <div style="font-size:42px;margin-bottom:10px">⚡</div>
-    <div style="font-size:20px;font-weight:800;color:var(--txt);margin-bottom:2px;letter-spacing:-.01em">Taulihawa DCS</div>
+    <div style="font-size:20px;font-weight:800;color:var(--txt);margin-bottom:2px;letter-spacing:-.01em"><span class="js-dcs-name">Taulihawa DCS</span></div>
     <div style="font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);margin-bottom:18px">Nepal Electricity Authority</div>
 
     <!-- Role toggle: Operator (full) vs Monitor (view-only) -->
@@ -1621,7 +1673,7 @@ gemini-1.5-flash</textarea>
     </button>
     <div id="appLockChecking" style="font-size:11px;color:var(--dim2);margin-top:10px;min-height:16px;font-family:'JetBrains Mono',monospace"></div>
   </div>
-  <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:20px;letter-spacing:.06em">Taulihawa Distribution Center · NEA Taulihawa</div>
+  <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:20px;letter-spacing:.06em"><span class="js-dcs-center">तौलिहवा वितरण केन्द्र</span> · NEA <span class="js-dcs-shortname">Taulihawa</span></div>
 </div>
 
 <!-- OLD SETTINGS PASSWORD MODAL (kept for settings re-auth) -->
@@ -1656,10 +1708,10 @@ gemini-1.5-flash</textarea>
     <div style="font-size:18px;font-weight:700;color:var(--blue);letter-spacing:-.01em;margin-bottom:4px">
       Er. Ramesh Adhikari
     </div>
-    <div style="font-size:12px;color:var(--dim2);margin-bottom:10px">Nepal Electricity Authority &nbsp;·&nbsp; Taulihawa</div>
+    <div style="font-size:12px;color:var(--dim2);margin-bottom:10px">Nepal Electricity Authority &nbsp;·&nbsp; <span class="js-dcs-shortname">Taulihawa</span></div>
     <div style="display:inline-flex;align-items:center;gap:6px;background:var(--blue-lt);border:1px solid #c7d9fb;border-radius:20px;padding:5px 14px">
       <span style="font-size:13px">⚡</span>
-      <span style="font-size:12px;color:var(--blue-dk);font-weight:600">Taulihawa DCS Substation Messaging System</span>
+      <span style="font-size:12px;color:var(--blue-dk);font-weight:600"><span class="js-dcs-name">Taulihawa DCS</span> Substation Messaging System</span>
     </div>
     <div style="font-size:11px;color:var(--dim2);margin-top:10px;font-family:'JetBrains Mono',monospace">Automating feeder notifications for reliable power communication</div>
   </div>
@@ -1685,12 +1737,23 @@ const DISPATCH_DEDUP_WINDOW = 60000; // 60 seconds
    DEFAULTS
    ============================================================ */
 const DEFAULTS = {
+  // Distribution Centers. Each DCS is a self-contained unit with its own
+  // substations, feeders, staff, and consumer asker list. The `id` is a
+  // short slug used to reference the DCS from station/staff records.
+  // `shortName` is what appears in the topbar; `name` is the full brand
+  // string used in message footers; `center` and `location` are used in
+  // the Nepali letterhead for the transformer inspection form.
+  dcs: [
+    { id:'taulihawa', shortName:'Taulihawa', name:'Taulihawa DCS',
+      center:'तौलिहवा वितरण केन्द्र', location:'कपिलवस्तु' }
+  ],
+  currentDcsId: 'taulihawa',
   stations: [
-    "तौलिहवा सबस्टेशन ३३/११ के.भी.",
-    "लबनी सबस्टेशन ३३/११ के.भी.",
-    "जितपुर सबस्टेशन ३३/११ के.भी.",
-    "घञ्चौरा सबस्टेशन ३३/११ के.भी.",
-    "मोतीपुर ग्रिड सबस्टेशन १३२/३३/११ के.भी."
+    {name:"तौलिहवा सबस्टेशन ३३/११ के.भी.",           dcs:'taulihawa'},
+    {name:"लबनी सबस्टेशन ३३/११ के.भी.",              dcs:'taulihawa'},
+    {name:"जितपुर सबस्टेशन ३३/११ के.भी.",            dcs:'taulihawa'},
+    {name:"घञ्चौरा सबस्टेशन ३३/११ के.भी.",           dcs:'taulihawa'},
+    {name:"मोतीपुर ग्रिड सबस्टेशन १३२/३३/११ के.भी.", dcs:'taulihawa'}
   ],
   feeders: [
     {name:"11 KV सौरहा फिडर",    station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
@@ -1745,7 +1808,16 @@ const DEFAULTS = {
     "अटो रिक्लोजर",
     "अज्ञात फल्ट"
   ],
-  askedby: ["Rambalak Yadav","Tilakram Chaudhary","Shivlochan Yadav","Nitesh Sah","Consumer","Ramesh Adhikari"],
+  askedby: [
+    // stations:[] means "shown for every substation" (general consumer askers).
+    // Populate stations:[...names] to scope an asker to specific substation(s).
+    { name:"Rambalak Yadav",     stations:[] },
+    { name:"Tilakram Chaudhary", stations:[] },
+    { name:"Shivlochan Yadav",   stations:[] },
+    { name:"Nitesh Sah",         stations:[] },
+    { name:"Consumer",           stations:[] },
+    { name:"Ramesh Adhikari",    stations:[] }
+  ],
   givenby: [
     {name:"दिनेश मौर्य",          station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
     {name:"केशव राज सापकोटा",     station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
@@ -1772,6 +1844,12 @@ if(localStorage.getItem('sms2_ver') !== DATA_VERSION){
 }
 
 let DATA = {
+  // Multi-DCS state — DATA.dcs lists all Distribution Centers this device
+  // knows about; DATA.currentDcsId picks the active one. Everything else
+  // (stations, feeders, staff…) is filtered by this current DCS at
+  // display time via helpers like stationsForCurrentDcs().
+  dcs:          ld('sms2_dcs',          DEFAULTS.dcs),
+  currentDcsId: ld('sms2_currentDcsId', DEFAULTS.currentDcsId),
   stations:    ld('sms2_stations',    DEFAULTS.stations),
   feeders:     ld('sms2_feeders',     DEFAULTS.feeders),
   reasons:     ld('sms2_reasons',     DEFAULTS.reasons),
@@ -1783,6 +1861,61 @@ let DATA = {
   // ALL feeders (default). { [station]: { 'system-gone':[names], 'incomer-failed':[..], 'kv33':[..], 'tripall':[..] } }
   groupfeeders: ld('sms2_groupfeeders', {})
 };
+
+// `saveData` is monkey-patched later by the Supabase sync layer; declaring it
+// as `let` (instead of `function saveData(...)`) prevents hoisting collisions.
+// It MUST be declared here, BEFORE the migration/repair code below, because
+// those blocks call saveData() — a `let` used before its declaration throws
+// "Cannot access 'saveData' before initialization" and blanks the whole app.
+let saveData = function(key){ sv('sms2_'+key, DATA[key]); };
+
+/* ── Migration: legacy DATA formats → new DCS-aware shapes ─────────
+   Existing users have plain string arrays. Normalize on load so all
+   downstream code sees objects with the fields it needs. */
+
+// stations: string[]  →  [{name, dcs}]
+if(DATA.stations.length && typeof DATA.stations[0] === 'string'){
+  DATA.stations = DATA.stations.map(name => ({name, dcs: DATA.currentDcsId || 'taulihawa'}));
+  saveData('stations');
+}
+// Repair corruption from an earlier sync bug that spread strings into objects
+// like {0:'त',1:'ौ',…,dcs:'taulihawa'} with no real `name`. Drop any station
+// without a proper string name, and any feeder/operator without name+station.
+(function repairCorruptRecords(){
+  let dirty = false;
+  const goodStations = DATA.stations.filter(s => s && typeof s.name === 'string' && s.name.length);
+  if(goodStations.length !== DATA.stations.length){ DATA.stations = goodStations; dirty = true; saveData('stations'); }
+  const validNames = new Set(DATA.stations.map(s => s.name));
+  const goodFeeders = DATA.feeders.filter(f => f && typeof f.name === 'string' && f.name.length && typeof f.station === 'string');
+  if(goodFeeders.length !== DATA.feeders.length){ DATA.feeders = goodFeeders; saveData('feeders'); }
+  const goodGiven = DATA.givenby.filter(g => g && typeof g.name === 'string' && g.name.length);
+  if(goodGiven.length !== DATA.givenby.length){ DATA.givenby = goodGiven; saveData('givenby'); }
+})();
+// Any station missing `dcs` (edited by hand or from an older migration) →
+// default to current DCS so the record still shows up.
+let _stationsDirty = false;
+DATA.stations.forEach(s => { if(s && !s.dcs){ s.dcs = DATA.currentDcsId || 'taulihawa'; _stationsDirty = true; } });
+if(_stationsDirty) saveData('stations');
+
+// askedby: string[]  →  [{name, stations:[]}]
+if(DATA.askedby.length && typeof DATA.askedby[0] === 'string'){
+  DATA.askedby = DATA.askedby.map(name => ({name, stations:[]}));
+  saveData('askedby');
+}
+// Any asker missing `stations` → default to empty (visible everywhere)
+let _askedByDirty = false;
+DATA.askedby.forEach(a => { if(a && !Array.isArray(a.stations)){ a.stations = []; _askedByDirty = true; } });
+if(_askedByDirty) saveData('askedby');
+
+// Ensure DATA.dcs exists (in case older localStorage was seeded without it)
+if(!Array.isArray(DATA.dcs) || !DATA.dcs.length){
+  DATA.dcs = DEFAULTS.dcs.slice();
+  saveData('dcs');
+}
+if(!DATA.currentDcsId || !DATA.dcs.some(d => d.id === DATA.currentDcsId)){
+  DATA.currentDcsId = DATA.dcs[0]?.id || 'taulihawa';
+  saveData('currentDcsId');
+}
 
 // Feeders affected by a group outage kind at a substation. Configured in
 // Settings → Group Outage Feeders; defaults to every feeder of the substation.
@@ -1796,11 +1929,62 @@ function groupAffectedFeeders(st, kind){
 
 // Migrate old givenby (plain string array) → object array
 if(DATA.givenby.length && typeof DATA.givenby[0] === 'string'){
-  DATA.givenby = DATA.givenby.map(name=>({name, station: DATA.stations[0]||''}));
+  DATA.givenby = DATA.givenby.map(name=>({name, station: (DATA.stations[0] && DATA.stations[0].name) || ''}));
   saveData('givenby');
 }
 let nextRcvId = Math.max(0,...DATA.receivers.map(r=>r.id))+1;
-function saveData(key){ sv('sms2_'+key, DATA[key]); }
+// (saveData is declared above, before the migration block.)
+
+/* ── DCS-aware helpers ─────────────────────────────────────────────
+   These wrap the raw DATA arrays so the rest of the app can stay
+   agnostic to the multi-DCS model. Every station/feeder/staff
+   accessor filters by the currently-active DCS. */
+
+function currentDcs(){
+  return DATA.dcs.find(d => d.id === DATA.currentDcsId) || DATA.dcs[0] || DEFAULTS.dcs[0];
+}
+window.currentDcs = currentDcs;
+
+// Station records for the current DCS (returns the object form).
+function stationsForCurrentDcs(){
+  const id = DATA.currentDcsId;
+  return DATA.stations.filter(s => s && s.dcs === id);
+}
+// Just the names of stations in the current DCS (for dropdowns/loops).
+function stationNamesForCurrentDcs(){
+  return stationsForCurrentDcs().map(s => s.name);
+}
+// Feeder records that belong to a station in the current DCS.
+function feedersForCurrentDcs(){
+  const names = new Set(stationNamesForCurrentDcs());
+  return DATA.feeders.filter(f => names.has(f.station));
+}
+// Askers to show for the currently-selected station. General askers
+// (empty stations[]) show for every substation; scoped askers show only
+// for their listed substations.
+function askedByForStation(stationName){
+  if(!stationName){
+    return DATA.askedby.filter(a => !a.stations || a.stations.length===0)
+                       .map(a => a.name);
+  }
+  return DATA.askedby
+    .filter(a => !a.stations || a.stations.length===0 || a.stations.includes(stationName))
+    .map(a => a.name);
+}
+
+// Read a station object or plain-string element safely.
+function stationName(s){ return typeof s === 'string' ? s : (s && s.name || ''); }
+function stationDcsOf(s){ return typeof s === 'string' ? DATA.currentDcsId : (s && s.dcs || ''); }
+
+// Refresh every DCS-dependent UI element (topbar brand, footers, lock
+// screen headings) so switching DCS updates the visible titles.
+function refreshDcsUI(){
+  const d = currentDcs();
+  document.querySelectorAll('.js-dcs-shortname').forEach(el => el.textContent = d.shortName || 'DCS');
+  document.querySelectorAll('.js-dcs-name').forEach(el      => el.textContent = d.name       || d.shortName || 'DCS');
+  document.querySelectorAll('.js-dcs-center').forEach(el    => el.textContent = d.center     || '');
+  document.querySelectorAll('.js-dcs-location').forEach(el  => el.textContent = d.location   || '');
+}
 
 
 /* ============================================================
@@ -1881,11 +2065,17 @@ async function appUnlock(){
     err.textContent='';
     restoreLastStation();
     setTimeout(setTopbarH,450);
-    await sbPullData(true);  // silent on initial load
-    await sbAutoLoad();
-    startSync();
-    // Self-test: verify feeder_status table is writable immediately after unlock
-    if(!monitorMode) sbSelfTestFeederWrite();
+    // Cloud sync must never block or crash the UI. If any of these throw
+    // (e.g. stale/incompatible data pushed by an older app version), the app
+    // still opens with local data; the error is logged, not fatal.
+    (async () => {
+      try{ await sbMigrateLegacyRows(); }catch(e){ console.warn('migrate failed:', e.message); }
+      try{ await sbPullData(true); }catch(e){ console.warn('pull failed:', e.message); }
+      try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
+      try{ sbAutoDailyBackup(); }catch(e){ console.warn('daily backup failed:', e.message); }
+      try{ startSync(); }catch(e){ console.warn('startSync failed:', e.message); }
+      try{ if(!monitorMode) sbSelfTestFeederWrite(); }catch(e){ console.warn('selftest failed:', e.message); }
+    })();
   } else {
     errRed.textContent='Incorrect password. Try again.';
     err.textContent=''; input.value=''; input.focus();
@@ -2130,8 +2320,13 @@ function getMultiVal(key){
 function fillStation(){
   const sel=$('station'), cur=sel.value;
   sel.innerHTML='<option value="">— select substation —</option>';
-  DATA.stations.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; sel.appendChild(o); });
-  if(cur) sel.value=cur;
+  // Only stations that belong to the currently active DCS
+  stationsForCurrentDcs().forEach(s=>{
+    const o=document.createElement('option');
+    o.value=s.name; o.textContent=s.name;
+    sel.appendChild(o);
+  });
+  if(cur && stationNamesForCurrentDcs().includes(cur)) sel.value=cur;
 }
 function fillFeeder(){
   const st=$("station").value;
@@ -2154,16 +2349,22 @@ function fillGivenBy(){
   DATA.givenby.filter(g=>g.station===st).forEach(g=>{ const o=document.createElement("option"); o.value=g.name; o.textContent=g.name; sel.appendChild(o); });
   if(cur) sel.value=cur;
 }
+// Askers: shown per substation. General askers (empty stations[]) show
+// for every substation; scoped ones show only for their listed substations.
+function fillAskedBy(){
+  const st = $("station").value;
+  const names = askedByForStation(st);
+  fillSelect('askedBy',     names);
+  fillSelect('askedByTrip', names);
+}
 function fillAll(){
-  fillStation(); fillFeeder(); fillGivenBy();
+  fillStation(); fillFeeder(); fillGivenBy(); fillAskedBy();
   fillSelect('reason',      DATA.reasons);
   fillSelect('tripReason',  DATA.tripreasons);
-  fillSelect('askedBy',     DATA.askedby);
-  fillSelect('askedByTrip', DATA.askedby);
 }
 function onStationChange(){
   feederPicker.clear();
-  fillFeeder(); fillGivenBy();
+  fillFeeder(); fillGivenBy(); fillAskedBy();
   $('givenBy').value=''; $('condition').value='';
   $('time').value=nowHM();
   onConditionChange(); autoBuild();
@@ -2438,7 +2639,7 @@ function buildTemplate(f){
   const tEN = f.time || '';
   const multi = f.feeders && f.feeders.length>1;
   const sep  = '━━━━━━━━━━━━━━━━━━━━';
-  const footer = 'Taulihawa DCS, NEA';
+  const footer = `${currentDcs().name || currentDcs().shortName || 'DCS'}, NEA`;
 
   if(f.condition==='trip'){
     if(currentLang==='ne'){
@@ -2967,6 +3168,308 @@ function copyMsg(){
 }
 
 /* ============================================================
+   TEXT-TO-SPEECH — consumer voice announcement (NO EXTERNAL API)
+   ============================================================
+   The internal message (with Substation / Feeder / Reason /
+   Operator labels) is meant for record-keeping and staff comms.
+   The VOICE version — what gets read aloud and downloaded as an
+   audio file for the operator to forward to affected consumers —
+   is a smooth 1-2 sentence Nepali announcement built directly
+   from the fields. It never mentions operator/staff names or
+   internal decorations.
+
+     • 🔊 Speak      — plays the announcement in-browser using the
+                       Web Speech API + the OS's installed Nepali
+                       voice. 100% offline, no data usage, no API,
+                       no server. On devices without a Nepali voice
+                       installed the app falls back to Hindi (same
+                       Devanagari script) or the browser default.
+
+     • ⬇ Voice       — records the same Web Speech playback via
+                       MediaRecorder + getDisplayMedia (the operator
+                       ticks "Share tab audio" once) and downloads
+                       an .webm audio file. Also no external API.
+                       If the browser lacks capture support, we fall
+                       back to plain playback and hint the operator
+                       to use the phone's built-in screen recorder.
+
+   Covered conditions: trip · shutdown · System Gone · 11 KV
+   Incomer Failed · 33 KV Incomer Failed · Trip All. */
+
+let ttsPlaying = false;
+let ttsUtter   = null;
+let ttsAudio   = null;   // currently-playing <Audio> element (for downloadable MP3 preview)
+
+function ttsAvailable(){
+  return typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+}
+
+// Prime the voices list — Chrome fires 'voiceschanged' async
+if(ttsAvailable()){
+  try{ speechSynthesis.getVoices(); }catch(e){}
+  try{ speechSynthesis.addEventListener('voiceschanged', ()=>{}); }catch(e){}
+}
+
+function pickNepaliVoice(){
+  const voices = (speechSynthesis.getVoices && speechSynthesis.getVoices()) || [];
+  if(!voices.length) return null;
+  let v = voices.find(x => /^ne(-|_|$)/i.test(x.lang || ''));
+  if(v) return v;
+  v = voices.find(x => /^hi(-|_|$)/i.test(x.lang || ''));
+  if(v) return v;
+  v = voices.find(x => /nepali|hindi/i.test(x.name || ''));
+  return v || null;
+}
+
+// Build a natural, consumer-facing 1-2 sentence Nepali announcement
+// from the current form fields. Never mentions operator/staff.
+// Returns null if there isn't enough info to say anything.
+function buildConsumerSpokenText(fOverride){
+  const f = fOverride || (typeof getFields === 'function' ? getFields() : null);
+  if(!f) return null;
+  const substation = (f.station || '').trim();
+  const feeders    = (f.feeders && f.feeders.length ? f.feeders : (f.feeder ? [f.feeder] : []))
+                       .map(s=>String(s).trim()).filter(Boolean);
+  if(!substation || !feeders.length) return null;
+
+  const multi     = feeders.length > 1;
+  const anyEndsInFeeder = feeders.every(x => /फिडर\s*$/.test(x));
+  const feederWord  = anyEndsInFeeder ? '' : (multi ? ' फिडरहरू' : ' फिडर');
+  const suffix      = 'मा';
+  const feederStr   = multi
+    ? feeders.slice(0,-1).join(', ') + ' र ' + feeders[feeders.length-1]
+    : feeders[0];
+
+  const reasonList = (f.tripReasons && f.tripReasons.length) ? f.tripReasons : (f.reasons || []);
+  const reasonStr  = reasonList.map(s=>String(s).trim()).filter(Boolean).join(', ');
+  const time = (f.time || '').trim();
+  const eta  = (f.eta  || '').trim();
+
+  if(f.condition === 'trip'){
+    let s1 = `नमस्कार, ${substation} अन्तर्गत ${feederStr}${feederWord}${suffix}`;
+    if(reasonStr) s1 += ` ${reasonStr}का कारण`;
+    if(time)      s1 += ` ${time} बजेदेखि`;
+    s1 += ` विद्युत आपूर्ति अवरुद्ध भएको छ।`;
+    const s2 = eta
+      ? ` अनुमानित ${eta} भित्र पुनःप्रवाह हुनेछ।`
+      : ` अविलम्ब मर्मत कार्य सुरु गरिएको छ।`;
+    return s1 + s2;
+  }
+
+  if(f.condition === 'shutdown'){
+    let s1 = `नमस्कार, ${substation} अन्तर्गत ${feederStr}${feederWord}${suffix}`;
+    if(reasonStr) s1 += ` ${reasonStr}का लागि`;
+    else          s1 += ` मर्मत कार्यका लागि`;
+    if(time)      s1 += ` ${time} बजेदेखि`;
+    if(eta)       s1 += ` करीब ${eta} सम्म`;
+    s1 += ` विद्युत आपूर्ति बन्द रहनेछ।`;
+    return s1 + ` असुविधाका लागि क्षमाप्रार्थी छौं।`;
+  }
+
+  return null;
+}
+window.buildConsumerSpokenText = buildConsumerSpokenText;
+
+// Voice text for the outage/tripall conditions (dispatched via dedicated
+// buttons, not the condition dropdown). Kind values:
+//   'system-gone'    — whole-substation blackout
+//   'incomer-failed' — 11 KV Incomer failure (all feeders of that substation)
+//   'kv33-failed'    — 33 KV Incomer failure
+//   'tripall'        — every feeder of a substation tripped simultaneously
+function buildOutageSpokenText(kind, station, time, eta){
+  if(!station) return null;
+  station = String(station).trim();
+  time = (time||'').trim();
+  eta  = (eta||'').trim();
+  const timePhrase = time ? ` ${time} बजेदेखि` : '';
+  const closer = eta
+    ? ` अनुमानित ${eta} भित्र पुनःप्रवाह हुनेछ।`
+    : ` अविलम्ब मर्मत कार्य सुरु गरिएको छ।`;
+  switch(kind){
+    case 'system-gone':
+      return `नमस्कार, ${station} अन्तर्गत${timePhrase} सम्पूर्ण विद्युत प्रणालीमा समस्या आएकोले सबै फिडरहरूको विद्युत आपूर्ति अवरुद्ध भएको छ।${closer}`;
+    case 'incomer-failed':
+      return `नमस्कार, ${station} अन्तर्गत ११ के.भी. इनकमरमा${timePhrase} समस्या आएकोले सबै फिडरहरूको विद्युत आपूर्ति अवरुद्ध भएको छ।${closer}`;
+    case 'kv33-failed':
+      return `नमस्कार, ${station} अन्तर्गत ३३ के.भी. इनकमरमा${timePhrase} समस्या आएकोले सबै फिडरहरूको विद्युत आपूर्ति अवरुद्ध भएको छ।${closer}`;
+    case 'tripall':
+      return `नमस्कार, ${station} अन्तर्गतका सम्पूर्ण फिडरहरू${timePhrase} ट्रिप भई विद्युत आपूर्ति अवरुद्ध भएको छ।${closer}`;
+    default: return null;
+  }
+}
+window.buildOutageSpokenText = buildOutageSpokenText;
+
+// Unified: figure out which spoken text applies given the current UI state
+// (or an explicit kind hint from a button click).
+function getCurrentSpokenText(explicitKind){
+  const kind = explicitKind || (typeof currentCondition === 'string' ? currentCondition : '') || '';
+  if(kind === 'trip' || kind === 'shutdown'){
+    return buildConsumerSpokenText();
+  }
+  const outageKinds = ['system-gone','incomer-failed','kv33-failed','tripall'];
+  if(outageKinds.includes(kind)){
+    const station = (document.getElementById('station')?.value || '').trim();
+    const time    = (document.getElementById('outageTime')?.value
+                     || document.getElementById('time')?.value || '').trim();
+    const eta     = (document.getElementById('outageEta')?.value || '').trim();
+    return buildOutageSpokenText(kind, station, time, eta);
+  }
+  // No condition set → fall back to whichever announcement is buildable
+  const t = buildConsumerSpokenText();
+  return t;
+}
+window.getCurrentSpokenText = getCurrentSpokenText;
+
+function updateTtsBtns(){
+  document.querySelectorAll('.tts-btn').forEach(btn=>{
+    btn.textContent = ttsPlaying ? '⏹ Stop' : '🔊 Speak';
+    btn.classList.toggle('tts-playing', ttsPlaying);
+  });
+}
+
+// Read the consumer announcement aloud using the browser's Speech
+// Synthesis. `kind` may be passed explicitly by outage/tripall buttons
+// which don't set `currentCondition` (e.g. speakMsg('system-gone')).
+function speakMsg(kind){
+  if(ttsPlaying){
+    try{ speechSynthesis.cancel(); }catch(e){}
+    if(ttsAudio){ try{ ttsAudio.pause(); }catch(e){} ttsAudio = null; }
+    ttsPlaying = false;
+    updateTtsBtns();
+    return;
+  }
+  if(!ttsAvailable()){
+    toast('यो ब्राउजरले voice reading सपोर्ट गर्दैन'); return;
+  }
+  const text = getCurrentSpokenText(typeof kind === 'string' ? kind : undefined);
+  if(!text){
+    toast('पहिले सबस्टेशन, फिडर र condition छान्नुहोस्');
+    return;
+  }
+  const doSpeak = () => {
+    const u = new SpeechSynthesisUtterance(text);
+    const voice = pickNepaliVoice();
+    if(voice){ u.voice = voice; u.lang = voice.lang; }
+    else       u.lang = 'ne-NP';
+    u.rate  = 0.92;
+    u.pitch = 1.0;
+    u.volume= 1.0;
+    u.onstart = ()=>{ ttsPlaying = true;  updateTtsBtns(); };
+    u.onend   = ()=>{ ttsPlaying = false; updateTtsBtns(); };
+    u.onerror = (e)=>{ ttsPlaying = false; updateTtsBtns(); toast('Voice error: '+(e.error||'')); };
+    ttsUtter = u;
+    try{ speechSynthesis.cancel(); }catch(e){}
+    speechSynthesis.speak(u);
+    ttsPlaying = true; updateTtsBtns();
+    if(!voice){
+      const voices = (speechSynthesis.getVoices && speechSynthesis.getVoices()) || [];
+      const hasNe = voices.some(v => /^ne(-|_|$)/i.test(v.lang||''));
+      if(!hasNe && !window._ttsHintShown){
+        window._ttsHintShown = true;
+        toast('💡 Nepali voice not installed — using closest available.', 4000);
+      }
+    }
+  };
+  const voices = (speechSynthesis.getVoices && speechSynthesis.getVoices()) || [];
+  if(voices.length === 0) setTimeout(doSpeak, 250); else doSpeak();
+}
+window.speakMsg = speakMsg;
+
+/* ── Download the voice as an audio file (NO EXTERNAL API) ────────
+   Uses the browser's own Speech Synthesis + MediaRecorder to capture
+   the tab's audio while the Nepali voice speaks. The user grants
+   one-time permission to share tab audio; the resulting .webm file
+   plays back in every WhatsApp / mobile audio player. If the browser
+   doesn't support getDisplayMedia (older Safari, some mobile
+   browsers) we degrade to in-browser playback and hint the user to
+   use their phone's built-in screen recorder. */
+async function downloadVoiceMsg(kind){
+  const text = getCurrentSpokenText(typeof kind === 'string' ? kind : undefined);
+  if(!text){ toast('पहिले सबस्टेशन, फिडर र condition छान्नुहोस्'); return; }
+  if(!ttsAvailable()){ toast('यो ब्राउजरले voice सपोर्ट गर्दैन'); return; }
+
+  const hasCapture = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)
+                     && typeof MediaRecorder !== 'undefined';
+  if(!hasCapture){
+    toast('यो browser मा download supported छैन — फोनको screen recorder प्रयोग गर्दै Speak थिच्नुहोस्।', 6000);
+    speakMsg(kind);
+    return;
+  }
+
+  // Prompt the user for permission — we need "Share tab audio" ticked.
+  toast('🎙 Prompt देखिँदा "Share tab audio" टिक गर्नुहोस्', 4500);
+  let stream;
+  try{
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      audio: true,
+      // A minimal video track is required by many browsers alongside audio;
+      // we drop it right after and only keep the audio track for recording.
+      video: { width:1, height:1, frameRate:1 }
+    });
+  }catch(e){
+    toast('Recording cancelled'); return;
+  }
+  const audioTracks = stream.getAudioTracks();
+  if(!audioTracks.length){
+    stream.getTracks().forEach(t=>t.stop());
+    toast('⚠ "Share tab audio" टिक नगर्दा voice capture भएन', 6000);
+    return;
+  }
+  const audioStream = new MediaStream(audioTracks);
+  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                 ? 'audio/webm;codecs=opus'
+                 : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '');
+  let recorder;
+  try{
+    recorder = mime ? new MediaRecorder(audioStream, {mimeType: mime}) : new MediaRecorder(audioStream);
+  }catch(e){
+    stream.getTracks().forEach(t=>t.stop());
+    toast('Recorder उपलब्ध छैन: '+e.message, 5000);
+    return;
+  }
+  const chunks = [];
+  recorder.ondataavailable = e => { if(e.data && e.data.size > 0) chunks.push(e.data); };
+  recorder.start();
+
+  // Speak the text; when it finishes, wait a beat for trailing audio then stop the recorder.
+  await new Promise(resolve => {
+    const u = new SpeechSynthesisUtterance(text);
+    const voice = pickNepaliVoice();
+    if(voice){ u.voice = voice; u.lang = voice.lang; } else u.lang = 'ne-NP';
+    u.rate = 0.92; u.pitch = 1.0; u.volume = 1.0;
+    u.onend   = ()=>setTimeout(resolve, 350);
+    u.onerror = ()=>setTimeout(resolve, 350);
+    try{ speechSynthesis.cancel(); }catch(e){}
+    speechSynthesis.speak(u);
+  });
+  await new Promise(resolve => {
+    recorder.onstop = resolve;
+    try{ recorder.stop(); }catch(e){ resolve(); }
+  });
+  stream.getTracks().forEach(t=>t.stop());
+
+  if(!chunks.length){
+    toast('⚠ No audio captured. Try again with "Share tab audio" ticked.', 5000);
+    return;
+  }
+  const blob = new Blob(chunks, {type: mime || 'audio/webm'});
+  const url  = URL.createObjectURL(blob);
+  const stamp = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `NEA_notice_${stamp}.webm`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 500);
+  toast('✓ Voice डाउनलोड भयो — WhatsApp मा पठाउनुहोस्');
+}
+window.downloadVoiceMsg = downloadVoiceMsg;
+
+// Stop any in-progress reading when the page is closed.
+window.addEventListener('beforeunload', ()=>{ try{ speechSynthesis.cancel(); }catch(e){} });
+
+/* ============================================================
    AI — GEMINI
    ============================================================ */
 async function callGemini(model,key,prompt){
@@ -2985,7 +3488,7 @@ async function runAI(){
   if(!key){setMessage(tmpl, f.condition==='trip'?'trip':'tpl');return;}
   const langName=currentLang==='ne'?'Nepali':'English';
   const condType=f.condition==='trip'?'TRIP alert':'SHUTDOWN notice';
-  const prompt=`You are drafting an official electricity ${condType} for Nepal Electricity Authority (NEA), Taulihawa. Write ONE concise, professional notice in ${langName} only. No preamble, no markdown, no translation.\nDetails:\n- Substation: ${f.station}\n- Feeder: ${f.feeder}\n- Condition: ${f.condition==='trip'?'Trip (automatic fault)':'Planned Shutdown'}\n- Reason: ${f.reason||'N/A'}\n- Affected area: ${f.site||'N/A'}\n- Time: ${f.time||'N/A'}\n- Estimated restore time: ${f.eta||'N/A'}\n- Requested by: ${f.askedBy||'N/A'}\n- Substation Operator: ${f.givenBy||'N/A'}\nFormat: use ⚡ for trip or 🔌 for shutdown as first line header, then key details neatly, then one formal closing sentence. If the estimated restore time is provided, include it in the notice. End with: _(auto generated msg)_${currentLang==='ne'?`\nNepali orthography rules — STRICTLY follow standard Nepali (नेपाली वर्णविन्यास, not Hindi):\n• Use "सुरु" (NOT "शुरु" or "शुरू") for "start/begin".\n• Use "का लागि" (NOT "को लागि") after nouns before the postposition "लागि".\n• Use "सबैलाई" (NOT "सबैमा") when addressing "to all".\n• Use "व्यहोरा" (NOT "बेहोरा").\n• Formal words: अवरुद्ध, अविलम्ब, गराइन्छ, गरिएको छ, क्षमाप्रार्थी, असुविधा — spell exactly as given.`:''}`;
+  const prompt=`You are drafting an official electricity ${condType} for Nepal Electricity Authority (NEA), ${currentDcs().shortName || 'Taulihawa'}. Write ONE concise, professional notice in ${langName} only. No preamble, no markdown, no translation.\nDetails:\n- Substation: ${f.station}\n- Feeder: ${f.feeder}\n- Condition: ${f.condition==='trip'?'Trip (automatic fault)':'Planned Shutdown'}\n- Reason: ${f.reason||'N/A'}\n- Affected area: ${f.site||'N/A'}\n- Time: ${f.time||'N/A'}\n- Estimated restore time: ${f.eta||'N/A'}\n- Requested by: ${f.askedBy||'N/A'}\n- Substation Operator: ${f.givenBy||'N/A'}\nFormat: use ⚡ for trip or 🔌 for shutdown as first line header, then key details neatly, then one formal closing sentence. If the estimated restore time is provided, include it in the notice. End with: _(auto generated msg)_${currentLang==='ne'?`\nNepali orthography rules — STRICTLY follow standard Nepali (नेपाली वर्णविन्यास, not Hindi):\n• Use "सुरु" (NOT "शुरु" or "शुरू") for "start/begin".\n• Use "का लागि" (NOT "को लागि") after nouns before the postposition "लागि".\n• Use "सबैलाई" (NOT "सबैमा") when addressing "to all".\n• Use "व्यहोरा" (NOT "बेहोरा").\n• Formal words: अवरुद्ध, अविलम्ब, गराइन्छ, गरिएको छ, क्षमाप्रार्थी, असुविधा — spell exactly as given.`:''}`;
   const models=($('modelList')?.value||'').split('\n').map(m=>m.trim()).filter(Boolean);
   status.style.color='var(--dim2)';
   for(const model of models){
@@ -3300,21 +3803,38 @@ function gfSave(st){
 
 function renderStationsTable(){
   const tb=$('tbl-substations'); tb.innerHTML='';
+  const cur = DATA.currentDcsId;
+  // DCS <select> options — for the "belongs to DCS" column
+  const dcsOptsAll = DATA.dcs.map(d=>`<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
+  // Only stations of the currently-active DCS are editable here
   DATA.stations.forEach((s,i)=>{
+    if(s.dcs !== cur) return;   // hidden for other DCS's
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td><input value="${esc(s)}" placeholder="e.g. तौलिहवा सबस्टेशन ३३/११ के.भी." onchange="DATA.stations[${i}]=this.value;saveData('stations');fillAll()"></td>
+    const dcsOpts = DATA.dcs.map(d=>`<option value="${esc(d.id)}" ${d.id===s.dcs?'selected':''}>${esc(d.name)}</option>`).join('');
+    tr.innerHTML=`
+      <td><input value="${esc(s.name)}" placeholder="e.g. तौलिहवा सबस्टेशन ३३/११ के.भी." onchange="DATA.stations[${i}].name=this.value;saveData('stations');fillAll()"></td>
+      <td><select onchange="DATA.stations[${i}].dcs=this.value;saveData('stations');refreshAllTables();fillAll()">${dcsOpts}</select></td>
       <td><button class="del-btn" onclick="delStation(${i})">✕</button></td>`;
     tb.appendChild(tr);
   });
 }
 function delStation(i){ DATA.stations.splice(i,1); saveData('stations'); renderStationsTable(); fillAll(); }
-function addStationRow(){ DATA.stations.push(''); saveData('stations'); renderStationsTable(); const rows=$('tbl-substations').querySelectorAll('tr'); rows[rows.length-1].querySelector('input').focus(); }
+function addStationRow(){
+  DATA.stations.push({name:'', dcs: DATA.currentDcsId});
+  saveData('stations');
+  renderStationsTable();
+  const rows=$('tbl-substations').querySelectorAll('tr');
+  const last=rows[rows.length-1]; if(last){ const inp=last.querySelector('input'); if(inp) inp.focus(); }
+}
 
 function renderFeedersTable(){
   const tb=$('tbl-feeders'); tb.innerHTML='';
+  // Only feeders whose station belongs to the current DCS
+  const currentStationNames = new Set(stationNamesForCurrentDcs());
   DATA.feeders.forEach((f,i)=>{
+    if(!currentStationNames.has(f.station)) return;
     const tr=document.createElement('tr');
-    let opts=DATA.stations.map(s=>`<option value="${esc(s)}" ${s===f.station?'selected':''}>${esc(s)}</option>`).join('');
+    let opts=stationNamesForCurrentDcs().map(name=>`<option value="${esc(name)}" ${name===f.station?'selected':''}>${esc(name)}</option>`).join('');
     tr.innerHTML=`<td><input value="${esc(f.name)}" placeholder="Feeder name" onchange="DATA.feeders[${i}].name=this.value;saveData('feeders');fillAll()"></td>
       <td><select onchange="DATA.feeders[${i}].station=this.value;saveData('feeders');fillAll()"><option value="">— station —</option>${opts}</select></td>
       <td><button class="del-btn" onclick="delFeeder(${i})">✕</button></td>`;
@@ -3322,7 +3842,13 @@ function renderFeedersTable(){
   });
 }
 function delFeeder(i){ DATA.feeders.splice(i,1); saveData('feeders'); renderFeedersTable(); fillAll(); }
-function addFeederRow(){ DATA.feeders.push({name:'',station:DATA.stations[0]||''}); saveData('feeders'); renderFeedersTable(); fillAll(); const rows=$('tbl-feeders').querySelectorAll('tr'); rows[rows.length-1].querySelector('input').focus(); }
+function addFeederRow(){
+  const firstStation = stationNamesForCurrentDcs()[0] || '';
+  DATA.feeders.push({name:'', station: firstStation});
+  saveData('feeders'); renderFeedersTable(); fillAll();
+  const rows=$('tbl-feeders').querySelectorAll('tr');
+  const last=rows[rows.length-1]; if(last){ const inp=last.querySelector('input'); if(inp) inp.focus(); }
+}
 
 function renderSimpleTable(key,tbId,label){
   const tb=$(tbId); tb.innerHTML='';
@@ -3337,9 +3863,12 @@ function addSimpleRow(key,label){ const tbId='tbl-'+key; DATA[key].push(''); sav
 
 function renderStaffTable(){
   const tb=$('tbl-givenby'); tb.innerHTML='';
+  const stationNames = stationNamesForCurrentDcs();
   DATA.givenby.forEach((g,i)=>{
+    // Only staff whose station belongs to the current DCS
+    if(g.station && !stationNames.includes(g.station)) return;
     const tr=document.createElement('tr');
-    let opts=DATA.stations.map(s=>`<option value="${esc(s)}" ${s===g.station?'selected':''}>${esc(s)}</option>`).join('');
+    let opts=stationNames.map(name=>`<option value="${esc(name)}" ${name===g.station?'selected':''}>${esc(name)}</option>`).join('');
     tr.innerHTML=`
       <td><input value="${esc(g.name)}" placeholder="Staff name" onchange="DATA.givenby[${i}].name=this.value;saveData('givenby');fillGivenBy()"></td>
       <td><select onchange="DATA.givenby[${i}].station=this.value;saveData('givenby');fillGivenBy()">
@@ -3351,10 +3880,161 @@ function renderStaffTable(){
 }
 function delStaff(i){ DATA.givenby.splice(i,1); saveData('givenby'); renderStaffTable(); fillGivenBy(); }
 function addStaffRow(){
-  DATA.givenby.push({name:'', station: $('station').value||DATA.stations[0]||''});
+  const first = stationNamesForCurrentDcs()[0] || '';
+  DATA.givenby.push({name:'', station: $('station').value||first});
   saveData('givenby'); renderStaffTable(); fillGivenBy();
   const rows=$('tbl-givenby').querySelectorAll('tr');
   rows[rows.length-1].querySelector('input').focus();
+}
+
+/* ── Asked By table (multi-substation) ─────────────────────────────
+   Each asker has:
+     • name       — display name
+     • stations[] — [] means "shown for every substation in this DCS"
+                   populated array means "shown only for these stations"
+   The UI shows checkboxes for each station in the current DCS, plus a
+   "General (all)" convenience toggle. */
+function renderAskedByTable(){
+  const tb=$('tbl-askedby'); if(!tb) return;
+  tb.innerHTML='';
+  const stNames = stationNamesForCurrentDcs();
+  DATA.askedby.forEach((a,i)=>{
+    if(!a) return;
+    // Only show askers relevant to the current DCS. An asker is relevant
+    // if it has NO scope (general — visible in every DCS) OR at least one
+    // of its scoped stations belongs to the current DCS.
+    if(a.stations && a.stations.length && !a.stations.some(n => stNames.includes(n))) return;
+    const generalOn = !a.stations || a.stations.length === 0;
+    const chips = stNames.map(name => {
+      const on = !generalOn && a.stations.includes(name);
+      return `<label class="tfx-pill" style="display:inline-flex;gap:5px;align-items:center;margin:2px 3px 2px 0;padding:3px 9px;font-size:11.5px;cursor:pointer;background:${on?'#dbeafe':'#fff'};color:${on?'#1e40af':'var(--dim)'};border:1px solid ${on?'#93c5fd':'var(--line)'};border-radius:20px;font-weight:600">
+        <input type="checkbox" ${on?'checked':''} ${generalOn?'disabled':''} style="margin:0" onchange="askedByToggleStation(${i}, '${esc(name).replace(/'/g,"\\'")}', this.checked)"> ${esc(name)}
+      </label>`;
+    }).join('');
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td><input value="${esc(a.name)}" placeholder="Asker name" onchange="DATA.askedby[${i}].name=this.value;saveData('askedby');fillAskedBy()"></td>
+      <td>
+        <label style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;margin-right:8px">
+          <input type="checkbox" ${generalOn?'checked':''} onchange="askedByToggleGeneral(${i}, this.checked)"> General (all)
+        </label>
+        <div style="display:inline-block">${chips}</div>
+      </td>
+      <td><button class="del-btn" onclick="delAskedBy(${i})">✕</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+function askedByToggleGeneral(i, general){
+  if(general){ DATA.askedby[i].stations = []; }
+  else {
+    // Turning general OFF without any station picked → default to current selected station
+    if(!DATA.askedby[i].stations || !DATA.askedby[i].stations.length){
+      const first = ($('station')?.value) || stationNamesForCurrentDcs()[0] || '';
+      DATA.askedby[i].stations = first ? [first] : [];
+    }
+  }
+  saveData('askedby'); renderAskedByTable(); fillAskedBy();
+}
+function askedByToggleStation(i, name, on){
+  if(!DATA.askedby[i].stations) DATA.askedby[i].stations = [];
+  const arr = DATA.askedby[i].stations;
+  if(on && !arr.includes(name)) arr.push(name);
+  if(!on) DATA.askedby[i].stations = arr.filter(x => x !== name);
+  saveData('askedby'); renderAskedByTable(); fillAskedBy();
+}
+function delAskedBy(i){ DATA.askedby.splice(i,1); saveData('askedby'); renderAskedByTable(); fillAskedBy(); }
+function addAskedByRow(){
+  DATA.askedby.push({name:'', stations:[]});
+  saveData('askedby'); renderAskedByTable(); fillAskedBy();
+  const rows=$('tbl-askedby').querySelectorAll('tr');
+  const last=rows[rows.length-1]; if(last){ const inp=last.querySelector('input'); if(inp) inp.focus(); }
+}
+
+/* ── DCS management table ─────────────────────────────────────────
+   List of Distribution Centers this device supports. Each row has:
+     • ID (immutable slug used in station.dcs references)
+     • Short name (topbar brand)
+     • Full name (message footer)
+     • Center (letterhead center name)
+     • Location (letterhead district)
+   The last row (currently-active DCS) has a "★ Active" badge; the
+   "Switch" button on other rows makes them active. */
+function renderDcsTable(){
+  const tb=$('tbl-dcs'); if(!tb) return;
+  tb.innerHTML='';
+  DATA.dcs.forEach((d,i)=>{
+    const isCurrent = d.id === DATA.currentDcsId;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td><input value="${esc(d.id)}" placeholder="e.g. taulihawa" ${isCurrent?'readonly':''} onchange="dcsRenameId(${i}, this.value)" title="${isCurrent?'Active DCS ID cannot be edited':''}"></td>
+      <td><input value="${esc(d.shortName||'')}" placeholder="Taulihawa" onchange="DATA.dcs[${i}].shortName=this.value;saveData('dcs');refreshDcsUI()"></td>
+      <td><input value="${esc(d.name||'')}"      placeholder="Taulihawa DCS" onchange="DATA.dcs[${i}].name=this.value;saveData('dcs');refreshDcsUI()"></td>
+      <td><input value="${esc(d.center||'')}"    placeholder="तौलिहवा वितरण केन्द्र" onchange="DATA.dcs[${i}].center=this.value;saveData('dcs');refreshDcsUI()"></td>
+      <td><input value="${esc(d.location||'')}"  placeholder="कपिलवस्तु" onchange="DATA.dcs[${i}].location=this.value;saveData('dcs');refreshDcsUI()"></td>
+      <td>
+        <input value="${esc(d.sbUrl||'')}" placeholder="(shared project)" style="font-size:11px;margin-bottom:4px" title="Leave blank to use the shared default Supabase project. Enter this DCS's own project URL to keep its data fully separate." onchange="DATA.dcs[${i}].sbUrl=this.value.trim();saveData('dcs')">
+        <input value="${esc(d.sbKey||'')}" placeholder="(shared anon key)" style="font-size:11px" type="password" title="Anon/public key for this DCS's own Supabase project." onchange="DATA.dcs[${i}].sbKey=this.value.trim();saveData('dcs')">
+      </td>
+      <td>
+        ${isCurrent
+          ? '<span style="color:#166534;font-weight:700;font-size:11px">★ Active</span>'
+          : `<button class="btn btn-ghost btn-sm" onclick="switchDcs('${esc(d.id)}')">Switch →</button>`}
+        ${isCurrent ? '' : `<button class="del-btn" onclick="delDcs(${i})" title="Remove this DCS">✕</button>`}
+      </td>`;
+    tb.appendChild(tr);
+  });
+}
+function dcsRenameId(i, newId){
+  newId = (newId||'').trim().toLowerCase().replace(/\s+/g,'_');
+  if(!newId){ toast('DCS ID cannot be empty'); renderDcsTable(); return; }
+  const old = DATA.dcs[i].id;
+  if(DATA.dcs.some((x,idx)=>idx!==i && x.id===newId)){ toast('That ID is already used'); renderDcsTable(); return; }
+  DATA.dcs[i].id = newId;
+  // Retag any stations that referenced the old ID
+  DATA.stations.forEach(s => { if(s.dcs === old) s.dcs = newId; });
+  saveData('dcs'); saveData('stations');
+  renderDcsTable();
+}
+function switchDcs(id){
+  if(!DATA.dcs.some(d=>d.id===id)) return;
+  DATA.currentDcsId = id;
+  saveData('currentDcsId');
+  refreshDcsUI();
+  // Reset the entry form since the previous station may not belong to the new DCS
+  const stEl = $('station'); if(stEl) stEl.value = '';
+  fillAll();
+  if(typeof onStationChange === 'function') onStationChange();
+  refreshAllTables();
+  toast('✓ Switched to ' + (currentDcs().name || id));
+  // Pull this DCS's data from its project (own project, or its namespace on the
+  // shared project) so the view reflects that DCS's latest cloud state.
+  if(typeof sbPullData === 'function' && sbReady()) sbPullData(true);
+}
+window.switchDcs = switchDcs;
+function delDcs(i){
+  const d = DATA.dcs[i]; if(!d) return;
+  if(d.id === DATA.currentDcsId){ toast('Cannot delete the active DCS — switch first'); return; }
+  // Ensure no stations reference this DCS anymore
+  const orphans = DATA.stations.filter(s => s.dcs === d.id).length;
+  if(orphans){
+    if(!confirm(`This DCS has ${orphans} substation(s). Delete them too?`)) return;
+    DATA.stations = DATA.stations.filter(s => s.dcs !== d.id);
+    saveData('stations');
+  }
+  DATA.dcs.splice(i,1);
+  saveData('dcs');
+  renderDcsTable();
+  refreshAllTables();
+}
+function addDcsRow(){
+  const base = 'dcs' + (DATA.dcs.length + 1);
+  let id = base, n=1;
+  while(DATA.dcs.some(d=>d.id===id)){ id = base + '_' + (++n); }
+  DATA.dcs.push({id, shortName:'', name:'', center:'', location:''});
+  saveData('dcs');
+  renderDcsTable();
+  const rows=$('tbl-dcs').querySelectorAll('tr');
+  const last=rows[rows.length-1]; if(last){ const inp=last.querySelectorAll('input')[1]; if(inp) inp.focus(); }
 }
 
 function renderReceiversTable(){
@@ -3379,11 +4059,12 @@ function delReceiver(i){ DATA.receivers.splice(i,1); saveData('receivers'); rend
 function addReceiverRow(){ DATA.receivers.push({id:nextRcvId++,name:'New Receiver',type:'wa',contact:'',cmbkey:'',enabled:true}); saveData('receivers'); renderReceiversTable(); renderReceivers(); const rows=$('tbl-receivers').querySelectorAll('tr'); rows[rows.length-1].querySelector('input').focus(); }
 
 function refreshAllTables(){
+  if(typeof renderDcsTable==='function') renderDcsTable();
   if(typeof renderGroupFeedersUI==='function') renderGroupFeedersUI();
   renderStationsTable(); renderFeedersTable();
   renderSimpleTable('reasons',     'tbl-reasons',     'Reason');
   renderSimpleTable('tripreasons', 'tbl-tripreasons', 'Reason');
-  renderSimpleTable('askedby',     'tbl-askedby',     'Name');
+  renderAskedByTable();
   renderStaffTable();
   renderReceiversTable(); renderLog();
 }
@@ -4242,7 +4923,7 @@ function dtBuildWorkbook(date, period){
 
   // ── Sheet 1: Summary (per substation) ──
   const sumRows=[
-    ['NEA Taulihawa — '+rng.name+' Feeder Downtime Report'],
+    ['NEA '+(currentDcs().shortName||'Taulihawa')+' — '+rng.name+' Feeder Downtime Report'],
     ['Report Period', rng.label, '', 'Generated', new Date().toLocaleString('en-GB')],
     ['Format', 'main events (duration) / feeder-wise events (duration) — e.g. "2 / 20" means the outage occurred 2 times, affecting 20 feeder-events in total'],
     ['Substation','System Gone (No.)','System Gone (Duration)','11 KV Incomer Failed (No.)','11 KV Incomer Failed (Duration)','Trip (No.)','Trip (Duration)','Shutdown (No.)','Shutdown (Duration)','Total Events','Total Downtime']
@@ -5843,9 +6524,27 @@ function loadSbCreds(){
 }
 loadSbCreds();
 
-// Always use hardcoded constants — localStorage values ignored
-function getSbUrl(){ return SB_URL_CONST; }
-function getSbKey(){ return SB_KEY_CONST; }
+// Always use hardcoded constants — localStorage values ignored.
+// Per-DCS override: a DCS may carry its own `sbUrl`/`sbKey` (a separate
+// Supabase project). When the active DCS has both set, all cloud I/O routes
+// there instead of the shared default project. Empty = use shared default,
+// so Taulihawa (no override) keeps using the hardcoded project untouched.
+function activeSbCreds(){
+  try{
+    const d = (typeof currentDcs === 'function') ? currentDcs() : null;
+    if(d && d.sbUrl && d.sbKey){
+      return { url: String(d.sbUrl).trim().replace(/\/+$/,''), key: String(d.sbKey).trim() };
+    }
+  }catch(e){}
+  return { url: SB_URL_CONST, key: SB_KEY_CONST };
+}
+function getSbUrl(){ return activeSbCreds().url; }
+function getSbKey(){ return activeSbCreds().key; }
+// True when the active DCS points at its OWN (non-default) Supabase project.
+function activeDcsHasOwnProject(){
+  const c = activeSbCreds();
+  return c.url !== SB_URL_CONST;
+}
 
 /* ── Supabase connection state ───────────────────────────────
    supabasePaused=true → all sbFetch calls are skipped,
@@ -6007,7 +6706,19 @@ async function sbFetch(path, method='GET', body=null){
   if(method==='GET') headers['Accept']='application/json';
   const opts={method, headers};
   if(body) opts.body=JSON.stringify(body);
-  const res=await fetch(url,opts);
+  // Abort after 12s so a stalled/blocked network never leaves the UI hanging
+  // (this was a cause of the lock screen getting stuck on "Checking…").
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), 12000);
+  opts.signal = ctrl.signal;
+  let res;
+  try{
+    res = await fetch(url,opts);
+  }catch(e){
+    clearTimeout(timer);
+    throw new Error(e.name==='AbortError' ? 'Request timed out' : e.message);
+  }
+  clearTimeout(timer);
   if(!res.ok){
     let err=''; try{const d=await res.json();err=d?.message||d?.hint||d?.error||res.status;}catch{err=res.status;}
     throw new Error(String(err));
@@ -6287,7 +6998,79 @@ async function sbAutoLoad(){
    DATA SYNC — feeders, stations, staff, receivers via Supabase
    API keys (Green API, Gemini, HttpSMS, CallMeBot) are excluded.
    ============================================================ */
-const DATA_SYNC_KEYS = ['stations','feeders','reasons','tripreasons','askedby','givenby','receivers','groupfeeders'];
+const DATA_SYNC_KEYS = ['dcs','currentDcsId','stations','feeders','reasons','tripreasons','askedby','givenby','receivers','groupfeeders'];
+
+// Keys whose contents are partitioned per-DCS (each record carries a `dcs` tag
+// or is keyed by a station belonging to a DCS). These must be synced as the
+// ACTIVE DCS's slice only — never the combined array — otherwise one DCS's push
+// overwrites every other DCS's data in the single shared cloud row.
+const DCS_PARTITIONED_KEYS = ['stations','feeders','givenby','groupfeeders'];
+// Keys that are global to a project and shared by all DCSs on it.
+const DCS_GLOBAL_KEYS = ['reasons','tripreasons','askedby','receivers'];
+
+/* Cloud row key for a data key.
+   - On a DCS's OWN project: plain 'data_<key>' (that project holds one DCS).
+   - On the SHARED default project: partitioned keys are namespaced by DCS id
+     ('data_stations__taulihawa') so DCSs coexist without clobbering. */
+function cloudKeyFor(key){
+  if(DCS_PARTITIONED_KEYS.includes(key) && !activeDcsHasOwnProject()){
+    return 'data_' + key + '__' + DATA.currentDcsId;
+  }
+  return 'data_' + key;
+}
+// The subset of a partitioned array that belongs to the active DCS.
+function activeSliceFor(key){
+  const cur = DATA.currentDcsId;
+  const stationNamesOfCur = new Set(DATA.stations.filter(s=>s && s.dcs===cur).map(s=>s.name));
+  switch(key){
+    case 'stations': return DATA.stations.filter(s=>s && s.dcs===cur);
+    case 'feeders':  return DATA.feeders.filter(f=>f && stationNamesOfCur.has(f.station));
+    case 'givenby':  return DATA.givenby.filter(g=>g && stationNamesOfCur.has(g.station));
+    case 'groupfeeders': {
+      const out={}; Object.keys(DATA.groupfeeders||{}).forEach(st=>{ if(stationNamesOfCur.has(st)) out[st]=DATA.groupfeeders[st]; });
+      return out;
+    }
+    default: return DATA[key];
+  }
+}
+// Merge a pulled active-DCS slice back into the combined local arrays,
+// replacing only the records that belong to the given DCS.
+function mergeSliceInto(key, dcsId, slice){
+  // Defensive: cloud data pushed by an older app version may be in legacy
+  // shapes (plain string arrays, or arrays where each element is a bare
+  // string). Coerce to the object shapes downstream code expects, so a stale
+  // cloud row can never corrupt local data or throw during load.
+  const asArray = Array.isArray(slice) ? slice : [];
+  const stationNamesOfDcs = new Set(DATA.stations.filter(s=>s && s.dcs===dcsId).map(s=>s.name));
+  switch(key){
+    case 'stations': {
+      const norm = asArray.map(s => typeof s === 'string' ? {name:s, dcs:dcsId} : {...s, dcs:dcsId})
+                          .filter(s => s.name);
+      DATA.stations = DATA.stations.filter(s=>s && s.dcs!==dcsId).concat(norm);
+      break;
+    }
+    case 'feeders': {
+      const norm = asArray.filter(f => f && typeof f === 'object' && f.name && f.station);
+      const sliceStations = new Set(norm.map(f=>f.station));
+      DATA.feeders = DATA.feeders.filter(f=>f && !stationNamesOfDcs.has(f.station) && !sliceStations.has(f.station)).concat(norm);
+      break;
+    }
+    case 'givenby': {
+      const norm = asArray.filter(g => g && typeof g === 'object' && g.name && g.station);
+      const sliceStations = new Set(norm.map(g=>g.station));
+      DATA.givenby = DATA.givenby.filter(g=>g && !stationNamesOfDcs.has(g.station) && !sliceStations.has(g.station)).concat(norm);
+      break;
+    }
+    case 'groupfeeders': {
+      const src = (slice && typeof slice === 'object' && !Array.isArray(slice)) ? slice : {};
+      const gf = {...(DATA.groupfeeders||{})};
+      Object.keys(gf).forEach(st=>{ if(stationNamesOfDcs.has(st)) delete gf[st]; });
+      Object.assign(gf, src);
+      DATA.groupfeeders = gf;
+      break;
+    }
+  }
+}
 
 // Push all syncable DATA keys to Supabase app_settings
 /* ── Push all syncable settings to Supabase ─────────────────────
@@ -6301,23 +7084,38 @@ async function sbPushData(silent=false){
   try{
     const url = getSbUrl()+'/rest/v1/app_settings';
     const rows = DATA_SYNC_KEYS.map(key => {
-      let val = DATA[key];
-      // Strip API credentials from receivers — never sync them to cloud
-      if(key === 'receivers'){
-        val = val.map(r => ({
+      let val;
+      if(key === 'dcs'){
+        // The DCS registry is global. Strip per-DCS Supabase credentials before
+        // syncing to the SHARED project (they are device/project-private); keep
+        // them when pushing to a DCS's own project is irrelevant since 'dcs' is
+        // only ever written to the shared project via the active-DCS default.
+        val = DATA.dcs.map(d => {
+          const {sbUrl, sbKey, ...rest} = d;
+          return rest;
+        });
+      } else if(key === 'currentDcsId'){
+        // Device-local preference — do NOT let one device's active DCS override
+        // everyone else's. Skip syncing it entirely.
+        return null;
+      } else if(DCS_PARTITIONED_KEYS.includes(key)){
+        val = activeSliceFor(key);           // only the active DCS's records
+      } else if(key === 'receivers'){
+        val = DATA.receivers.map(r => ({
           id: r.id, name: r.name, contact: r.contact,
           type: r.type, enabled: r.enabled, groupLink: r.groupLink||'',
-          cmbkey: r.cmbkey||''   // CallMeBot key is OK to sync (non-secret)
-          // Intentionally omit: greenApi instanceId/token, httpSms key, etc.
+          cmbkey: r.cmbkey||''
         }));
+      } else {
+        val = DATA[key];
       }
       return {
-        key:        'data_' + key,
+        key:        cloudKeyFor(key),
         value:      JSON.stringify(val),
         updated_at: new Date().toISOString()
       };
-    });
-    // Upsert all keys in one request — ?on_conflict=key is required for merge-duplicates to work
+    }).filter(Boolean);
+
     const res = await fetch(url+'?on_conflict=key', {
       method:  'POST',
       headers: {...sbHeaders(), 'Prefer': 'resolution=merge-duplicates,return=minimal'},
@@ -6339,44 +7137,60 @@ async function sbPushData(silent=false){
 async function sbPullData(silent=false){
   if(!sbReady()) return;
   try{
-    const keys = DATA_SYNC_KEYS.map(k => 'data_' + k);
+    // Build the list of cloud keys we expect for the ACTIVE DCS: globals plus
+    // this DCS's namespaced partitioned keys (or plain keys on an own-project).
+    const wanted = DATA_SYNC_KEYS
+      .filter(k => k !== 'currentDcsId')   // never pulled — device-local
+      .map(k => cloudKeyFor(k));
     const rows = await sbFetch(
-      'app_settings?key=in.(' + keys.map(k => `"${k}"`).join(',') + ')&select=key,value'
+      'app_settings?key=in.(' + wanted.map(k => `"${k}"`).join(',') + ')&select=key,value'
     );
     if(!rows || !rows.length) return;
     let changed = false;
     rows.forEach(row => {
-      const dataKey = row.key.replace('data_', '');
+      // Recover the logical data key from a possibly-namespaced cloud key.
+      let dataKey = row.key.replace(/^data_/, '');
+      let nsDcs = null;
+      const nsIdx = dataKey.indexOf('__');
+      if(nsIdx >= 0){ nsDcs = dataKey.slice(nsIdx+2); dataKey = dataKey.slice(0, nsIdx); }
       if(!DATA_SYNC_KEYS.includes(dataKey)) return;
       try{
         const parsed = JSON.parse(row.value);
-        if(dataKey === 'receivers'){
-          // Merge: keep device-local API credentials, apply cloud structure
+        if(dataKey === 'dcs'){
+          // Merge cloud DCS registry but PRESERVE each DCS's local Supabase
+          // credentials (never synced to shared cloud).
+          const merged = parsed.map(cloudD => {
+            const localD = DATA.dcs.find(x => x.id === cloudD.id);
+            return localD ? { ...cloudD, sbUrl: localD.sbUrl||'', sbKey: localD.sbKey||'' } : cloudD;
+          });
+          if(JSON.stringify(DATA.dcs) !== JSON.stringify(merged)){
+            DATA.dcs = merged; sv('sms2_dcs', merged); changed = true;
+          }
+        } else if(DCS_PARTITIONED_KEYS.includes(dataKey)){
+          const targetDcs = nsDcs || DATA.currentDcsId;
+          const before = JSON.stringify(DATA[dataKey]);
+          mergeSliceInto(dataKey, targetDcs, parsed);
+          if(JSON.stringify(DATA[dataKey]) !== before){
+            sv('sms2_' + dataKey, DATA[dataKey]); changed = true;
+          }
+        } else if(dataKey === 'receivers'){
           const local = DATA.receivers;
           DATA.receivers = parsed.map(cloudR => {
             const localR = local.find(l => l.id === cloudR.id);
             return localR
-              ? { ...cloudR,
-                  // Preserve device-only fields never synced to cloud
-                  apiKey:            localR.apiKey            || '',
-                  instanceId:        localR.instanceId        || '',
-                  idInstance:        localR.idInstance        || '',
-                  apiTokenInstance:  localR.apiTokenInstance  || ''
-                }
+              ? { ...cloudR, apiKey: localR.apiKey||'', instanceId: localR.instanceId||'',
+                  idInstance: localR.idInstance||'', apiTokenInstance: localR.apiTokenInstance||'' }
               : cloudR;
           });
           sv('sms2_receivers', DATA.receivers);
         } else {
-          // Simple replace — compare first to avoid unnecessary writes
           const current = JSON.stringify(DATA[dataKey]);
           const incoming = JSON.stringify(parsed);
           if(current !== incoming){
-            DATA[dataKey] = parsed;
-            sv('sms2_' + dataKey, parsed);
-            changed = true;
+            DATA[dataKey] = parsed; sv('sms2_' + dataKey, parsed); changed = true;
           }
         }
-      }catch(e){ console.warn('Parse error for', dataKey, e); }
+      }catch(e){ console.warn('Parse error for', row.key, e); }
     });
     if(changed){
       fillAll();
@@ -6390,15 +7204,153 @@ async function sbPullData(silent=false){
   }
 }
 
+/* ── Per-DCS backup snapshots in Supabase ───────────────────────
+   Stores a timestamped copy of a DCS's full data slice as an
+   app_settings row keyed 'backup_<dcsId>_<isoDate>'. A daily snapshot
+   is taken automatically so "yesterday's" state is always recoverable.
+   Restore overwrites BOTH local data and the shared cloud slice. */
+function dcsSliceBundle(dcsId){
+  const prevCur = DATA.currentDcsId;
+  DATA.currentDcsId = dcsId;                 // activeSliceFor reads currentDcsId
+  const bundle = {
+    stations:     activeSliceFor('stations'),
+    feeders:      activeSliceFor('feeders'),
+    givenby:      activeSliceFor('givenby'),
+    groupfeeders: activeSliceFor('groupfeeders'),
+    reasons:      DATA.reasons,
+    tripreasons:  DATA.tripreasons,
+    askedby:      DATA.askedby
+  };
+  DATA.currentDcsId = prevCur;
+  return bundle;
+}
+async function sbBackupDcs(dcsId, tag){
+  if(!sbReady()) return false;
+  const id = dcsId || DATA.currentDcsId;
+  const stamp = tag || new Date().toISOString();
+  const row = {
+    key: 'backup_' + id + '_' + stamp,
+    value: JSON.stringify({ dcsId:id, at:stamp, data: dcsSliceBundle(id) }),
+    updated_at: new Date().toISOString()
+  };
+  try{
+    const res = await fetch(getSbUrl()+'/rest/v1/app_settings?on_conflict=key', {
+      method:'POST', headers:{...sbHeaders(),'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify([row])
+    });
+    return res.ok;
+  }catch(e){ console.warn('backup failed', e.message); return false; }
+}
+// Take one automatic daily snapshot of the active DCS (once per calendar day).
+async function sbAutoDailyBackup(){
+  try{
+    const id = DATA.currentDcsId;
+    const today = new Date().toISOString().slice(0,10);       // YYYY-MM-DD
+    const flagKey = 'sms2_lastbackup_' + id;
+    if(localStorage.getItem(flagKey) === today) return;       // already done today
+    const ok = await sbBackupDcs(id, today + 'T00:00:00.000Z');
+    if(ok) localStorage.setItem(flagKey, today);
+  }catch(e){}
+}
+// List available backup rows for a DCS (newest first).
+async function sbListBackups(dcsId){
+  const id = dcsId || DATA.currentDcsId;
+  const rows = await sbFetch('app_settings?key=like.backup_' + encodeURIComponent(id) + '_*&select=key,updated_at&order=updated_at.desc');
+  return rows || [];
+}
+// Restore a specific backup row: overwrite local slice AND the shared cloud slice.
+async function sbRestoreBackup(backupKey){
+  const rows = await sbFetch('app_settings?key=eq.' + encodeURIComponent(backupKey) + '&select=value');
+  if(!rows || !rows.length) throw new Error('Backup not found');
+  const snap = JSON.parse(rows[0].value);
+  const id = snap.dcsId, b = snap.data;
+  // Overwrite the local records belonging to this DCS.
+  mergeSliceInto('stations', id, b.stations||[]);
+  mergeSliceInto('feeders',  id, b.feeders||[]);
+  mergeSliceInto('givenby',  id, b.givenby||[]);
+  mergeSliceInto('groupfeeders', id, b.groupfeeders||{});
+  if(b.reasons)     DATA.reasons     = b.reasons;
+  if(b.tripreasons) DATA.tripreasons = b.tripreasons;
+  if(b.askedby)     DATA.askedby     = b.askedby;
+  ['stations','feeders','givenby','groupfeeders','reasons','tripreasons','askedby']
+    .forEach(k => sv('sms2_' + k, DATA[k]));
+  // Push the restored slice back to the shared cloud so ALL devices get it.
+  const prevCur = DATA.currentDcsId;
+  DATA.currentDcsId = id;
+  await sbPushData(true);
+  DATA.currentDcsId = prevCur;
+  fillAll(); refreshAllTables();
+}
+// UI entry point: revert the active DCS from a chosen backup.
+async function revertDcsFromBackup(){
+  if(!sbReady()){ toast('⚠ Supabase sync is off — cannot reach backups'); return; }
+  const id = DATA.currentDcsId;
+  let backups;
+  try{ backups = await sbListBackups(id); }
+  catch(e){ toast('⚠ Could not list backups: ' + e.message); return; }
+  if(!backups.length){ alert('No Supabase backups found for "' + (currentDcs().name||id) + '".\n\nA daily snapshot is taken automatically from now on, so tomorrow you will be able to revert to today\'s state.'); return; }
+  const list = backups.map((b,idx) => {
+    const stamp = b.key.replace('backup_' + id + '_', '');
+    return (idx+1) + '. ' + stamp;
+  }).join('\n');
+  const pick = prompt('Backups for "' + (currentDcs().name||id) + '" (newest first):\n\n' + list + '\n\nEnter the number to restore (overwrites current data locally AND in the cloud for all devices):');
+  if(!pick) return;
+  const n = parseInt(pick,10);
+  if(isNaN(n) || n<1 || n>backups.length){ toast('Invalid selection'); return; }
+  if(!confirm('Restore backup #' + n + ' for ' + (currentDcs().name||id) + '?\nThis overwrites current data on every device.')) return;
+  try{
+    await sbRestoreBackup(backups[n-1].key);
+    toast('✓ Reverted to backup #' + n, 2500);
+  }catch(e){ toast('⚠ Restore failed: ' + e.message, 3000); }
+}
+window.revertDcsFromBackup = revertDcsFromBackup;
+window.sbBackupDcs = sbBackupDcs;
+
+/* ── One-time migration: legacy combined cloud rows → namespaced ──
+   Older builds stored the COMBINED arrays under 'data_stations' etc.
+   The new scheme stores each DCS's slice under 'data_stations__<id>'.
+   On first run we seed the Taulihawa namespace from the legacy rows so
+   nothing is lost, then future pushes keep DCSs separate. Runs once. */
+async function sbMigrateLegacyRows(){
+  if(!sbReady()) return;
+  if(localStorage.getItem('sms2_cloud_ns_migrated') === '1') return;
+  try{
+    const legacyKeys = DCS_PARTITIONED_KEYS.map(k => `"data_${k}"`).join(',');
+    const nsKeys     = DCS_PARTITIONED_KEYS.map(k => `"data_${k}__taulihawa"`).join(',');
+    const rows = await sbFetch('app_settings?key=in.(' + legacyKeys + ',' + nsKeys + ')&select=key,value');
+    const have = new Set((rows||[]).map(r => r.key));
+    const seed = [];
+    DCS_PARTITIONED_KEYS.forEach(k => {
+      const legacy = (rows||[]).find(r => r.key === 'data_' + k);
+      const nsExists = have.has('data_' + k + '__taulihawa');
+      // Only seed if the namespaced row is missing AND a legacy row exists.
+      if(legacy && !nsExists){
+        seed.push({ key:'data_'+k+'__taulihawa', value:legacy.value, updated_at:new Date().toISOString() });
+      }
+    });
+    if(seed.length){
+      await fetch(getSbUrl()+'/rest/v1/app_settings?on_conflict=key', {
+        method:'POST', headers:{...sbHeaders(),'Prefer':'resolution=merge-duplicates,return=minimal'},
+        body: JSON.stringify(seed)
+      });
+    }
+    localStorage.setItem('sms2_cloud_ns_migrated','1');
+  }catch(e){ console.warn('cloud ns migration skipped:', e.message); }
+}
+window.sbMigrateLegacyRows = sbMigrateLegacyRows;
+
 /* ── Hook saveData → auto-push on every settings change ─────────
    This fires whenever any user with the settings password edits
    substations, feeders, staff, reasons, receivers, or asked-by.
    ────────────────────────────────────────────────────────────── */
 const _saveDataOrig = saveData;
-function saveData(key){
+// Reassignment (not a second `function saveData` declaration) — otherwise
+// hoisting makes both declarations point to the wrapper, and the wrapper's
+// call to _saveDataOrig would recurse into itself.
+saveData = function(key){
   _saveDataOrig(key);
   if(DATA_SYNC_KEYS.includes(key)) sbPushData(true); // silent — avoid toast on every settings keystroke
-}
+};
 function recordLog(type, recipients, status){
   _recordLogBase(type, recipients, status);
   if(LOG.length) sbInsertLog(LOG[0]);
@@ -6602,13 +7554,29 @@ function startSync(){
 /* ============================================================
    INIT — show lock screen first, everything else after unlock
    ============================================================ */
-renderLog();
-renderFeederStatus();
-dtInit();          // downtime tracker: prune old events, set report date, start end-of-day reminder
-showAppLock();
-// Initialize connection/mute UI from persisted state
-updateSbConnUI();
-updateRcvMuteUI();
+// Each pre-lock render touches DATA that may be corrupt/stale (e.g. after an
+// older app version pushed incompatible data to Supabase). Isolate each so a
+// single failure can NEVER prevent the lock screen from appearing and its
+// Operator/Monitor toggle from working.
+try{ renderLog(); }catch(e){ console.warn('renderLog init failed:', e.message); }
+try{ renderFeederStatus(); }catch(e){ console.warn('renderFeederStatus init failed:', e.message); }
+try{ dtInit(); }catch(e){ console.warn('dtInit failed:', e.message); }
+try{ refreshDcsUI(); }catch(e){ console.warn('refreshDcsUI init failed:', e.message); }
+try{ showAppLock(); }catch(e){ console.warn('showAppLock failed:', e.message); }
+try{ updateSbConnUI(); }catch(e){ console.warn('updateSbConnUI failed:', e.message); }
+try{ updateRcvMuteUI(); }catch(e){ console.warn('updateRcvMuteUI failed:', e.message); }
+
+// Absolute fallback: make sure the lock screen is visible and the role toggle
+// is clickable no matter what happened above. Direct listeners are added as a
+// backup to the inline onclick handlers so the toggle can't be "dead".
+try{
+  const lock = document.getElementById('appLock');
+  if(lock){ lock.style.display='flex'; lock.style.opacity='1'; }
+  const opBtn = document.getElementById('roleOperator');
+  const monBtn = document.getElementById('roleMonitor');
+  if(opBtn)  opBtn.addEventListener('click', ()=>{ try{ setLoginRole('operator'); }catch(e){} });
+  if(monBtn) monBtn.addEventListener('click', ()=>{ try{ setLoginRole('monitor'); }catch(e){} });
+}catch(e){ console.warn('lock-screen fallback failed:', e.message); }
 
 // restoreLastStation and sbAutoLoad are called inside appUnlock()
 // after the user successfully authenticates
@@ -7523,35 +8491,48 @@ function tfxDownloadWordById(id){
 
 // -------------------------- Word (.doc) export ------------------
 // Builds a Word-compatible HTML file (opens natively in MS Word).
+// Sized to fit ONE A4 page: 0.4in margins, 9pt body / 8pt tables,
+// compact row spacing, side-by-side fuse tables, tight cell padding.
 function tfxBuildWordHtml(d){
   const style = `
     <style>
-      body{font-family:'Mangal','Kalimati','Noto Sans Devanagari','Segoe UI',serif;font-size:9.5pt;color:#000;line-height:1.25;}
-      h1,h2,h3{margin:0 0 3pt 0;}
-      table{border-collapse:collapse;width:100%;font-size:8.5pt;margin:3pt 0;}
-      th,td{border:1px solid #000;padding:2pt 4pt;text-align:left;}
+      /* ── PAGE SETUP ── A4 with narrow margins so everything fits on one sheet */
+      @page { size:A4; margin:0.35in 0.5in 0.35in 0.5in; }
+      body{font-family:'Mangal','Kalimati','Noto Sans Devanagari','Segoe UI',serif;font-size:8.5pt;color:#000;margin:0;line-height:1.12;mso-line-height-rule:exactly;}
+      h1,h2,h3,h4{margin:0 0 1pt 0;}
+      table{border-collapse:collapse;width:100%;font-size:7.5pt;margin:1pt 0;page-break-inside:avoid;}
+      /* Outer layout tables (used only for side-by-side layouts) must NOT prevent
+         page breaks — they're wrappers, not data tables, and their avoid-rules
+         cascade too aggressively and force premature page breaks. */
+      table.layout-tbl{page-break-inside:auto;margin:0;}
+      table.layout-tbl > tbody > tr > td{page-break-inside:auto;}
+      th,td{border:1px solid #000;padding:0.5pt 3pt;text-align:left;line-height:1.05;}
       th{background:#eee;font-weight:bold;}
       .center{text-align:center;}
-      .subject{text-align:center;font-weight:bold;text-decoration:underline;font-size:11pt;margin:5pt 0;}
-      .row{margin-bottom:2pt;}
+      .subject{text-align:center;font-weight:bold;text-decoration:underline;font-size:10pt;margin:1pt 0 2pt;}
+      .row{margin-bottom:0.5pt;}
       .lbl{font-weight:bold;}
-      .sig-row td{border:none;padding-top:16pt;}
-      hr{margin:3pt 0;}
+      .header-band{text-align:center;padding-bottom:1pt;border-bottom:1.2pt solid #000;margin-bottom:1pt;}
+      .header-band h1{font-size:12pt;font-weight:bold;letter-spacing:0.3pt;line-height:1.05;margin:0;}
+      .header-band .sub1{font-size:8pt;margin:0;line-height:1.05;}
+      .header-band .sub2{font-size:9.5pt;font-weight:bold;margin:0;line-height:1.1;}
+      .compact-grid{width:100%;border:none;margin:0;font-size:8.5pt;}
+      .compact-grid td{border:none;padding:0.3pt 4pt 0.3pt 0;vertical-align:top;line-height:1.15;}
+      .sect-hdr{font-weight:bold;margin:1.5pt 0 0.3pt 0;font-size:8.5pt;}
+      .sig-row{margin-top:3pt;border:none;}
+      .sig-row td{border:none;padding-top:8pt;font-size:8.5pt;}
     </style>
   `;
-  const laTbl = `
-    <table style="max-width:60%;">
-      <tr><th>फेज अवस्था</th><th>R</th><th>Y</th><th>B</th></tr>
-      <tr><td>क्षति</td><td>${tfxEscapeHtml(d.lightningArrester.khati.R)}</td><td>${tfxEscapeHtml(d.lightningArrester.khati.Y)}</td><td>${tfxEscapeHtml(d.lightningArrester.khati.B)}</td></tr>
-      <tr><td>ठीक</td><td>${tfxEscapeHtml(d.lightningArrester.thik.R)}</td><td>${tfxEscapeHtml(d.lightningArrester.thik.Y)}</td><td>${tfxEscapeHtml(d.lightningArrester.thik.B)}</td></tr>
-      <tr><td>छैन</td><td>${tfxEscapeHtml(d.lightningArrester.chhaina.R)}</td><td>${tfxEscapeHtml(d.lightningArrester.chhaina.Y)}</td><td>${tfxEscapeHtml(d.lightningArrester.chhaina.B)}</td></tr>
-    </table>
-  `;
+
+  // Lightning Arrester is now embedded inside `fuseAndLaTbl` (Section 13+14
+  // combined into one row).
+
+  // Earthing: full-width dense table
   const earthTbl = `
     <table>
-      <tr><th>भाग</th><th>छ</th><th>छैन</th><th>टुटेको</th><th>तामा (साइज)</th><th>जी.आई साइज</th><th>काउन्टर साइज</th><th>केबुल साइज</th></tr>
+      <tr><th>भाग</th><th>छ</th><th>छैन</th><th>टुटेको</th><th>तामा</th><th>जी.आई</th><th>काउन्टर</th><th>केबुल</th></tr>
       ${['neutral','body','la'].map(key=>{
-        const labels={neutral:'निउट्रलको',body:'बडीको',la:'एल.ए. को'};
+        const labels={neutral:'निउट्रल',body:'बडी',la:'एल.ए.'};
         const e=d.earthing[key];
         return `<tr>
           <td>${labels[key]}</td>
@@ -7566,86 +8547,126 @@ function tfxBuildWordHtml(d){
       }).join('')}
     </table>
   `;
-  const htFuseTbl = `
-    <table style="max-width:45%;display:inline-table;margin-right:12pt;">
-      <tr><th colspan="3" class="center">एच. टी. फ्यूज (Amp)</th></tr>
-      <tr><th>B</th><th>Y</th><th>R</th></tr>
-      <tr><td>${tfxEscapeHtml(d.htFuse.B)}</td><td>${tfxEscapeHtml(d.htFuse.Y)}</td><td>${tfxEscapeHtml(d.htFuse.R)}</td></tr>
+
+  // HT + LT fuse + Lightning Arrester all in one row (3 columns).
+  // This combines what would otherwise be TWO stacked sections (13 + 14),
+  // saving ~55pt of vertical space and letting the whole form fit on one page.
+  const fuseAndLaTbl = `
+    <table class="layout-tbl" style="border:none;">
+      <tr>
+        <td style="width:24%;padding:0 4pt 0 0;border:none;vertical-align:top">
+          <table style="margin:0">
+            <tr><th colspan="3" class="center">एच.टी. फ्यूज (A)</th></tr>
+            <tr><th>B</th><th>Y</th><th>R</th></tr>
+            <tr><td>${tfxEscapeHtml(d.htFuse.B)}</td><td>${tfxEscapeHtml(d.htFuse.Y)}</td><td>${tfxEscapeHtml(d.htFuse.R)}</td></tr>
+          </table>
+        </td>
+        <td style="width:24%;padding:0 4pt 0 0;border:none;vertical-align:top">
+          <table style="margin:0">
+            <tr><th colspan="3" class="center">एल.टी. फ्यूज</th></tr>
+            <tr><th>B</th><th>Y</th><th>R</th></tr>
+            <tr><td>${tfxEscapeHtml(d.ltFuse.B)}</td><td>${tfxEscapeHtml(d.ltFuse.Y)}</td><td>${tfxEscapeHtml(d.ltFuse.R)}</td></tr>
+          </table>
+        </td>
+        <td style="width:52%;padding:0;border:none;vertical-align:top">
+          <table style="margin:0">
+            <tr><th colspan="4" class="center">(१४) लाइटिङ एरेष्टर</th></tr>
+            <tr><th>अवस्था</th><th>R</th><th>Y</th><th>B</th></tr>
+            <tr><td>क्षति</td><td>${tfxEscapeHtml(d.lightningArrester.khati.R)}</td><td>${tfxEscapeHtml(d.lightningArrester.khati.Y)}</td><td>${tfxEscapeHtml(d.lightningArrester.khati.B)}</td></tr>
+            <tr><td>ठीक</td><td>${tfxEscapeHtml(d.lightningArrester.thik.R)}</td><td>${tfxEscapeHtml(d.lightningArrester.thik.Y)}</td><td>${tfxEscapeHtml(d.lightningArrester.thik.B)}</td></tr>
+            <tr><td>छैन</td><td>${tfxEscapeHtml(d.lightningArrester.chhaina.R)}</td><td>${tfxEscapeHtml(d.lightningArrester.chhaina.Y)}</td><td>${tfxEscapeHtml(d.lightningArrester.chhaina.B)}</td></tr>
+          </table>
+        </td>
+      </tr>
     </table>
   `;
-  const ltFuseTbl = `
-    <table style="max-width:45%;display:inline-table;">
-      <tr><th colspan="3" class="center">एल. टी. फ्यूज</th></tr>
-      <tr><th>B</th><th>Y</th><th>R</th></tr>
-      <tr><td>${tfxEscapeHtml(d.ltFuse.B)}</td><td>${tfxEscapeHtml(d.ltFuse.Y)}</td><td>${tfxEscapeHtml(d.ltFuse.R)}</td></tr>
+
+  // Reading (RYB) + problem-fuseJaane side-by-side, same layout technique
+  const riddhiProbTbl = `
+    <table class="layout-tbl" style="border:none;">
+      <tr>
+        <td style="width:55%;padding:0 5pt 0 0;border:none;vertical-align:top">
+          <table style="margin:0">
+            <tr><th>रिडिङ</th><th>R</th><th>Y</th><th>B</th><th>मिति</th></tr>
+            <tr><td>अघिको</td><td>${tfxEscapeHtml(d.riddhiBeforeBigreko.R)}</td><td>${tfxEscapeHtml(d.riddhiBeforeBigreko.Y)}</td><td>${tfxEscapeHtml(d.riddhiBeforeBigreko.B)}</td><td>${tfxEscapeHtml(d.riddhiBeforeBigreko.miti)}</td></tr>
+          </table>
+        </td>
+        <td style="width:45%;padding:0;border:none;vertical-align:top">
+          <table style="margin:0">
+            <tr><th>फ्यूज जाने</th><th>R</th><th>Y</th><th>B</th></tr>
+            <tr><td>एच.टी.</td><td>${tfxEscapeHtml(d.transformerProblem.fuseJaane.ht.R)}</td><td>${tfxEscapeHtml(d.transformerProblem.fuseJaane.ht.Y)}</td><td>${tfxEscapeHtml(d.transformerProblem.fuseJaane.ht.B)}</td></tr>
+            <tr><td>एल.टी.</td><td>${tfxEscapeHtml(d.transformerProblem.fuseJaane.lt.R)}</td><td>${tfxEscapeHtml(d.transformerProblem.fuseJaane.lt.Y)}</td><td>${tfxEscapeHtml(d.transformerProblem.fuseJaane.lt.B)}</td></tr>
+          </table>
+        </td>
+      </tr>
     </table>
   `;
-  const riddhiTbl = `
-    <table style="max-width:70%;">
-      <tr><th>फेज</th><th>R</th><th>Y</th><th>B</th><th>मिति</th></tr>
-      <tr><td>रिडिङ</td><td>${tfxEscapeHtml(d.riddhiBeforeBigreko.R)}</td><td>${tfxEscapeHtml(d.riddhiBeforeBigreko.Y)}</td><td>${tfxEscapeHtml(d.riddhiBeforeBigreko.B)}</td><td>${tfxEscapeHtml(d.riddhiBeforeBigreko.miti)}</td></tr>
-    </table>
-  `;
-  const probTbl = `
-    <table style="max-width:60%;">
-      <tr><th></th><th>R</th><th>Y</th><th>B</th></tr>
-      <tr><td>एच. टी.</td><td>${tfxEscapeHtml(d.transformerProblem.fuseJaane.ht.R)}</td><td>${tfxEscapeHtml(d.transformerProblem.fuseJaane.ht.Y)}</td><td>${tfxEscapeHtml(d.transformerProblem.fuseJaane.ht.B)}</td></tr>
-      <tr><td>एल. टी.</td><td>${tfxEscapeHtml(d.transformerProblem.fuseJaane.lt.R)}</td><td>${tfxEscapeHtml(d.transformerProblem.fuseJaane.lt.Y)}</td><td>${tfxEscapeHtml(d.transformerProblem.fuseJaane.lt.B)}</td></tr>
+
+  // Identification rows (items 1-9): 2 fields per row via a plain 2-col grid table
+  const idGrid = `
+    <table class="compact-grid">
+      <tr>
+        <td style="width:50%"><span class="lbl">(१) के.भी.ए. :</span> ${tfxEscapeHtml(d.kva)}</td>
+        <td style="width:50%"><span class="lbl">(२) फेज :</span> ${tfxEscapeHtml(d.phase)}</td>
+      </tr>
+      <tr>
+        <td><span class="lbl">(३) निर्माता :</span> ${tfxEscapeHtml(d.manufacturer)}</td>
+        <td><span class="lbl">(४) निर्माण वर्ष :</span> ${tfxEscapeHtml(d.mfgYear)}</td>
+      </tr>
+      <tr>
+        <td><span class="lbl">(५) जडान मिति :</span> ${tfxEscapeHtml(d.jadanMiti)}</td>
+        <td><span class="lbl">(६) विग्रेको / जलेको मिति :</span> ${tfxEscapeHtml(d.bigrekoMiti)}</td>
+      </tr>
+      <tr>
+        <td><span class="lbl">(७) ट्रान्सफर्मर सि.नं. :</span> ${tfxEscapeHtml(d.transformerSN)}</td>
+        <td><span class="lbl">(८) पोष्ट नं. :</span> ${tfxEscapeHtml(d.postNo)}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><span class="lbl">(९) जडान स्थान :</span> ${tfxEscapeHtml(d.jadanSthan)}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><span class="lbl">(१०) स्थिती :</span> <b>${tfxEscapeHtml(d.sthiti)}</b> &nbsp;|&nbsp; <span class="lbl">(११) तेलको लेभुल :</span> <b>${tfxEscapeHtml(d.oilLevel)}</b> &nbsp;|&nbsp; <span class="lbl">(१२) ड्रेन भल्भमा तेल :</span> <b>${tfxEscapeHtml(d.drainValveOil)}</b></td>
+      </tr>
     </table>
   `;
 
   const body = `
-    <div class="center">
-      <h1 style="font-size:15pt;">नेपाल विद्युत प्राधिकरण</h1>
-      <div style="font-size:9pt;">वितरण तथा ग्राहक सेवा निर्देशनालय</div>
-      <div style="font-size:9pt;">लुम्बिनी प्रादेशिक कार्यालय, बुटवल</div>
-      <h2 style="font-size:11pt;margin-top:2pt;">तौलिहवा वितरण केन्द्र, कपिलवस्तु</h2>
+    <div class="header-band">
+      <h1>नेपाल विद्युत प्राधिकरण</h1>
+      <div class="sub1">वितरण तथा ग्राहक सेवा निर्देशनालय · लुम्बिनी प्रादेशिक कार्यालय, बुटवल</div>
+      <div class="sub2">${tfxEscapeHtml(currentDcs().center || 'तौलिहवा वितरण केन्द्र')}${currentDcs().location ? ', '+tfxEscapeHtml(currentDcs().location) : ''}</div>
     </div>
-    <hr>
-    <div class="subject">विषय : - ${d.sthiti==='नयाँ' ? 'नयाँ' : 'बिग्रेको'} ट्रान्सफर्मर विवरण</div>
+    <div class="subject">विषय : ${d.sthiti==='नयाँ' ? 'नयाँ' : 'बिग्रेको'} ट्रान्सफर्मर विवरण</div>
 
-    <div class="row"><span class="lbl">(१) के.भी.ए. :</span> ${tfxEscapeHtml(d.kva)} &nbsp;&nbsp;&nbsp; <span class="lbl">(२) फेज :</span> ${tfxEscapeHtml(d.phase)}</div>
-    <div class="row"><span class="lbl">(३) निर्माता :</span> ${tfxEscapeHtml(d.manufacturer)} &nbsp;&nbsp;&nbsp; <span class="lbl">(४) निर्माण वर्ष :</span> ${tfxEscapeHtml(d.mfgYear)}</div>
-    <div class="row"><span class="lbl">(५) जडान मिति :</span> ${tfxEscapeHtml(d.jadanMiti)} &nbsp;&nbsp;&nbsp; <span class="lbl">(६) विग्रेको / जलेको मिति :</span> ${tfxEscapeHtml(d.bigrekoMiti)}</div>
-    <div class="row"><span class="lbl">(७) ट्रान्सफर्मर सि.नं. :</span> ${tfxEscapeHtml(d.transformerSN)} &nbsp;&nbsp;&nbsp; <span class="lbl">(८) ट्रान्सफर्मर पोष्ट नं. :</span> ${tfxEscapeHtml(d.postNo)}</div>
-    <div class="row"><span class="lbl">(९) जडान स्थान :</span> ${tfxEscapeHtml(d.jadanSthan)}</div>
+    ${idGrid}
 
-    <div class="row"><span class="lbl">(१०) ट्रान्सफर्मरको स्थिती :</span> <b>${tfxEscapeHtml(d.sthiti)}</b></div>
-    <div class="row"><span class="lbl">(११) अंकित चिन्ह भन्दा तेलको लेभुल :</span> <b>${tfxEscapeHtml(d.oilLevel)}</b></div>
-    <div class="row"><span class="lbl">(१२) ड्रेन भल्भ खोल्दा तेल :</span> <b>${tfxEscapeHtml(d.drainValveOil)}</b></div>
+    <div class="sect-hdr">(१३) एच. टी. / एल. टी. फ्यूज &nbsp;·&nbsp; (१४) लाइटिङ एरेष्टर :</div>
+    ${fuseAndLaTbl}
 
-    <div class="row"><span class="lbl">(१३) एच. टी. / एल. टी. फ्यूज :</span></div>
-    ${htFuseTbl} ${ltFuseTbl}
-
-    <div class="row" style="margin-top:3pt;"><span class="lbl">(१४) लाइटिङ एरेष्टर :</span></div>
-    ${laTbl}
-
-    <div class="row"><span class="lbl">(१५) अर्थिङ विवरण :</span></div>
+    <div class="sect-hdr">(१५) अर्थिङ विवरण :</div>
     ${earthTbl}
 
-    <div class="row"><span class="lbl">(१६) बिग्रनु भन्दा अघिको रिडिङ :</span></div>
-    ${riddhiTbl}
+    <div class="sect-hdr">(१६) बिग्रनु अघिको रिडिङ · (१७) ट्रान्सफर्मरमा के हुन्थ्यो :</div>
+    ${riddhiProbTbl}
 
-    <div class="row"><span class="lbl">(१७) ट्रान्सफर्मरमा के हुन्थ्यो? (फ्यूज जाने) :</span></div>
-    ${probTbl}
-    <div class="row">
-      <span class="lbl">यम. सी. बी. ट्रीप हुने :</span> <b>${tfxEscapeHtml(d.transformerProblem.mcbTrip)}</b> &nbsp;&nbsp;|&nbsp;&nbsp;
-      <span class="lbl">एच. टी. फ्यूज भित्रबाट आवाज आउने :</span> <b>${tfxEscapeHtml(d.transformerProblem.htFuseAwaj)}</b>
+    <div class="row" style="margin-top:2pt;">
+      <span class="lbl">यम. सी. बी. ट्रीप हुने :</span> <b>${tfxEscapeHtml(d.transformerProblem.mcbTrip)}</b> &nbsp;|&nbsp;
+      <span class="lbl">एच.टी. फ्यूज भित्रबाट आवाज :</span> <b>${tfxEscapeHtml(d.transformerProblem.htFuseAwaj)}</b>
     </div>
 
     <div class="row" style="margin-top:3pt;"><span class="lbl">जल्नु/बिग्रनुको कारण :</span> ${tfxEscapeHtml(d.causeOfBurning)}</div>
     <div class="row"><span class="lbl">कैफियत :</span> ${tfxEscapeHtml(d.remarks)}</div>
 
-    <table class="sig-row" style="margin-top:10pt;border:none;">
+    <table class="sig-row">
       <tr>
-        <td style="border:none;">निरीक्षण गर्ने व्यक्ति : <b>${tfxEscapeHtml(d.inspectorName)}</b></td>
-        <td style="border:none;">पद : <b>${tfxEscapeHtml(d.designation)}</b></td>
-        <td style="border:none;">दस्तखत : .......................</td>
+        <td style="width:40%">निरीक्षण गर्ने : <b>${tfxEscapeHtml(d.inspectorName)}</b></td>
+        <td style="width:30%">पद : <b>${tfxEscapeHtml(d.designation)}</b></td>
+        <td style="width:30%">दस्तखत : .......................</td>
       </tr>
     </table>
   `;
 
-  // MS-Word specific HTML shell
+  // MS-Word specific HTML shell — matches @page CSS above.
   return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta charset="utf-8">
@@ -7660,7 +8681,8 @@ function tfxBuildWordHtml(d){
 </xml>
 <![endif]-->
 <style>
-@page WordSection1 { size:8.5in 11.0in; margin:0.5in 0.6in 0.5in 0.6in; }
+/* Word-specific page section: A4 with narrow margins */
+@page WordSection1 { size:8.27in 11.69in; margin:0.35in 0.5in 0.35in 0.5in; mso-page-orientation:portrait; }
 div.WordSection1 { page:WordSection1; }
 </style>
 ${style}
@@ -7756,7 +8778,7 @@ function tfxPrintBurntRegister(){
 </style>
 </head><body>
   <h1>नेपाल विद्युत प्राधिकरण</h1>
-  <div class="sub">तौलिहवा वितरण केन्द्र, कपिलवस्तु</div>
+  <div class="sub">${tfxEscapeHtml(currentDcs().center || 'तौलिहवा वितरण केन्द्र')}${currentDcs().location ? ', '+tfxEscapeHtml(currentDcs().location) : ''}</div>
   <div class="sub"><b>जलेको ट्रान्सफर्मर रेकर्ड</b></div>
   <div class="meta">प्रिन्ट मिति: ${today} · कुल रेकर्ड: ${rows.length}</div>
   <table>
