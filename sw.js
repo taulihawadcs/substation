@@ -23,6 +23,8 @@ self.addEventListener('push', (e) => {
       tag: 'nea-msg',
       renotify: true,
       vibrate: [200, 100, 200],
+      icon: d.icon || './icon-192.png',
+      badge: './badge-96.png',
       data: { url: d.url || './' }
     });
   };
@@ -33,7 +35,9 @@ self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   e.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const w of wins) { if ('focus' in w) return w.focus(); }
+    for (const w of wins) {
+      if ('focus' in w) return w.focus();
+    }
     return self.clients.openWindow(e.notification.data?.url || './');
   })());
 });
