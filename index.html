@@ -8191,6 +8191,14 @@ try{
   if(monBtn) monBtn.addEventListener('click', ()=>{ try{ setLoginRole('monitor'); }catch(e){} });
 }catch(e){ console.warn('lock-screen fallback failed:', e.message); }
 
+// Notification बाट खोल्दा (?role=monitor) → lock screen मा Monitor pre-select
+try{
+  const p = new URLSearchParams(location.search);
+  if(p.get('role')==='monitor' || location.hash==='#monitor'){
+    setLoginRole('monitor');
+  }
+}catch(e){ console.warn('role param failed:', e.message); }
+
 // restoreLastStation and sbAutoLoad are called inside appUnlock()
 // after the user successfully authenticates
 
