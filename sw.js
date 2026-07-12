@@ -1,79 +1,65 @@
 /* NEA DCS Messaging — Service Worker (Web Push)
    Receives push messages sent by the Supabase Edge Function and shows a
-   system notification even when the app/browser is CLOSED.
-*/
+   system notification even when the app / browser tab is CLOSED.
+   Must be served from the SAME folder as the app over HTTPS. */
 
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
-});
+self.addEventListener('install', (e) => { self.skipWaiting(); });
+self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('push', (event) => {
-  const showNotification = async () => {
-    let data = {};
-
+self.addEventListener('push', (e) => {
+  const show = async () => {
+    let d = {};
     try {
-      data = event.data.json();
-    } catch (err) {
-      data = {
-        title: "⚡ New Message",
-        body: event.data ? event.data.text() : "नयाँ सन्देश आयो"
-      };
+      d = e.data.json();
+    } catch (_) {
+      d = { body: e.data ? e.data.text() : '' };
     }
 
-    // Don't show notification if app is already open and focused
-    const windows = await self.clients.matchAll({
-      type: "window",
+    // If the app is open AND focused, the in-app chime already alerts the
+    // operator — skip the duplicate system notification.
+    const wins = await self.clients.matchAll({
+      type: 'window',
       includeUncontrolled: true
     });
 
-    if (windows.some(win => win.focused)) {
-      return;
-    }
+    if (wins.some(w => w.focused)) return;
 
     return self.registration.showNotification(
-      data.title || "⚡ NEA DCS Messaging",
+      d.title || '⚡ New message',
       {
-        body: data.body || "नयाँ सन्देश आयो",
-        icon: "./icon.png",
-        badge: "./icon.png",
-        image: "./icon.png",
-        vibrate: [200, 100, 200],
-        tag: "nea-dcs-message",
+        body: d.body || 'नयाँ सन्देश आयो',
+        tag: 'nea-msg',
         renotify: true,
-        requireInteraction: true,
+        vibrate: [200, 100, 200],
+        icon: './icon.png',       // Large notification icon
+        badge: './icon.png',      // Status bar icon
         data: {
-          url: data.url || "./"
+          url: d.url || './?role=monitor'
         }
       }
     );
   };
 
-  event.waitUntil(showNotification());
+  e.waitUntil(show());
 });
 
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
 
-  event.waitUntil(
-    (async () => {
-      const allClients = await self.clients.matchAll({
-        type: "window",
-        includeUncontrolled: true
-      });
+  e.waitUntil((async () => {
+    const wins = await self.clients.matchAll({
+      type: 'window',
+      includeUncontrolled: true
+    });
 
-      for (const client of allClients) {
-        if ("focus" in client) {
-          client.focus();
-          client.navigate(event.notification.data.url);
-          return;
-        }
+    for (const w of wins) {
+      if ('focus' in w) {
+        return w.focus();
       }
+    }
 
-      await self.clients.openWindow(event.notification.data.url || "./");
-    })()
-  );
+    return self.clients.openWindow(
+      e.notification.data?.url || './?role=monitor'
+    );
+  })());
 });
