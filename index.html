@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -37,6 +36,9 @@ body{background:var(--bg);color:var(--txt);font-family:'Archivo',sans-serif;line
 .nav-tab{background:none;border:none;font-family:'Archivo',sans-serif;font-size:14px;font-weight:500;color:var(--dim);cursor:pointer;padding:10px 20px;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;flex:none}
 .nav-tab:hover{color:var(--txt)}
 .nav-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+#monitorRefreshBtn{display:none;background:none;border:none;font-size:16px;line-height:1;cursor:pointer;padding:6px 10px;color:var(--dim);border-radius:8px}
+#monitorRefreshBtn:hover{background:var(--bg);color:var(--txt)}
+#monitorRefreshBtn:active{transform:rotate(90deg);transition:transform .2s}
 .page{display:none;padding:24px 20px 60px;max-width:860px;margin:0 auto}
 .page.active{display:block}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px}
@@ -228,6 +230,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .fs-row.s-charged  {border-left-color:#22c55e}
 .fs-row.s-system-gone{border-left-color:#d946ef;background:#fdf6ff}
 .fs-row.s-incomer-failed{border-left-color:#e11d48;background:#fff5f7}
+.fs-row.s-kv33{border-left-color:#7c3aed;background:#f8f6ff}
 .fs-row.s-restored {border-left-color:#38bdf8}
 
 /* Status icon circle */
@@ -242,6 +245,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .s-charged   .fs-icon{background:#f0fdf4}
 .s-system-gone .fs-icon{background:#fdf2f8}
 .s-incomer-failed .fs-icon{background:#ffe4e6}
+.s-kv33 .fs-icon{background:#f3ebff}
 .s-restored  .fs-icon{background:#f0f9ff}
 
 .fs-info{flex:1;min-width:0}
@@ -269,6 +273,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .fs-badge.charged    {background:#f0fdf4;color:#15803d;border:1.5px solid #22c55e}
 .fs-badge.system-gone{background:#fdf2f8;color:#86198f;border:1.5px solid #d946ef}
 .fs-badge.incomer-failed{background:#ffe4e6;color:#9f1239;border:1.5px solid #e11d48}
+.fs-badge.kv33       {background:#f3ebff;color:#5b21b6;border:1.5px solid #7c3aed}
 .fs-badge.restored   {background:#f0f9ff;color:#0369a1;border:1.5px solid #38bdf8}
 
 .fs-action{flex-shrink:0}
@@ -292,6 +297,14 @@ body.monitor-mode #shutdownArea,
 body.monitor-mode #outageArea{display:none !important}
 body.monitor-mode .fs-action{display:none}
 body.monitor-mode #tripAllBar{display:none}
+/* Monitor is view-only: the System Gone / 33 KV / Incomer Failed / Trip-All
+   restore buttons act on whichever single substation is currently selected,
+   which is ambiguous (and shouldn't be actionable) in the "All Substations"
+   grouped view — so monitor never gets these buttons, same as .fs-action. */
+body.monitor-mode .sg-restore-btn,
+body.monitor-mode .if-restore-btn,
+body.monitor-mode .ta-restore-btn{display:none}
+body.monitor-mode #monitorRefreshBtn{display:inline-flex;align-items:center;justify-content:center;margin-left:auto}
 body.monitor-mode .fs-card .card-head #langToggle{display:none}
 /* Monitor: Recent Messages moves to the LEFT column (just below the substation
    dropdown). JS relocates #monitorRecent into #monitorRecentSlot on monitor
@@ -362,6 +375,12 @@ select.big option,
   min-height:40px;
 }
 .fs-empty{font-size:12px;color:var(--dim2);font-style:italic;padding:8px 0;text-align:center}
+.fs-station-group-head{
+  font-size:11px;font-weight:800;letter-spacing:.04em;color:var(--dim,#64748b);
+  text-transform:uppercase;padding:10px 4px 5px;margin-top:4px;
+  border-bottom:1.5px solid var(--line2,#e6ebf1);
+}
+.fs-station-group-head:first-child{margin-top:0}
 
 /* ── System Gone Banner ──────────────────────────────── */
 .sg-banner{
@@ -870,6 +889,7 @@ body.log-page-open #page-log{
     </span>
     <span id="muteBadge" style="display:none;margin-left:4px;background:#fef2f2;border:1px solid var(--red);color:var(--red);border-radius:8px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Archivo',sans-serif;cursor:pointer" onclick="showPage('settings');showSection('sec-receivers')" title="Receivers muted — click to manage">🔕 MUTED</span>
     <span id="sbPauseBadge" style="display:none;margin-left:2px;background:#fff7ed;border:1px solid #f97316;color:#c2410c;border-radius:8px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Archivo',sans-serif;cursor:pointer" onclick="showPage('settings');showSection('sec-supabase')" title="Supabase paused — click to manage">⏸ SYNC OFF</span>
+    <button id="monitorRefreshBtn" onclick="location.reload()" title="ताजा गर्नुहोस् — पासवर्ड फेरि चाहिँदैन (Refresh — no password needed)">🔄</button>
   </div>
 </div>
 
@@ -1756,8 +1776,19 @@ gemini-1.5-flash</textarea>
       </button>
     </div>
     <div id="roleHint" style="font-size:11px;color:var(--dim2);margin-bottom:12px;line-height:1.5">Full access — enter entry &amp; dispatch alerts.</div>
-    <input type="password" id="appLockInput" placeholder="Enter password"
-      style="width:100%;padding:12px 16px;border:2px solid var(--line2);border-radius:10px;font-size:16px;font-family:'Archivo',sans-serif;text-align:center;letter-spacing:.15em;margin-bottom:8px;outline:none;transition:border-color .15s"
+    <!-- type="text" + -webkit-text-security masks the input exactly like a
+         password field visually, but because it is NOT type="password",
+         Chrome/Edge/Safari's credential manager never treats it as a login
+         field — so the "Save password?" prompt never appears. (There's
+         nothing to save anyway: passwords are never sent anywhere, only
+         hashed locally against app_config.) autocomplete/ignore attributes
+         are added too as extra belt-and-suspenders for other password
+         managers. Firefox doesn't support -webkit-text-security, so input
+         there shows as plain text — a minor, accepted trade-off. -->
+    <input type="text" id="appLockInput" placeholder="Enter password"
+      autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+      data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other"
+      style="width:100%;padding:12px 16px;border:2px solid var(--line2);border-radius:10px;font-size:16px;font-family:'Archivo',sans-serif;text-align:center;letter-spacing:.15em;margin-bottom:8px;outline:none;transition:border-color .15s;-webkit-text-security:disc;text-security:disc"
       onfocus="this.style.borderColor='var(--blue)'"
       onblur="this.style.borderColor='var(--line2)'"
       onkeydown="if(event.key==='Enter')appUnlock()">
@@ -1770,6 +1801,17 @@ gemini-1.5-flash</textarea>
     <div id="appLockChecking" style="font-size:11px;color:var(--dim2);margin-top:10px;min-height:16px;font-family:'JetBrains Mono',monospace"></div>
   </div>
   <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:20px;letter-spacing:.06em"><span class="js-dcs-center">तौलिहवा वितरण केन्द्र</span> · NEA <span class="js-dcs-shortname">Taulihawa</span></div>
+</div>
+
+<!-- ========== PUSH NOTIFICATION OPT-IN (shown at most once, ever) ========== -->
+<div id="pushPromptOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9500;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:26px 24px 20px;width:min(340px,92vw);box-shadow:0 16px 50px rgba(0,0,0,.3);text-align:center">
+    <div style="font-size:36px;margin-bottom:8px">🔔</div>
+    <div style="font-size:16px;font-weight:800;color:var(--txt);margin-bottom:6px">सूचना सक्रिय गर्ने?</div>
+    <div style="font-size:12.5px;color:var(--dim2);line-height:1.65;margin-bottom:18px">एप बन्द भए पनि फिडर ट्रिप / System Gone जस्ता जरुरी सूचना यो डिभाइसमा तुरुन्तै आउनेछ।<br><span style="color:#9aa3b2">Get feeder trip / outage alerts on this device even when the app is closed.</span></div>
+    <button onclick="pushPromptEnable()" style="width:100%;padding:12px;border:none;border-radius:10px;background:var(--blue);color:#fff;font-family:'Archivo',sans-serif;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px">🔔 सूचना सक्रिय गर्नुहोस्</button>
+    <button onclick="pushPromptDismiss()" style="width:100%;padding:10px;border:none;background:transparent;color:var(--dim2);font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;cursor:pointer">पछि (Not now)</button>
+  </div>
 </div>
 
 <!-- OLD SETTINGS PASSWORD MODAL (kept for settings re-auth) -->
@@ -2117,6 +2159,25 @@ let cachedEntryHash    = null;
 let cachedSettingsHash = null;
 let settingsPwExists   = false;
 
+// ── Monitor "stay signed in" ──────────────────────────────────────────
+// Monitor (view-only) staff shouldn't have to retype the password every
+// time they refresh — or every time they tap a push notification, which
+// can arrive (and be tapped) long after the browser was fully closed. That
+// second case needs storage that survives closing the app entirely, so
+// this is localStorage (not sessionStorage), with the freshness enforced
+// by a 24-hour expiry timestamp we check ourselves. Operator logins are
+// untouched — still re-enter the password after every reload, since that
+// role can dispatch messages and change data.
+const MONITOR_SESSION_KEY='sms2_monitor_session_until';
+const MONITOR_SESSION_TTL_MS=24*3600*1000; // 24 hours
+function grantMonitorSession(){
+  try{ localStorage.setItem(MONITOR_SESSION_KEY, String(Date.now()+MONITOR_SESSION_TTL_MS)); }catch(e){}
+}
+function hasValidMonitorSession(){
+  try{ return Number(localStorage.getItem(MONITOR_SESSION_KEY)||0) > Date.now(); }
+  catch(e){ return false; }
+}
+
 async function fetchPasswordHashes(){
   try{
     const rows=await sbFetch('app_config?key=in.("app_password","settings_password")&select=key,value');
@@ -2154,6 +2215,7 @@ async function appUnlock(){
   if(granted){
     appUnlocked=true;
     monitorMode = asMonitor;
+    if(asMonitor) grantMonitorSession();
     applyMonitorMode();   // show/hide UI based on role
     const lock=$('appLock');
     lock.style.transition='opacity .4s'; lock.style.opacity='0';
@@ -2161,6 +2223,7 @@ async function appUnlock(){
     err.textContent='';
     restoreLastStation();
     setTimeout(setTopbarH,450);
+    setTimeout(()=>{ maybeOfferPush().catch(e=>console.warn('push offer failed:', e.message)); }, 900);
     // Cloud sync must never block or crash the UI. If any of these throw
     // (e.g. stale/incompatible data pushed by an older app version), the app
     // still opens with local data; the error is logged, not fatal.
@@ -2187,6 +2250,10 @@ async function appUnlock(){
 // per-row "set" dropdowns, the Trip All bar, and Settings are hidden.
 function applyMonitorMode(){
   document.body.classList.toggle('monitor-mode', monitorMode);
+  // Refresh the substation dropdown's default-option label for the active
+  // role ("🌐 All Substations" for monitor, "— select substation —" for
+  // operator) and keep it pointed at whatever was already selected.
+  if(typeof fillStation==='function' && $('station')) fillStation();
   // Move Recent Messages between its two homes:
   //   • Monitor mode → #monitorRecentSlot on the left (below substation).
   //   • Operator mode → back inside the .mini-preview-wrap on the right
@@ -2216,6 +2283,7 @@ function applyMonitorMode(){
     if($('shutdownArea')) $('shutdownArea').style.display='none';
     if($('outageArea')) $('outageArea').style.display='none';
     renderMonitorRecent();
+    if(typeof renderFeederStatus==='function') renderFeederStatus();
   }
 }
 
@@ -2436,7 +2504,12 @@ function getMultiVal(key){
 
 function fillStation(){
   const sel=$('station'), cur=sel.value;
-  sel.innerHTML='<option value="">— select substation —</option>';
+  // Monitor (view-only) staff aren't limited to one substation at a time —
+  // the blank/default option shows every substation's feeders at once
+  // (see renderFeederStatus). Operators still pick one specific substation.
+  sel.innerHTML = (typeof monitorMode!=='undefined' && monitorMode)
+    ? '<option value="">🌐 All Substations</option>'
+    : '<option value="">— select substation —</option>';
   // Only stations that belong to the currently active DCS
   stationsForCurrentDcs().forEach(s=>{
     const o=document.createElement('option');
@@ -2840,8 +2913,8 @@ function buildTemplate(f){
       if(f.eta) m+=fmtLine('Est. restore', f.eta);
       m+=`${sep}\n`;
       m+=multi
-        ?`माथि उल्लेखित फिडरहरू ट्रिप भई विद्युत आपूर्ति अवरुद्ध भएको व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। अविलम्ब मर्मत कार्य सुरु गरिएको छ। असुविधाका लागि क्षमाप्रार्थी छौं।`
-        :`माथि उल्लेखित फिडर ट्रिप भई विद्युत आपूर्ति अवरुद्ध भएको व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। अविलम्ब मर्मत कार्य सुरु गरिएको छ। असुविधाका लागि क्षमाप्रार्थी छौं।`;
+        ?`माथि उल्लेखित फिडरहरू ट्रिप भई विद्युत आपूर्ति अवरुद्ध भएको व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। असुविधाका लागि क्षमाप्रार्थी छौं।`
+        :`माथि उल्लेखित फिडर ट्रिप भई विद्युत आपूर्ति अवरुद्ध भएको व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। असुविधाका लागि क्षमाप्रार्थी छौं।`;
       if(f.askedByTrip||f.givenBy) m+='\n';
       if(f.askedByTrip) m+=fmtLine('माग गर्ने ', f.askedByTrip);
       if(f.givenBy)     m+=fmtLine('Operator  ', f.givenBy);
@@ -3763,6 +3836,12 @@ function _pushToLog(entry){
   };
   LOG.unshift(row);
   if($('page-log').classList.contains('active')) renderLogPage();
+  // 🔔 Fire the same chime + browser notification for entries created on
+  // THIS device too, not just ones pulled in from other devices via poll —
+  // every new log entry now alerts, regardless of who sent it.
+  if(typeof msgAlertFirstSync!=='undefined' && !msgAlertFirstSync){
+    try{ notifyNewMessages(1, row); }catch(e){}
+  }
 }
 
 function renderLogPage(){
@@ -4297,8 +4376,8 @@ setTopbarH();
    duration, and provides an end-of-day Excel report that can be
    downloaded and sent to all receivers with delivery safeguards.
    ============================================================ */
-var DT_OUTAGE_TYPES = ['system-gone','incomer-failed','trip','shutdown'];
-var DT_TYPE_LABEL   = {'system-gone':'System Gone','incomer-failed':'11 KV Incomer Failed','trip':'Trip','shutdown':'Shutdown'};
+var DT_OUTAGE_TYPES = ['system-gone','incomer-failed','kv33','trip','shutdown'];
+var DT_TYPE_LABEL   = {'system-gone':'System Gone','incomer-failed':'11 KV Incomer Failed','kv33':'33 KV Incomer Failed','trip':'Trip','shutdown':'Shutdown'};
 var DT_EVENTS       = ld('sms2_dt_events', []);   // persisted across reloads
 var dtSendInFlight  = false;                       // hard re-entrancy lock for report send
 var dtReminderShownFor = '';
@@ -4414,6 +4493,46 @@ function dtOnStatusChange(feeder, newStatus, timeHM){
     dtSave();
     const pg=$('page-log'); if(pg && pg.classList.contains('active')) dtRenderSummary();
   }catch(e){ console.warn('Downtime track error:', e.message); }
+}
+
+// Fresh page loads / cloud polls hydrate feederStatusMap through the SAME
+// Proxy used for live status changes (see feederStatusMap below). But on a
+// brand-new session the Proxy has no real "previous" value for a feeder —
+// it silently assumes 'normal'. So if a feeder's CURRENT cloud status also
+// happens to be 'normal' (e.g. it was Charged and has since settled back to
+// Normal), the before/after diff sees 'normal' === 'normal' and never fires
+// a close — even though this device's local DT_EVENTS may still hold that
+// feeder's outage as open from a previous session/device. That orphaned
+// "open" event then reappears in every later report as still-ongoing, with
+// its duration recalculated from the report window's start to "now" each
+// time — which is why a feeder charged days ago can still show up today
+// with an inflated, ever-changing duration.
+// This reconciles DT_EVENTS directly against the freshest feederStatusMap,
+// independent of that before/after diff, and closes anything left stuck
+// open once we know the feeder has actually moved on. The real restore time
+// was never captured for these, so the close is flagged "assumed" (⚠ in the
+// Log page) — exactly like history-imported events — so the operator can
+// correct it to the true time if needed.
+function dtReconcileOpenEvents(){
+  let changed=false;
+  DT_EVENTS.forEach(ev=>{
+    if(ev.deleted || ev.end) return;                    // only still-open events
+    const live=(feederStatusMap[ev.feeder]||{}).status||'normal';
+    if(live===ev.type) return;                           // still genuinely ongoing
+    const endIso=new Date().toISOString();
+    if(new Date(endIso) < new Date(ev.start)) return;     // guard against clock skew
+    ev.end=endIso; ev.endHM=dtHMFromIso(endIso);
+    ev.durationMin=Math.max(0,Math.round((new Date(ev.end)-new Date(ev.start))/60000));
+    ev.assumed=true;   // end time is a guess — real restore time was missed; editable in Log
+    dtMarkDirty(ev.id);
+    changed=true;
+  });
+  if(changed){
+    DT_EVENTS.sort((a,b)=>new Date(a.start)-new Date(b.start));
+    dtPrune(); dtSave();
+    const pg=$('page-log'); if(pg && pg.classList.contains('active')) dtRenderSummary();
+  }
+  return changed;
 }
 
 // Keep ~13 months locally (needed for monthly reports); deleted tombstones
@@ -4778,7 +4897,7 @@ async function dtImportHistory(silent){
     } else if(/system.*restored/i.test(cond)){
       targetStations(r).forEach(st=>feedersOf(st).forEach(f=>closeEv(f,iso,hm)));
     } else if(/incomer/i.test(cond) && /fail/i.test(cond)){
-      const ty=/33/.test(cond)?'trip':'incomer-failed';
+      const ty=/33/.test(cond)?'kv33':'incomer-failed';
       targetStations(r).forEach(st=>feedersOf(st).forEach(f=>openEv(f,ty,iso,hm)));
     } else if(/incomer/i.test(cond) && /restor/i.test(cond)){
       targetStations(r).forEach(st=>feedersOf(st).forEach(f=>closeEv(f,iso,hm)));
@@ -5458,7 +5577,7 @@ function dtEnterReview(date, period, sendExcel){
    When the operator selects a substation — and every 10 minutes while one is
    selected — a Nepali notice lists that substation's active outages so no
    feeder is left un-restored by mistake. ── */
-var NEPALI_STATUS={'trip':'ट्रिप','shutdown':'शटडाउन','system-gone':'सिस्टम गन','incomer-failed':'११ के.भी. इनकमर फेल'};
+var NEPALI_STATUS={'trip':'ट्रिप','shutdown':'शटडाउन','system-gone':'सिस्टम गन','incomer-failed':'११ के.भी. इनकमर फेल','kv33':'३३ के.भी. इनकमर फेल'};
 function activeOutageAlert(){
   try{
     const st=$('station') && $('station').value; if(!st) return;
@@ -5657,6 +5776,7 @@ const FS_BADGE={
   'shutdown'      :{cls:'shutdown',       label:'Shutdown'},
   'system-gone'   :{cls:'system-gone',    label:'System Gone'},
   'incomer-failed':{cls:'incomer-failed', label:'11 KV Incomer Failed'},
+  'kv33'          :{cls:'kv33',           label:'33 KV Incomer Failed'},
   'charged'       :{cls:'charged',        label:'Charged'},
   'restored'      :{cls:'restored',       label:'Restored'}
 };
@@ -5668,6 +5788,7 @@ const FS_ICON={
   'charged'       :'✅',
   'system-gone'   :'⛔',
   'incomer-failed':'🛑',
+  'kv33'          :'⚠️',
   'restored'      :'💧'
 };
 
@@ -5734,14 +5855,43 @@ function renderFeederStatus(){
   if(!panel) return;
   updateTripAllToggleUI();
   const st=$('station').value;
+
+  // Monitor (view-only) with no single substation picked → "🌐 All
+  // Substations" is selected: render every substation's feeders in one
+  // scrollable list, each under its own station header, instead of asking
+  // the monitor to pick one substation at a time.
+  if(!st && monitorMode){
+    const stations=stationsForCurrentDcs();
+    const groups=stations.filter(s=>DATA.feeders.some(f=>f.station===s.name));
+    if(!groups.length){
+      panel.innerHTML='<div class="fs-empty">No substations configured.</div>';
+      return;
+    }
+    panel.innerHTML='';
+    groups.forEach(s=>{
+      const head=document.createElement('div');
+      head.className='fs-station-group-head';
+      head.textContent=s.name;
+      panel.appendChild(head);
+      const feeders=DATA.feeders.filter(f=>f.station===s.name).map(f=>f.name);
+      renderFeederStatusBlock(s.name, feeders, panel);
+    });
+    return;
+  }
+
   const feeders=st?DATA.feeders.filter(f=>f.station===st).map(f=>f.name):[];
   if(!feeders.length){
     panel.innerHTML='<div class="fs-empty">Select a substation to see feeder statuses.</div>';
     return;
   }
-
   panel.innerHTML='';
+  renderFeederStatusBlock(st, feeders, panel);
+}
 
+// Renders the outage banners + feeder rows for ONE substation, appended into
+// `panel`. Shared by the single-substation view and the monitor "All
+// Substations" grouped view above.
+function renderFeederStatusBlock(st, feeders, panel){
   const incomerActive = isIncomerFailedActive(st);
   const sgActive      = isSystemGoneActive(st);
   const kv33Active    = isKv33Active(st);
@@ -6139,10 +6289,11 @@ async function applyKv33Failed(t){
   });
   kv33Map[st]={snapshot, time};
 
-  // Trip ALL feeders of this substation
-  all.forEach(name=>{ feederStatusMap[name]={status:'trip',time}; });
+  // Trip ALL feeders of this substation (33 KV Incomer Failed — its own
+  // distinct status, tracked separately from a manual Trip All in the Log)
+  all.forEach(name=>{ feederStatusMap[name]={status:'kv33',time}; });
   renderFeederStatus();
-  for(const name of all){ await sbPushOneFeedStatus(name,{status:'trip',time}); }
+  for(const name of all){ await sbPushOneFeedStatus(name,{status:'kv33',time}); }
 
   const eta33 = ($('outageEta')?.value||'').trim();
   const msg=`33 KV Incomer of ${st} Failed at ${time}` + (eta33 ? ` (Est. restore: ${eta33})` : '') + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
@@ -6746,7 +6897,64 @@ create policy "anon_delete_tfx_docs" on storage.objects for delete to anon
 insert into app_config (key, value, updated_at)
 values ('app_password', '9faf7e5a6d8c908b34cd8f48def377b9716a63e8df1bdcdff75a70e0334dd84a', now())
 on conflict (key) do nothing;
--- Settings password: created on first use via Settings → Change Password modal.`;
+-- Settings password: created on first use via Settings → Change Password modal.
+
+-- ============================================================
+-- WEB PUSH WEBHOOK — calls the push-notify Edge Function on every
+-- message_log INSERT, so a push notification fires for every new
+-- log entry, on every subscribed device (including the sender's).
+-- Run this block ONCE per project, then fill in the two secrets below.
+-- Safe to re-run (idempotent).
+-- ============================================================
+
+-- 1) Enable pg_net (Supabase's async HTTP extension for Postgres)
+create extension if not exists pg_net with schema extensions;
+
+-- 2) Store the Edge Function URL + service role key in Supabase Vault
+--    so they never appear in plain SQL or in this app's source.
+--    Replace the two placeholder values below, then run just these
+--    two lines once (they will error harmlessly on re-run — that's fine,
+--    it means the secret already exists):
+--
+--    select vault.create_secret('https://YOUR-PROJECT-REF.functions.supabase.co/push-notify', 'push_notify_url');
+--    select vault.create_secret('YOUR-SERVICE-ROLE-KEY', 'push_notify_service_key');
+
+-- 3) Trigger function — fires on every message_log INSERT and posts
+--    the new row to the push-notify Edge Function via pg_net.
+create or replace function notify_push_on_message_log()
+returns trigger language plpgsql security definer as $$
+declare
+  fn_url  text;
+  svc_key text;
+begin
+  select decrypted_secret into fn_url
+    from vault.decrypted_secrets where name = 'push_notify_url';
+  select decrypted_secret into svc_key
+    from vault.decrypted_secrets where name = 'push_notify_service_key';
+
+  if fn_url is null or svc_key is null then
+    -- Vault secrets not set up yet — skip silently rather than
+    -- failing the INSERT into message_log.
+    return new;
+  end if;
+
+  perform net.http_post(
+    url     := fn_url,
+    body    := jsonb_build_object('type','INSERT','table','message_log','record', row_to_json(new)),
+    headers := jsonb_build_object(
+                 'Content-Type','application/json',
+                 'Authorization','Bearer ' || svc_key
+               )
+  );
+  return new;
+end;
+$$;
+
+-- 4) Attach the trigger to message_log
+drop trigger if exists trg_message_log_push on message_log;
+create trigger trg_message_log_push
+  after insert on message_log
+  for each row execute procedure notify_push_on_message_log();`;
 
 function saveSbCreds(){
   // Credentials are hardcoded — settings fields update display only
@@ -7073,15 +7281,16 @@ async function sbPullLog(){
   const st=$('sbStatus'); st.style.color='var(--dim2)'; st.textContent='Pulling log…';
   try{
     const rows=await sbFetch('message_log?order=id.desc&limit=500');
-    // Merge into LOG — avoid duplicates by ts+station+feeder
-    const existing=new Set(LOG.map(e=>e.ts+'|'+e.station+'|'+e.feeder));
+    // Merge into LOG — dedup by row id (see syncFromCloud for why a
+    // ts+station+feeder key silently drops legitimate messages)
+    const existing=new Set(LOG.map(e=>e.id).filter(id=>id!=null));
     let added=0;
     rows.forEach(r=>{
-      const key=(r.ts||'')+'|'+(r.station||'')+'|'+(r.feeder||'');
-      if(!existing.has(key)){
+      if(r.id!=null && !existing.has(r.id)){
         LOG.push({
-          ts:r.ts,station:r.station,feeder:r.feeder,condition:r.condition,
+          id:r.id,ts:r.ts,station:r.station,feeder:r.feeder,condition:r.condition,
           reason:r.reason,time:r.sent_at,recipients:r.recipients,status:r.status,msg:r.msg,
+          device_code:r.device_code||'',
           date:new Date(r.created_at||Date.now())
         });
         added++;
@@ -7224,6 +7433,7 @@ async function sbPullFeederStatus(){
         if(r.updated_at) feederLocalWriteAt[r.feeder_name] = r.updated_at;
       }
     });
+    try{ dtReconcileOpenEvents(); }catch(e){ console.warn('dt reconcile failed:', e.message); }
     renderFeederStatus();
     sbst.style.color='var(--green)'; sbst.textContent=`✓ Feeder status pulled (${rows.length} feeders).`;
     toast(`✓ Feeder status pulled from Supabase (${rows.length} feeders)`);
@@ -7246,6 +7456,7 @@ async function sbAutoLoad(){
         if(r.updated_at) feederLocalWriteAt[r.feeder_name] = r.updated_at;
       }
     });
+    try{ dtReconcileOpenEvents(); }catch(e){ console.warn('dt reconcile failed:', e.message); }
     renderFeederStatus();
     updateSbSyncStatus(`Auto-loaded at ${nowHM()} — ${rows.length} feeder(s) synced`);
   }catch(e){
@@ -7871,6 +8082,46 @@ async function togglePush(){
 window.togglePush = togglePush;
 
 /* ============================================================
+   PUSH — auto-activate where possible, else ask ONCE
+   Browsers refuse to show the real OS permission dialog without a
+   genuine user tap on something in the page, so a fully silent
+   auto-enable is only possible when permission was already granted
+   on a previous visit. Otherwise we show our own small pop-up once
+   ever (per device) and only call Notification.requestPermission()
+   when the person taps "Enable" on it — that tap IS the gesture
+   browsers require. Once dismissed or answered, never shown again.
+   ============================================================ */
+const PUSH_PROMPT_SHOWN_KEY='nea_push_prompt_shown_v1';
+
+async function maybeOfferPush(){
+  try{
+    if(!pushSupported() || !('Notification' in window)) return;
+    if(Notification.permission==='granted'){
+      // Already allowed at the browser level on this device — just make
+      // sure we're actually subscribed. Silent: no prompt, nothing to ask.
+      const sub = await getPushSubscription();
+      if(!sub) await togglePush();   // subscribes silently; permission is already granted
+      return;
+    }
+    if(Notification.permission==='denied') return;               // user said no — never re-ask
+    if(localStorage.getItem(PUSH_PROMPT_SHOWN_KEY)) return;       // already asked once, ever
+    const ov=$('pushPromptOverlay'); if(ov) ov.style.display='flex';
+  }catch(e){ console.warn('push auto-offer failed:', e.message); }
+}
+async function pushPromptEnable(){
+  localStorage.setItem(PUSH_PROMPT_SHOWN_KEY,'1');
+  const ov=$('pushPromptOverlay'); if(ov) ov.style.display='none';
+  await togglePush();   // the tap that just happened is the required user gesture
+}
+function pushPromptDismiss(){
+  localStorage.setItem(PUSH_PROMPT_SHOWN_KEY,'1');
+  const ov=$('pushPromptOverlay'); if(ov) ov.style.display='none';
+}
+window.pushPromptEnable  = pushPromptEnable;
+window.pushPromptDismiss = pushPromptDismiss;
+
+
+/* ============================================================
    NEW-MESSAGE ALERT — plays a chime + shows a browser
    notification whenever a NEW message appears in the log
    (i.e. a message sent from any other operator device).
@@ -7959,7 +8210,6 @@ function notifyNewMessages(count, latest){
    and every 30s for log updates so all users see live changes
    ============================================================ */
 let syncInterval = null;
-let lastLogCount = 0;
 
 // Track settings version (updated_at) to detect remote changes
 let lastSettingsTimestamp = '';
@@ -8008,8 +8258,24 @@ function reconcileOutageStateFromMap(){
       bannerChanged=true;
     }
 
-    // ── Trip All (PER-STATION): every CONFIGURED group feeder is 'trip'.
-    // Skipped while a 33 KV Incomer failure owns the tripped state locally. ──
+    // ── 33 KV Incomer Failed (PER-STATION): every CONFIGURED group feeder is
+    // 'kv33' — its own status, distinct from a plain Trip All, so a device
+    // that didn't trigger it locally still reconstructs the RIGHT banner
+    // (and the right restore action) instead of misreading it as Trip All. ──
+    const kvSet = groupAffectedFeeders(st,'kv33');
+    const allKv33  = kvSet.every(n => (feederStatusMap[n]||{}).status === 'kv33');
+    const noneKv33 = kvSet.every(n => (feederStatusMap[n]||{}).status !== 'kv33');
+    if(allKv33 && !isKv33Active(st)){
+      const snapshot={};
+      kvSet.forEach(n=>{ snapshot[n]={status:'normal',time:''}; });
+      kv33Map[st]={snapshot, time:(feederStatusMap[kvSet[0]]||{}).time||nowHM()};
+      bannerChanged=true;
+    } else if(noneKv33 && isKv33Active(st)){
+      delete kv33Map[st];
+      bannerChanged=true;
+    }
+
+    // ── Trip All (PER-STATION): every CONFIGURED group feeder is 'trip'. ──
     const taSet = groupAffectedFeeders(st,'tripall');
     const allTrip  = taSet.every(n => (feederStatusMap[n]||{}).status === 'trip');
     const noneTrip = taSet.every(n => (feederStatusMap[n]||{}).status !== 'trip');
@@ -8021,12 +8287,6 @@ function reconcileOutageStateFromMap(){
       bannerChanged=true;
     } else if(noneTrip && tripAllMap[st]){
       delete tripAllMap[st];
-      bannerChanged=true;
-    }
-    // 33 KV state is cleared if no feeder of this station is tripped any more
-    // (e.g. another device restored them)
-    if(noneTrip && isKv33Active(st)){
-      delete kv33Map[st];
       bannerChanged=true;
     }
   });
@@ -8068,6 +8328,7 @@ async function syncFromCloud(){
       }
     });
     if(expireChargedFeeders()) changed=true;
+    try{ if(dtReconcileOpenEvents()) changed=true; }catch(e){ console.warn('dt reconcile failed:', e.message); }
     if(changed) renderFeederStatus();
 
     // ── Reconstruct outage-banner state from synced statuses ──
@@ -8081,30 +8342,39 @@ async function syncFromCloud(){
   // ── Sync log (every call) ──
   try{
     const logRows = await sbFetch('message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code&order=id.desc&limit=200');
-    if(logRows.length !== lastLogCount){
-      lastLogCount = logRows.length;
-      const existing = new Set(LOG.map(e=>e.ts+'|'+e.station+'|'+e.feeder));
-      let added = 0;
-      logRows.forEach(r=>{
-        const key=(r.ts||'')+'|'+(r.station||'')+'|'+(r.feeder||'');
-        if(!existing.has(key)){
-          LOG.push({
-            ts:r.ts, station:r.station, feeder:r.feeder,
-            condition:r.condition, reason:r.reason, time:r.sent_at,
-            recipients:r.recipients, status:r.status, msg:r.msg,
-            device_code:r.device_code||'',
-            date:new Date(r.created_at||Date.now())
-          });
-          added++;
-        }
-      });
-      if(added){
-        LOG.sort((a,b)=>new Date(b.date)-new Date(a.date));
-        if($('page-log').classList.contains('active')) renderLogPage();
-        if(monitorMode) renderMonitorRecent();
-        // 🔔 Alert tone + notification for messages sent from other devices
-        if(!msgAlertFirstSync) notifyNewMessages(added, logRows[0]);
+    // Diff by the DB row id — exact, no collisions. (Previously this used a
+    // ts+station+feeder string key, which collides whenever two different
+    // messages hit the same feeder in the same minute — e.g. a trip and a
+    // restore close together — silently dropping the second one. It was
+    // also gated on `logRows.length !== lastLogCount`, which permanently
+    // stalls once the log passes 200 total entries: the 200-row window
+    // stays full forever after that, one row rolls off for every one that's
+    // added, so the count never changes again and new messages would stop
+    // triggering notifications for good.)
+    const existingIds = new Set(LOG.map(e=>e.id).filter(id=>id!=null));
+    let added = 0, newest = null;
+    logRows.forEach(r=>{
+      if(r.id!=null && !existingIds.has(r.id)){
+        LOG.push({
+          id:r.id, ts:r.ts, station:r.station, feeder:r.feeder,
+          condition:r.condition, reason:r.reason, time:r.sent_at,
+          recipients:r.recipients, status:r.status, msg:r.msg,
+          device_code:r.device_code||'',
+          date:new Date(r.created_at||Date.now())
+        });
+        added++;
+        if(!newest || r.id>newest.id) newest=r;
       }
+    });
+    if(added){
+      LOG.sort((a,b)=>new Date(b.date)-new Date(a.date));
+      if($('page-log').classList.contains('active')) renderLogPage();
+      if(monitorMode) renderMonitorRecent();
+      // 🔔 Alert tone + notification for messages sent from other devices —
+      // fires once per poll even if several messages landed at once, and
+      // now fires for every single new row, not just the ones that happened
+      // to change the total count.
+      if(!msgAlertFirstSync) notifyNewMessages(added, newest);
     }
     msgAlertFirstSync = false;   // initial log load done — alert from now on
     updateSbSyncStatus(`Last sync: ${nowHM()} — ${logRows.length} log entries`);
@@ -8201,6 +8471,32 @@ try{
 
 // restoreLastStation and sbAutoLoad are called inside appUnlock()
 // after the user successfully authenticates
+
+// If this device already has a valid Monitor session (granted at a
+// previous login, within the last 24h — see MONITOR_SESSION_TTL_MS),
+// skip the password screen entirely. This is what makes both the
+// monitor Refresh button AND tapping a push notification (which can
+// open a brand-new browser window well after the app was closed) land
+// straight in monitor mode without asking for the password again.
+// Runs last so it can override the "always show the lock screen"
+// fallback above.
+try{
+  if(hasValidMonitorSession()){
+    appUnlocked=true; monitorMode=true; loginRole='monitor';
+    applyMonitorMode();
+    const lock=document.getElementById('appLock');
+    if(lock){ lock.style.display='none'; }
+    restoreLastStation();
+    setTimeout(setTopbarH,450);
+    setTimeout(()=>{ maybeOfferPush().catch(e=>console.warn('push offer failed:', e.message)); }, 900);
+    (async () => {
+      try{ await sbMigrateLegacyRows(); }catch(e){ console.warn('migrate failed:', e.message); }
+      try{ await sbPullData(true); }catch(e){ console.warn('pull failed:', e.message); }
+      try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
+      try{ startSync(); }catch(e){ console.warn('startSync failed:', e.message); }
+    })();
+  }
+}catch(e){ console.warn('monitor auto-unlock failed:', e.message); }
 
 /* ============================================================
    विग्रेको ट्रान्सफर्मर फारम + जलेको ट्रान्सफर्मर रेकर्ड
