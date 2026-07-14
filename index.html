@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5004,7 +5005,7 @@ function dtRenderSummary(){
         +(ev.end?'':' <span style="color:#d97706;font-weight:700;font-size:10px">ongoing</span>')
       : (ev.end?`<span style="font-size:9px;color:var(--dim2)">${esc(ed.slice(5))}</span> <span class="log-ts">${esc(ev.endHM)}</span>`:'<span style="color:#d97706;font-weight:700">ongoing</span>');
     const warnTag=ev.assumed?` <span title="End time was assumed during history import — please verify" style="cursor:help">⚠</span>`:'';
-    const grpN=DT_EVENTS.filter(e=>!e.deleted && e.type===ev.type && String(e.start).slice(0,16)===String(ev.start).slice(0,16)).length;
+    const grpN=DT_EVENTS.filter(e=>!e.deleted && e.type===ev.type && e.station===ev.station && String(e.start).slice(0,16)===String(ev.start).slice(0,16)).length;
     const grpTag=grpN>1?` <span title="${grpN} feeders share this ${esc(DT_TYPE_LABEL[ev.type]||ev.type)} event — corrections can apply to all" style="font-size:9px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:1px 5px;color:#4338ca;font-weight:700">×${grpN}</span>`:'';
     h+=`<tr><td style="font-size:11px;font-weight:600">${esc(ev.station)}</td><td style="font-size:11px">${esc(ev.feeder)}</td>`+
        `<td style="font-size:11px">${esc(DT_TYPE_LABEL[ev.type]||ev.type)}${grpTag}</td>`+
@@ -5050,7 +5051,7 @@ function dtEditWhen(id, which){
 
   // Detect sibling events created by the same group action (BEFORE changing)
   const key=String(ev.start).slice(0,16);
-  const sibs=DT_EVENTS.filter(e=>!e.deleted && e.id!==ev.id && e.type===ev.type && String(e.start).slice(0,16)===key);
+  const sibs=DT_EVENTS.filter(e=>!e.deleted && e.id!==ev.id && e.type===ev.type && e.station===ev.station && String(e.start).slice(0,16)===key);
   let targets=[ev];
   if(sibs.length){
     const applyAll=confirm(
@@ -5856,6 +5857,21 @@ function renderFeederStatus(){
   updateTripAllToggleUI();
   const st=$('station').value;
 
+  // ── Global "Restore All Substations" shortcut — only shown when 2+
+  // substations are simultaneously in System Gone, since a single active
+  // station is already handled by its own per-station banner below. ──
+  const sgActiveStations = Object.keys(systemGoneMap);
+  const restoreAllBannerHtml = (sgActiveStations.length>1 && !monitorMode) ? `
+    <div class="sg-banner" style="margin-bottom:10px;background:linear-gradient(135deg,#fef2f2,#fff1f2);border:1.5px solid #e11d48">
+      <div class="sg-banner-left">
+        <div class="sg-banner-label">⛔ System Gone — ${sgActiveStations.length} substations</div>
+        <div class="sg-banner-sub">${esc(sgActiveStations.join(', '))}</div>
+      </div>
+      <button class="sg-restore-btn" onclick="restoreAllSystemGone()">
+        ⚡ Restore All Substations
+      </button>
+    </div>` : '';
+
   // Monitor (view-only) with no single substation picked → "🌐 All
   // Substations" is selected: render every substation's feeders in one
   // scrollable list, each under its own station header, instead of asking
@@ -5884,7 +5900,7 @@ function renderFeederStatus(){
     panel.innerHTML='<div class="fs-empty">Select a substation to see feeder statuses.</div>';
     return;
   }
-  panel.innerHTML='';
+  panel.innerHTML=restoreAllBannerHtml;
   renderFeederStatusBlock(st, feeders, panel);
 }
 
@@ -6218,11 +6234,11 @@ async function applySystemGone(t, stations){
 }
 
 // Restore ONE substation from System Gone (per-substation banner button).
-async function restoreSystemGoneFor(st){
+async function restoreSystemGoneFor(st, presetTime, suppressMsg){
   st = st || $('station').value;
   if(!st || !isSystemGoneActive(st)) return;
   if(outageOpLock[st]){ toast('An outage operation is already in progress for this substation — please wait'); return; }
-  const t=dtAskTime('⚡ System of '+st+' — पुनर्स्थापना (Restored) कति बजे भयो?');
+  const t = presetTime || dtAskTime('⚡ System of '+st+' — पुनर्स्थापना (Restored) कति बजे भयो?');
   if(t===null) return;   // operator cancelled
   outageOpLock[st]=true;
   try{
@@ -6251,6 +6267,8 @@ async function restoreSystemGoneFor(st){
   renderFeederStatus();
   for(const name of stFeeders){ await sbPushOneFeedStatus(name,feederStatusMap[name]); }
 
+  if(suppressMsg) return;   // caller (e.g. restoreAllSystemGone) sends ONE combined message instead
+
   if(!anyStillGoneInCloud){
     toast('✅ System already restored by another user — feeders reverted, no duplicate message.',3000);
     return;
@@ -6262,6 +6280,46 @@ async function restoreSystemGoneFor(st){
 }
 // Legacy alias (older banner markup / stray calls)
 async function restoreFromSystemGone(){ return restoreSystemGoneFor($('station').value); }
+
+// Restore EVERY substation currently in System Gone with ONE combined
+// message (mirrors how applySystemGone sends one combined "System Gone of
+// A, B, C" message on the way in). Each station's feeders are still reverted
+// individually and its own downtime record is still closed at the right
+// time — only the outgoing WhatsApp/SMS message is merged into one.
+async function restoreAllSystemGone(){
+  const stations = Object.keys(systemGoneMap);
+  if(!stations.length){ toast('No substation is currently in System Gone.'); return; }
+  if(!confirm(`⚡ RESTORE ALL SUBSTATIONS\n\n${stations.length} substation(s) will be restored with ONE message:\n\n${stations.join('\n')}\n\nपक्का गर्नुहुन्छ?`)) return;
+  const t=dtAskTime('⚡ System Restored (All) — कति बजे भयो?');
+  if(t===null) return;   // operator cancelled — nothing touched
+  toast(`⏳ Restoring ${stations.length} substation(s)...`,2500);
+
+  // Cross-device send-once, checked ONCE up front across ALL affected feeders:
+  // if every one of them is already restored in the cloud (another device beat
+  // us to it), skip the message entirely rather than sending a stale/duplicate one.
+  const allFeeders = stations.flatMap(st=>{
+    const rec=systemGoneMap[st];
+    return (rec&&rec.snapshot)?Object.keys(rec.snapshot):groupAffectedFeeders(st,'system-gone');
+  });
+  const anyStillGoneInCloud = await anyFeederStillInState(allFeeders, 'system-gone');
+
+  const restoredStations=[];
+  for(const st of stations){
+    if(!isSystemGoneActive(st)) continue;   // may have been restored by another device mid-loop
+    await restoreSystemGoneFor(st, t, /*suppressMsg=*/true);
+    restoredStations.push(st);
+  }
+
+  if(!restoredStations.length){ toast('Nothing left to restore — already handled elsewhere.',3000); return; }
+
+  if(!anyStillGoneInCloud){
+    toast('✅ Already restored by another user — feeders reverted, no duplicate message.',3000);
+    return;
+  }
+  const msg = `System of ${restoredStations.join(', ')} restored at ${t}`;
+  dispatchBulkMsg(msg,'System Restored', restoredStations.join(', '));
+  toast('✅ Restore All Substations — one message sent.',3500);
+}
 
 /* ============================================================
    33 KV INCOMER FAILED  (PER-SUBSTATION)
@@ -6320,7 +6378,7 @@ async function restoreKv33Failed(st){
     all.forEach(name=>{
       const pre=rec && rec.snapshot[name];
       if(pre){
-        const restoreStatus=(pre.status==='trip'||pre.status==='normal')?'normal':pre.status;
+        const restoreStatus=(pre.status==='kv33'||pre.status==='normal')?'normal':pre.status;
         feederStatusMap[name]={status:restoreStatus,time:pre.time||''};
       } else {
         feederStatusMap[name]={status:'normal',time:''};
@@ -6497,6 +6555,9 @@ function onTripAllToggle(which){
 }
 
 function applyTripAll(st){
+  if(isSystemGoneActive(st)){ toast('⚠ System Gone is active for this substation — restore it first before Trip All.',3500); return; }
+  if(isIncomerFailedActive(st)){ toast('⚠ 11 KV Incomer Failed is active for this substation — restore it first before Trip All.',3500); return; }
+  if(isKv33Active(st)){ toast('⚠ 33 KV Incomer Failed is active for this substation — restore it first before Trip All.',3500); return; }
   const t   = dtAskTime('⚡ Trip All — '+st+' का सबै फिडर कति बजे ट्रिप भए?');
   if(t===null) return;   // operator cancelled
   const all = groupAffectedFeeders(st,'tripall');
@@ -8233,27 +8294,31 @@ function reconcileOutageStateFromMap(){
     // ── System Gone (PER-STATION): every CONFIGURED group feeder is 'system-gone' ──
     const sgSet = groupAffectedFeeders(st,'system-gone');
     const allGone  = sgSet.every(n => (feederStatusMap[n]||{}).status === 'system-gone');
-    const noneGone = sgSet.every(n => (feederStatusMap[n]||{}).status !== 'system-gone');
+    // Only treat this as a genuine restore if EVERY feeder actually landed on
+    // normal/charged — NOT merely "no longer system-gone". A feeder that got
+    // overwritten by an unrelated op (e.g. Trip All) is neither, so the banner
+    // is correctly left in place instead of being silently discarded.
+    const allRestoredSg = sgSet.every(n => ['normal','charged'].includes((feederStatusMap[n]||{}).status));
     if(allGone && !isSystemGoneActive(st)){
       // Reconstruct a best-effort snapshot (pre-state unknown → normal)
       const snapshot={};
       sgSet.forEach(n=>{ snapshot[n]={status:'normal',time:''}; });
       systemGoneMap[st]={snapshot, time:(feederStatusMap[sgSet[0]]||{}).time||nowHM()};
       bannerChanged=true;
-    } else if(noneGone && isSystemGoneActive(st)){
+    } else if(allRestoredSg && isSystemGoneActive(st)){
       delete systemGoneMap[st];
       bannerChanged=true;
     }
 
     const ifSet = groupAffectedFeeders(st,'incomer-failed');
     const allFailed = ifSet.every(n => (feederStatusMap[n]||{}).status === 'incomer-failed');
-    const noneFailed = ifSet.every(n => (feederStatusMap[n]||{}).status !== 'incomer-failed');
+    const allRestoredIf = ifSet.every(n => ['normal','charged'].includes((feederStatusMap[n]||{}).status));
     if(allFailed && !isIncomerFailedActive(st)){
       const snapshot={};
       ifSet.forEach(n=>{ snapshot[n]={status:'normal',time:''}; });
       incomerFailedMap[st]={snapshot, time:(feederStatusMap[ifSet[0]]||{}).time||nowHM()};
       bannerChanged=true;
-    } else if(noneFailed && isIncomerFailedActive(st)){
+    } else if(allRestoredIf && isIncomerFailedActive(st)){
       delete incomerFailedMap[st];
       bannerChanged=true;
     }
@@ -8264,13 +8329,13 @@ function reconcileOutageStateFromMap(){
     // (and the right restore action) instead of misreading it as Trip All. ──
     const kvSet = groupAffectedFeeders(st,'kv33');
     const allKv33  = kvSet.every(n => (feederStatusMap[n]||{}).status === 'kv33');
-    const noneKv33 = kvSet.every(n => (feederStatusMap[n]||{}).status !== 'kv33');
+    const allRestoredKv = kvSet.every(n => ['normal','charged'].includes((feederStatusMap[n]||{}).status));
     if(allKv33 && !isKv33Active(st)){
       const snapshot={};
       kvSet.forEach(n=>{ snapshot[n]={status:'normal',time:''}; });
       kv33Map[st]={snapshot, time:(feederStatusMap[kvSet[0]]||{}).time||nowHM()};
       bannerChanged=true;
-    } else if(noneKv33 && isKv33Active(st)){
+    } else if(allRestoredKv && isKv33Active(st)){
       delete kv33Map[st];
       bannerChanged=true;
     }
