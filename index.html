@@ -1005,6 +1005,14 @@ body.log-page-open #page-log{
             <label>अनुमानित पुनःप्रवाह समय (Est. restore)</label>
             <input type="text" id="tripEta" list="etaOptions" placeholder="e.g. 30 min" autocomplete="off" oninput="autoBuild()" style="width:130px;padding:6px 10px">
           </div>
+          <div style="flex:1;min-width:130px">
+            <label>Affected Area / Site</label>
+            <input type="text" id="tripSite" placeholder="optional" autocomplete="off" oninput="autoBuild()" style="width:100%;padding:6px 10px">
+          </div>
+          <div style="flex:1;min-width:130px">
+            <label>Note</label>
+            <input type="text" id="tripNote" placeholder="optional" autocomplete="off" oninput="autoBuild()" style="width:100%;padding:6px 10px">
+          </div>
         </div>
         <div style="font-size:10px;color:var(--dim2);margin-top:3px">💡 घटना केही मिनेट अगाडि भएको भए यहाँ सच्याउनुहोस् — सन्देश, लग र डाउनटाइम रिपोर्टमा यही समय जान्छ।</div>
             <button class="btn btn-amber" onclick="dispatchTrip()">⚡ Dispatch Trip Alert</button>
@@ -1030,31 +1038,11 @@ body.log-page-open #page-log{
           </select>
         </div>
 
-        <!-- Optional (Site + Time + Note) -->
-        <details id="moreDetails" style="margin-top:2px">
-          <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--dim2);letter-spacing:.06em;text-transform:uppercase;list-style:none;padding:4px 0">
-            ▸ Optional fields (site, time, extra note)
-          </summary>
-          <div style="margin-top:10px">
-            <div class="field">
-              <label>Affected Area / Site</label>
-              <div class="site-wrap">
-                <input type="text" id="site" class="site-input" placeholder="e.g. ओदारी, वडा नं. ३, कृष्णनगर…" autocomplete="off">
-              </div>
-            </div>
-            <div class="grid2" style="margin-top:0">
-              <div class="field">
-                <label>Shutdown Time</label>
-                <input type="text" id="time" placeholder="auto-filled on feeder pick" autocomplete="off" oninput="autoBuild(); if($('tripActualTime'))$('tripActualTime').value=this.value; if($('shutdownActualTime'))$('shutdownActualTime').value=this.value;">
-                <div style="font-size:10px;color:var(--dim2);margin-top:3px">💡 वास्तविक समय — Trip/Shutdown केही मिनेट अगाडि भएको भए यहाँ सच्याउनुहोस्; सन्देश, लग र रिपोर्टमा यही समय जान्छ।</div>
-              </div>
-              <div class="field">
-                <label>Work Detail (extra note)</label>
-                <input type="text" id="workDetail" placeholder="optional" autocomplete="off" oninput="autoBuild()">
-              </div>
-            </div>
-          </div>
-        </details>
+        <!-- Hidden master time field — kept in sync by the visible actual-time
+             inputs (tripActualTime / shutdownActualTime / outageTime) below.
+             No longer shown directly; the visible actual-time field is the
+             single source of truth for the operator. -->
+        <input type="text" id="time" style="display:none">
 
         <!-- Shutdown dispatch button -->
         <div style="margin-top:14px">
@@ -1070,6 +1058,14 @@ body.log-page-open #page-log{
           <div>
             <label>अनुमानित पुनःप्रवाह समय (Est. restore)</label>
             <input type="text" id="shutdownEta" list="etaOptions" placeholder="e.g. 2 hr" autocomplete="off" oninput="autoBuild()" style="width:130px;padding:6px 10px">
+          </div>
+          <div style="flex:1;min-width:130px">
+            <label>Affected Area / Site</label>
+            <input type="text" id="site" placeholder="e.g. ओदारी, वडा नं. ३…" autocomplete="off" style="width:100%;padding:6px 10px">
+          </div>
+          <div style="flex:1;min-width:130px">
+            <label>Note (extra)</label>
+            <input type="text" id="workDetail" placeholder="optional" autocomplete="off" oninput="autoBuild()" style="width:100%;padding:6px 10px">
           </div>
         </div>
         <div style="font-size:10px;color:var(--dim2);margin-top:3px">💡 घटना केही मिनेट अगाडि भएको भए यहाँ सच्याउनुहोस् — सन्देश, लग र डाउनटाइम रिपोर्टमा यही समय जान्छ।</div>
@@ -1092,6 +1088,14 @@ body.log-page-open #page-log{
               <label style="font-size:11px;font-weight:700;color:#b45309">अनुमानित पुनःप्रवाह समय (Est. restore):</label>
               <input type="text" id="outageEta" list="etaOptions" placeholder="e.g. 1 hr" autocomplete="off" style="width:110px;padding:5px 8px;font-size:12px;margin-left:6px">
             </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#b45309">Affected Area:</label>
+              <input type="text" id="outageSite" placeholder="optional" autocomplete="off" style="width:130px;padding:5px 8px;font-size:12px;margin-left:6px">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#b45309">Note:</label>
+              <input type="text" id="outageNote" placeholder="optional" autocomplete="off" style="width:130px;padding:5px 8px;font-size:12px;margin-left:6px">
+            </div>
             <span style="font-size:10px;color:var(--dim2);flex-basis:100%"> — घटना केही मिनेट अगाडि भएको भए यहाँ सच्याउनुहोस्; सन्देश र लगमा यही समय जान्छ।</span>
           </div>
           <!-- Substation picker — shown for System Gone only. Tick exactly the
@@ -1100,9 +1104,8 @@ body.log-page-open #page-log{
             <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:5px;letter-spacing:.03em">Affected substations (untick the ones that are NOT gone):</div>
             <div id="sgStationPicker" style="display:flex;flex-wrap:wrap;gap:6px"></div>
           </div>
-          <!-- Live preview of the EXACT message that Dispatch will send -->
-          <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:4px">📨 Message Preview — यो सन्देश पठाइनेछ:</div>
-          <div id="outagePreview" style="background:#fff;border:1.5px dashed #d97706;border-radius:8px;padding:9px 11px;font-size:12.5px;font-family:'JetBrains Mono',monospace;color:#7c2d12;margin-bottom:10px;word-break:break-word;line-height:1.5;white-space:pre-wrap"></div>
+          <!-- Message Preview is shown in the "📋 Message Preview" card at the
+               bottom-right (mini-preview-wrap) — no need to duplicate it here. -->
           <p style="font-size:12px;color:var(--dim2);margin-bottom:10px">Preview जाँच गर्नुस् र Dispatch थिच्नुस्। (All affected feeders will be set to this condition and ONE message sent.)</p>
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
             <button class="btn" id="outageDispatchBtn" style="background:#d97706;color:#fff" onclick="dispatchOutage()">📣 Dispatch</button>
@@ -2741,6 +2744,15 @@ function getSgSelectedStations(){
    the operator edits actual time, est. restore, or (for System Gone)
    the ticked substations. Mirrors applySystemGone / applyIncomerFailed
    / applyKv33Failed message construction 1:1. */
+// Builds the Area/Note suffix shared by all three outage message types.
+function outageSiteNoteSuffix(){
+  const site = ($('outageSite')?.value||'').trim();
+  const note = ($('outageNote')?.value||'').trim();
+  let s = '';
+  if(site) s += ` (Area: ${site})`;
+  if(note) s += `\nNote: ${note}`;
+  return s;
+}
 function buildOutagePreviewMsg(){
   const cond = $('condition') ? $('condition').value : '';
   const st   = $('station') ? $('station').value : '';
@@ -2748,30 +2760,30 @@ function buildOutagePreviewMsg(){
   const time = /^\d{1,2}:\d{2}$/.test(tRaw) ? tRaw : nowHM();
   const eta  = ($('outageEta')?.value||'').trim();
   const etaSuffix = eta ? ` (Est. restore: ${eta})` : '';
+  const snSuffix = outageSiteNoteSuffix();
   if(cond==='system-gone'){
     const targets = getSgSelectedStations();
     if(!targets.length) return '⚠ कुनै सबस्टेशन छानिएको छैन — कम्तीमा एउटा ✔ गर्नुहोस्।';
     const allStations=[...new Set(DATA.feeders.map(f=>f.station))];
     const isAll = targets.length===allStations.length && allStations.every(s=>targets.includes(s));
-    return (isAll ? `System Gone at ${time}` : `System Gone of ${targets.join(', ')} at ${time}`) + etaSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+    return (isAll ? `System Gone at ${time}` : `System Gone of ${targets.join(', ')} at ${time}`) + etaSuffix + snSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   }
-  if(cond==='incomer-failed') return `11 KV Incomer of ${st} Failed at ${time}` + etaSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
-  if(cond==='kv33-failed')    return `33 KV Incomer of ${st} Failed at ${time}` + etaSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+  if(cond==='incomer-failed') return `11 KV Incomer of ${st} Failed at ${time}` + etaSuffix + snSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+  if(cond==='kv33-failed')    return `33 KV Incomer of ${st} Failed at ${time}` + etaSuffix + snSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   return '';
 }
 function updateOutagePreview(){
-  const el=$('outagePreview'); if(!el) return;
+  // The outage dispatch box no longer has its own preview element — the
+  // exact outgoing message is mirrored straight into the bottom-right
+  // "📋 Message Preview" card instead.
   const m = buildOutagePreviewMsg();
-  el.textContent = m;
-  // Mirror into the bottom Message Preview card so it also shows the
-  // exact outgoing message for these group conditions.
   const cond=$('condition') ? $('condition').value : '';
   if(m && ['system-gone','incomer-failed','kv33-failed'].includes(cond) && !m.startsWith('⚠')){
     setMessage(m,'tpl');
   }
 }
-// Live hooks: time / eta edits and substation tick changes
-['outageTime','outageEta'].forEach(id=>{
+// Live hooks: time / eta / area / note edits and substation tick changes
+['outageTime','outageEta','outageSite','outageNote'].forEach(id=>{
   const el=$(id); if(!el) return;
   el.addEventListener('input',  updateOutagePreview);
   el.addEventListener('change', updateOutagePreview);
@@ -2808,6 +2820,8 @@ async function dispatchOutage(){
     $('outageArea').style.display='none';
     const sgWrap=$('sgStationWrap'); if(sgWrap) sgWrap.style.display='none';
     if($('outageEta')) $('outageEta').value='';
+    if($('outageSite')) $('outageSite').value='';
+    if($('outageNote')) $('outageNote').value='';
     preview.textContent = 'Select substation, staff, feeder and condition — message will appear here.';
     preview.classList.add('empty'); $('msgTagWrap').innerHTML='';
     updateMiniPreviewVisibility();
@@ -2877,6 +2891,8 @@ function getFields(){
     site:        $('site').value.trim(),
     time:        $('time').value.trim(),
     workDetail:  $('workDetail').value.trim(),
+    tripSite:    ($('tripSite')?.value||'').trim(),
+    tripNote:    ($('tripNote')?.value||'').trim(),
     eta
   };
 }
@@ -2909,8 +2925,10 @@ function buildTemplate(f){
       m+=fmtLine('Substation', f.station);
       m+=fmtF('Feeder    ', f.feeders);
       if(f.tripReasons&&f.tripReasons.length) m+=fmtF('Reason    ', f.tripReasons);
+      if(f.tripSite) m+=fmtLine('Area      ', f.tripSite);
       if(t) m+=fmtLine('Time      ', t);
       if(f.eta) m+=fmtLine('Est. restore', f.eta);
+      if(f.tripNote) m+=fmtLine('Note      ', f.tripNote);
       m+=`${sep}\n`;
       m+=multi
         ?`माथि उल्लेखित फिडरहरू ट्रिप भई विद्युत आपूर्ति अवरुद्ध भएको व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। असुविधाका लागि क्षमाप्रार्थी छौं।`
@@ -2925,8 +2943,10 @@ function buildTemplate(f){
       m+=fmtLine('Substation', f.station);
       m+=fmtF('Feeder    ', f.feeders);
       if(f.tripReasons&&f.tripReasons.length) m+=fmtF('Reason    ', f.tripReasons);
+      if(f.tripSite) m+=fmtLine('Area      ', f.tripSite);
       if(tEN) m+=fmtLine('Time      ', tEN);
       if(f.eta) m+=fmtLine('Est. restore', f.eta);
+      if(f.tripNote) m+=fmtLine('Note      ', f.tripNote);
       m+=`${sep}\n`;
       m+=multi
         ?`The above feeders have tripped and power supply is disrupted. Restoration work has been initiated immediately. We apologize for the inconvenience.`
@@ -3755,7 +3775,7 @@ async function runAI(){
   if(!key){setMessage(tmpl, f.condition==='trip'?'trip':'tpl');return;}
   const langName=currentLang==='ne'?'Nepali':'English';
   const condType=f.condition==='trip'?'TRIP alert':'SHUTDOWN notice';
-  const prompt=`You are drafting an official electricity ${condType} for Nepal Electricity Authority (NEA), ${currentDcs().shortName || 'Taulihawa'}. Write ONE concise, professional notice in ${langName} only. No preamble, no markdown, no translation.\nDetails:\n- Substation: ${f.station}\n- Feeder: ${f.feeder}\n- Condition: ${f.condition==='trip'?'Trip (automatic fault)':'Planned Shutdown'}\n- Reason: ${f.reason||'N/A'}\n- Affected area: ${f.site||'N/A'}\n- Time: ${f.time||'N/A'}\n- Estimated restore time: ${f.eta||'N/A'}\n- Requested by: ${f.askedBy||'N/A'}\n- Substation Operator: ${f.givenBy||'N/A'}\nFormat: use ⚡ for trip or 🔌 for shutdown as first line header, then key details neatly, then one formal closing sentence. If the estimated restore time is provided, include it in the notice. The body must END with the apology sentence: ${langName==='Nepali'||currentLang==='ne'?'"असुविधाका लागि क्षमाप्रार्थी छौं।"':'"We apologize for the inconvenience."'} End with: _(auto generated msg)_${currentLang==='ne'?`\nNepali orthography rules — STRICTLY follow standard Nepali (नेपाली वर्णविन्यास, not Hindi):\n• Use "सुरु" (NOT "शुरु" or "शुरू") for "start/begin".\n• Use "का लागि" (NOT "को लागि") after nouns before the postposition "लागि".\n• Use "सबैलाई" (NOT "सबैमा") when addressing "to all".\n• Use "व्यहोरा" (NOT "बेहोरा").\n• Formal words: अवरुद्ध, अविलम्ब, गराइन्छ, गरिएको छ, क्षमाप्रार्थी, असुविधा — spell exactly as given.`:''}`;
+  const prompt=`You are drafting an official electricity ${condType} for Nepal Electricity Authority (NEA), ${currentDcs().shortName || 'Taulihawa'}. Write ONE concise, professional notice in ${langName} only. No preamble, no markdown, no translation.\nDetails:\n- Substation: ${f.station}\n- Feeder: ${f.feeder}\n- Condition: ${f.condition==='trip'?'Trip (automatic fault)':'Planned Shutdown'}\n- Reason: ${f.reason||'N/A'}\n- Affected area: ${(f.condition==='trip'?f.tripSite:f.site)||'N/A'}\n- Time: ${f.time||'N/A'}\n- Estimated restore time: ${f.eta||'N/A'}\n- Requested by: ${f.askedBy||'N/A'}\n- Substation Operator: ${f.givenBy||'N/A'}\n- Extra note: ${(f.condition==='trip'?f.tripNote:f.workDetail)||'N/A'}\nFormat: use ⚡ for trip or 🔌 for shutdown as first line header, then key details neatly, then one formal closing sentence. If the estimated restore time is provided, include it in the notice. The body must END with the apology sentence: ${langName==='Nepali'||currentLang==='ne'?'"असुविधाका लागि क्षमाप्रार्थी छौं।"':'"We apologize for the inconvenience."'} End with: _(auto generated msg)_${currentLang==='ne'?`\nNepali orthography rules — STRICTLY follow standard Nepali (नेपाली वर्णविन्यास, not Hindi):\n• Use "सुरु" (NOT "शुरु" or "शुरू") for "start/begin".\n• Use "का लागि" (NOT "को लागि") after nouns before the postposition "लागि".\n• Use "सबैलाई" (NOT "सबैमा") when addressing "to all".\n• Use "व्यहोरा" (NOT "बेहोरा").\n• Formal words: अवरुद्ध, अविलम्ब, गराइन्छ, गरिएको छ, क्षमाप्रार्थी, असुविधा — spell exactly as given.`:''}`;
   const models=($('modelList')?.value||'').split('\n').map(m=>m.trim()).filter(Boolean);
   status.style.color='var(--dim2)';
   for(const model of models){
@@ -3774,6 +3794,10 @@ function clearForm(){
   feederPicker.clear(); reasonPicker.clear(); tripReasonPicker.clear();
   $('condition').value=''; $('askedBy').value=''; $('askedByTrip').value='';
   $('site').value=''; $('time').value=''; $('workDetail').value='';
+  if($('tripSite'))   $('tripSite').value='';
+  if($('tripNote'))   $('tripNote').value='';
+  if($('outageSite')) $('outageSite').value='';
+  if($('outageNote')) $('outageNote').value='';
   // Also clear the Est. restore fields — do not leak across dispatches
   if($('tripEta'))     $('tripEta').value='';
   if($('shutdownEta')) $('shutdownEta').value='';
@@ -6274,7 +6298,7 @@ async function applySystemGone(t, stations){
   const etaSuffix = eta ? ` (Est. restore: ${eta})` : '';
   const msg = (isAll
     ? `System Gone at ${time}`
-    : `System Gone of ${targets.join(', ')} at ${time}`) + etaSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+    : `System Gone of ${targets.join(', ')} at ${time}`) + etaSuffix + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   dispatchBulkMsg(msg,'System Gone', isAll?'All Substations':targets.join(', '));
   toast(`⛔ System Gone — ${isAll?'all substations':targets.join(', ')} updated. Click "System Restored" on each affected substation to revert.`,3500);
 }
@@ -6400,7 +6424,7 @@ async function applyKv33Failed(t){
   for(const name of all){ await sbPushOneFeedStatus(name,{status:'kv33',time}); }
 
   const eta33 = ($('outageEta')?.value||'').trim();
-  const msg=`33 KV Incomer of ${st} Failed at ${time}` + (eta33 ? ` (Est. restore: ${eta33})` : '') + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+  const msg=`33 KV Incomer of ${st} Failed at ${time}` + (eta33 ? ` (Est. restore: ${eta33})` : '') + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   dispatchBulkMsg(msg,'33KV Incomer Failed',st);
   toast('⚡ 33 KV Incomer Failed — all feeders of '+st+' tripped. Click "33 KV Incomer Restored" to revert.',3500);
   } finally { delete outageOpLock[st]; }
@@ -6496,7 +6520,7 @@ async function applyIncomerFailed(t){
     return;
   }
   const eta11 = ($('outageEta')?.value||'').trim();
-  const msg=`11 KV Incomer of ${st} Failed at ${time}` + (eta11 ? ` (Est. restore: ${eta11})` : '') + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+  const msg=`11 KV Incomer of ${st} Failed at ${time}` + (eta11 ? ` (Est. restore: ${eta11})` : '') + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   dispatchBulkMsg(msg,'11KV Incomer Failed',st);
   toast('🛑 11 KV Incomer Failed — all feeders of this substation updated. Click "11 KV Incomer Restored" to revert.',3500);
   } finally { delete outageOpLock[st]; }
