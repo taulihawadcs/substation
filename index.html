@@ -6124,13 +6124,68 @@ function onFeederStatusAction(feederName,sel){
   } else if(action==='incomer-failed'){
     applyIncomerFailed(t);
   } else {
-    // trip / shutdown on any feeder — silent status update only, no message.
+    // trip / shutdown on any feeder — status update PLUS a short one-line
+    // notice (separate, simpler wording from the full Entry-form dispatch).
     // Skip if the feeder is already in this exact status (no duplicate write).
     if(cur.status===action){ toast(`Already ${FS_BADGE[action]?.label||action} — no change`); return; }
     feederStatusMap[feederName]={status:action,time:t};
     renderFeederStatus();
     sbPushOneFeedStatus(feederName,{status:action,time:t});
+    const station=DATA.feeders.find(f=>f.name===feederName)?.station||$('station').value||'';
+    const typeLabel = action==='trip' ? 'Trip' : 'Shutdown';
+    const msg = action==='trip'
+      ? `${feederName} of ${station} auto tripped at ${t}`
+      : `${feederName} of ${station} is under shutdown since ${t}`;
+    dispatchQuickStatusMsg(feederName, station, typeLabel, t, msg);
   }
+}
+
+async function dispatchQuickStatusMsg(feederName, station, typeLabel, t, msg){
+  // Duplicate/double-click guard — block an identical notice for the same
+  // feeder within the window (synchronous, before any await).
+  const _now = Date.now();
+  const _ck = (typeLabel==='Trip' ? 'QTR:' : 'QSD:') + feederName;
+  if(recentDispatched[_ck] && (_now - recentDispatched[_ck]) < DISPATCH_DEDUP_WINDOW){
+    toast(`⚠ ${typeLabel} notice already sent for this feeder moments ago`); return;
+  }
+  recentDispatched[_ck] = _now;
+  for(const k in recentDispatched){
+    if(_now - recentDispatched[k] > DISPATCH_DEDUP_WINDOW) delete recentDispatched[k];
+  }
+  // Receiver mute check — same behaviour as Charged notices
+  if(receiversMuted){
+    toast(`🔕 All Muted — ${typeLabel} notice logged but NOT sent`, 3000);
+    recordLogDirect({
+      type:typeLabel,
+      recipients: DATA.receivers.filter(r=>r.enabled).map(r=>r.name).join(', ') || 'None',
+      status:'MUTED — not sent', station, feeder:feederName, time:t, msg
+    });
+    return;
+  }
+  const enabled=DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
+  if(!enabled.length){toast(`${typeLabel} noted — no receivers configured`);return;}
+  toast(`Sending ${typeLabel} notice for ${feederName}…`,2000);
+  const wrap=$('sendStatusWrap');
+  wrap.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--dim2);margin:6px 0 3px;text-transform:uppercase;letter-spacing:.06em">${typeLabel} Notice…</div>`;
+  const statusDiv=document.createElement('div'); wrap.appendChild(statusDiv);
+  enabled.forEach(r=>{
+    const el=document.createElement('div'); el.className='send-row';
+    el.innerHTML=`<span class="send-name">${esc(r.name)}</span><span class="send-state st-q" id="qss_${r.id}">queued…</span>`;
+    statusDiv.appendChild(el);
+  });
+  let ok=0;
+  for(const r of enabled){
+    const stEl=$(`qss_${r.id}`);
+    if(stEl){stEl.textContent='sending…';stEl.className='send-state st-s';}
+    if(await sendSilent(r,msg,stEl)) ok++;
+  }
+  const result=ok+'/'+enabled.length+' sent';
+  recordLogDirect({
+    type:typeLabel, recipients:enabled.map(r=>r.name).join(', '),
+    status:result, station, feeder:feederName, time:t, msg
+  });
+  sbInsertLog(LOG[0]);
+  toast(`${typeLabel} notice sent: ${ok}/${enabled.length}`);
 }
 
 function markFeederCharged(feederName){
@@ -6148,7 +6203,8 @@ function markFeederCharged(feederName){
   } finally { dtCloseTimeOverride=null; }
   renderFeederStatus();
   sbPushOneFeedStatus(feederName,{status:'charged',time:t,ts:Date.now()});
-  const msg=`${feederName} Charged at ${t}`;
+  const station=DATA.feeders.find(f=>f.name===feederName)?.station||$('station').value||'';
+  const msg=`${feederName} of ${station} charged at ${t}. Thanks for your patience.`;
   dispatchChargedMsg(feederName,msg);
 }
 
