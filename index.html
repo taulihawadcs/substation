@@ -30,7 +30,7 @@ body{background:var(--bg);color:var(--txt);font-family:'Archivo',sans-serif;line
   max-height:40px;overflow:hidden;transition:max-height .35s ease,opacity .3s ease,padding .3s ease}
 .topbar.hdr-compact .topbar-brand{max-height:0;opacity:0;padding-top:0;padding-bottom:0}
 .topbar.hdr-compact .topbar-subtitle{max-height:0;opacity:0;padding-bottom:0}
-.topbar-nav{display:flex;align-items:center;justify-content:center;gap:0;border-top:1px solid var(--line);padding:0 20px;
+.topbar-nav{display:flex;align-items:center;justify-content:flex-start;gap:0;border-top:1px solid var(--line);padding:0 8px;
   overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .topbar-nav::-webkit-scrollbar{display:none}
 .nav-tab{background:none;border:none;font-family:'Archivo',sans-serif;font-size:14px;font-weight:500;color:var(--dim);cursor:pointer;padding:10px 20px;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;flex:none}
@@ -390,6 +390,13 @@ select.big option,
   padding:10px 14px;margin-bottom:6px;
   box-shadow:0 2px 12px rgba(217,70,239,.15);
 }
+.sg-banner-group{
+  background:linear-gradient(135deg,#fef2f2 60%,#fee2e2);
+  border:2px solid #e11d48;
+  box-shadow:0 2px 14px rgba(225,29,72,.25);
+}
+.sg-banner-group .sg-banner-label{color:#9f1239}
+.sg-banner-group .sg-banner-sub{color:#be123c}
 .sg-banner-left{display:flex;flex-direction:column;gap:2px}
 .sg-banner-label{font-size:13px;font-weight:800;color:#86198f;display:flex;align-items:center;gap:6px}
 .sg-banner-sub{font-size:10px;color:#a21caf;font-family:'JetBrains Mono',monospace}
@@ -526,10 +533,10 @@ select.big option,
   .topbar-brand{font-size:18px;padding:7px 20px 1px}
   .topbar-subtitle{font-size:10px;padding-bottom:5px}
   .nav-tab{padding:7px 12px;font-size:13px;white-space:nowrap}
-  /* justify-content:center clips BOTH ends when tabs overflow a narrow screen
-     ("Entry" was cut off on the left) — left-align on mobile so every tab is
-     reachable with a horizontal swipe. */
-  .topbar-nav{justify-content:flex-start;padding:0 8px}
+  /* Left-alignment (justify-content:flex-start) now lives in the base
+     .topbar-nav rule so it applies on real mobile widths too — it used to
+     be trapped in this ≥900px-only block, which meant phones still got the
+     old justify-content:center that clipped tabs on both ends. */
 
   /* Page fills viewport below topbar */
   #page-main{
@@ -5927,20 +5934,12 @@ function renderFeederStatus(){
   updateTripAllToggleUI();
   const st=$('station').value;
 
-  // ── Global "Restore All Substations" shortcut — only shown when 2+
-  // substations are simultaneously in System Gone, since a single active
-  // station is already handled by its own per-station banner below. ──
-  const sgActiveStations = Object.keys(systemGoneMap);
-  const restoreAllBannerHtml = (sgActiveStations.length>1 && !monitorMode) ? `
-    <div class="sg-banner" style="margin-bottom:10px;background:linear-gradient(135deg,#fef2f2,#fff1f2);border:1.5px solid #e11d48">
-      <div class="sg-banner-left">
-        <div class="sg-banner-label">⛔ System Gone — ${sgActiveStations.length} substations</div>
-        <div class="sg-banner-sub">${esc(sgActiveStations.join(', '))}</div>
-      </div>
-      <button class="sg-restore-btn" onclick="restoreAllSystemGone()">
-        ⚡ Restore All Substations
-      </button>
-    </div>` : '';
+  // NOTE: the "Restore All Substations" action now lives INSIDE the
+  // per-station System Gone banner below (renderFeederStatusBlock) — it
+  // automatically becomes the primary button there whenever 2+ substations
+  // are simultaneously down, so whichever station's screen the operator
+  // happens to be looking at, one obvious click restores everyone. This
+  // avoids a station being silently forgotten behind a look-alike banner.
 
   // Monitor (view-only) with no single substation picked → "🌐 All
   // Substations" is selected: render every substation's feeders in one
@@ -5970,7 +5969,7 @@ function renderFeederStatus(){
     panel.innerHTML='<div class="fs-empty">Select a substation to see feeder statuses.</div>';
     return;
   }
-  panel.innerHTML=restoreAllBannerHtml;
+  panel.innerHTML='';
   renderFeederStatusBlock(st, feeders, panel);
 }
 
@@ -5983,18 +5982,40 @@ function renderFeederStatusBlock(st, feeders, panel){
   const kv33Active    = isKv33Active(st);
 
   // ── System Gone banner (PER-STATION) with prominent Restore button ──
+  // When 2+ substations are simultaneously down (the common case — one
+  // upstream/grid fault usually takes the whole DCS out together, and comes
+  // back together too), the PRIMARY button here becomes "Restore All
+  // Substations" so the operator doesn't have to hunt down every affected
+  // station one by one. A small secondary link still allows restoring just
+  // this one substation for the rare case they genuinely differ.
   if(sgActive){
     const sgTime=systemGoneMap[st].time||'';
+    const sgActiveStations=Object.keys(systemGoneMap);
+    const groupOutage=sgActiveStations.length>1;
     const banner=document.createElement('div');
-    banner.className='sg-banner';
-    banner.innerHTML=`
-      <div class="sg-banner-left">
-        <div class="sg-banner-label">⛔ System Gone</div>
-        <div class="sg-banner-sub">${sgTime?'Since '+sgTime+' — click to restore this substation':''}</div>
-      </div>
-      <button class="sg-restore-btn" onclick="restoreSystemGoneFor('${esc(st)}')">
-        ⚡ System Restored
-      </button>`;
+    banner.className='sg-banner'+(groupOutage?' sg-banner-group':'');
+    if(groupOutage){
+      banner.innerHTML=`
+        <div class="sg-banner-left">
+          <div class="sg-banner-label">⛔ System Gone — ${sgActiveStations.length} substations down</div>
+          <div class="sg-banner-sub">${esc(sgActiveStations.join(', '))}${sgTime?' · since '+sgTime:''}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
+          <button class="sg-restore-btn" onclick="restoreAllSystemGone()">
+            ⚡ Restore All Substations
+          </button>
+          <a href="javascript:void(0)" onclick="restoreSystemGoneFor('${esc(st)}')" style="font-size:10px;color:#a21caf;text-decoration:underline;cursor:pointer;font-family:'Archivo',sans-serif">restore only ${esc(st)}</a>
+        </div>`;
+    } else {
+      banner.innerHTML=`
+        <div class="sg-banner-left">
+          <div class="sg-banner-label">⛔ System Gone</div>
+          <div class="sg-banner-sub">${sgTime?'Since '+sgTime+' — click to restore this substation':''}</div>
+        </div>
+        <button class="sg-restore-btn" onclick="restoreSystemGoneFor('${esc(st)}')">
+          ⚡ System Restored
+        </button>`;
+    }
     panel.appendChild(banner);
   }
 
@@ -6111,7 +6132,6 @@ function onFeederStatusAction(feederName,sel){
     t=asked;
   }
   if(action==='charged'){
-    if(cur.status==='charged'){ toast('Already Charged — this feeder is already Charged. No duplicate.'); return; }
     markFeederCharged(feederName);
   } else if(action==='normal'){
     if(cur.status==='normal'){ toast('Already Normal — no change'); return; }
@@ -6189,8 +6209,16 @@ async function dispatchQuickStatusMsg(feederName, station, typeLabel, t, msg){
 }
 
 function markFeederCharged(feederName){
-  // Normal feeder charged — status update + one charged msg sent
-  if((feederStatusMap[feederName]||{}).status==='charged'){
+  // Guard against duplicate/no-op "Charged" notices:
+  //  • already Charged  → pure no-op, don't even ask for a time.
+  //  • already Normal   → the feeder is already effectively fine (e.g. a
+  //    "System Restored" bulk revert already brought it back). Still record
+  //    a fresh charge time locally/in the cloud for accurate downtime
+  //    reporting, but skip the WhatsApp/SMS notice and log entry — a
+  //    message already went out for the event that fixed it, so a second
+  //    "Charged" notice per feeder would just be noise.
+  const cur=feederStatusMap[feederName]||{status:'normal',time:''};
+  if(cur.status==='charged'){
     toast('Already Charged — no duplicate.'); return;
   }
   // Charging is often noticed a few minutes late — ask the ACTUAL time; the
@@ -6203,6 +6231,10 @@ function markFeederCharged(feederName){
   } finally { dtCloseTimeOverride=null; }
   renderFeederStatus();
   sbPushOneFeedStatus(feederName,{status:'charged',time:t,ts:Date.now()});
+  if(cur.status==='normal'){
+    toast('Feeder was already Normal — charge time recorded, no duplicate message sent.',3500);
+    return;
+  }
   const station=DATA.feeders.find(f=>f.name===feederName)?.station||$('station').value||'';
   const msg=`${feederName} of ${station} charged at ${t}. Thanks for your patience.`;
   dispatchChargedMsg(feederName,msg);
