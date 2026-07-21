@@ -30,7 +30,7 @@ body{background:var(--bg);color:var(--txt);font-family:'Archivo',sans-serif;line
   max-height:40px;overflow:hidden;transition:max-height .35s ease,opacity .3s ease,padding .3s ease}
 .topbar.hdr-compact .topbar-brand{max-height:0;opacity:0;padding-top:0;padding-bottom:0}
 .topbar.hdr-compact .topbar-subtitle{max-height:0;opacity:0;padding-bottom:0}
-.topbar-nav{display:flex;align-items:center;justify-content:flex-start;gap:0;border-top:1px solid var(--line);padding:0 8px;
+.topbar-nav{display:flex;align-items:center;justify-content:center;gap:0;border-top:1px solid var(--line);padding:0 20px;
   overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .topbar-nav::-webkit-scrollbar{display:none}
 .nav-tab{background:none;border:none;font-family:'Archivo',sans-serif;font-size:14px;font-weight:500;color:var(--dim);cursor:pointer;padding:10px 20px;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;flex:none}
@@ -390,13 +390,6 @@ select.big option,
   padding:10px 14px;margin-bottom:6px;
   box-shadow:0 2px 12px rgba(217,70,239,.15);
 }
-.sg-banner-group{
-  background:linear-gradient(135deg,#fef2f2 60%,#fee2e2);
-  border:2px solid #e11d48;
-  box-shadow:0 2px 14px rgba(225,29,72,.25);
-}
-.sg-banner-group .sg-banner-label{color:#9f1239}
-.sg-banner-group .sg-banner-sub{color:#be123c}
 .sg-banner-left{display:flex;flex-direction:column;gap:2px}
 .sg-banner-label{font-size:13px;font-weight:800;color:#86198f;display:flex;align-items:center;gap:6px}
 .sg-banner-sub{font-size:10px;color:#a21caf;font-family:'JetBrains Mono',monospace}
@@ -533,10 +526,10 @@ select.big option,
   .topbar-brand{font-size:18px;padding:7px 20px 1px}
   .topbar-subtitle{font-size:10px;padding-bottom:5px}
   .nav-tab{padding:7px 12px;font-size:13px;white-space:nowrap}
-  /* Left-alignment (justify-content:flex-start) now lives in the base
-     .topbar-nav rule so it applies on real mobile widths too — it used to
-     be trapped in this ≥900px-only block, which meant phones still got the
-     old justify-content:center that clipped tabs on both ends. */
+  /* justify-content:center clips BOTH ends when tabs overflow a narrow screen
+     ("Entry" was cut off on the left) — left-align on mobile so every tab is
+     reachable with a horizontal swipe. */
+  .topbar-nav{justify-content:flex-start;padding:0 8px}
 
   /* Page fills viewport below topbar */
   #page-main{
@@ -737,6 +730,10 @@ body.log-page-open #page-log{
 #page-transformer .tfx-grid-2{grid-template-columns:1fr 1fr;}
 #page-transformer .tfx-grid-3{grid-template-columns:1fr 1fr 1fr;}
 #page-transformer .tfx-grid-4{grid-template-columns:1fr 1fr 1fr 1fr;}
+#page-transformer .tfx-letter-2col{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;align-items:start;}
+@media (max-width:820px){
+  #page-transformer .tfx-letter-2col{grid-template-columns:1fr;}
+}
 @media (max-width:760px){
   #page-transformer .tfx-grid-2,
   #page-transformer .tfx-grid-3,
@@ -877,6 +874,10 @@ body.log-page-open #page-log{
 #tfxModalRoot .tfx-btn:hover{background:#082a66;}
 #tfxModalRoot .tfx-btn.tfx-ghost{background:transparent;color:#4a5066;border:1px solid #cdd3e0;}
 #tfxModalRoot .tfx-btn.tfx-ghost:hover{background:#f1f2f6;}
+#tfxModalRoot .tfx-btn.tfx-danger{background:#fff;color:#b5402a;border:1px solid #b5402a;}
+#tfxModalRoot .tfx-btn.tfx-danger:hover{background:#fbeae7;}
+#tfxModalRoot .tfx-modal-box-wide{width:min(560px, 84vw);}
+#tfxModalRoot .tfx-hint{font-size:11.5px;color:#5a6178;margin-top:4px;line-height:1.5;}
 </style>
 </head>
 <body>
@@ -894,8 +895,8 @@ body.log-page-open #page-log{
       <span id="syncDotIcon" style="width:7px;height:7px;border-radius:50%;background:#d1d5db;display:inline-block"></span>
       <span id="syncDotLabel"></span>
     </span>
-    <span id="muteBadge" style="display:none;margin-left:4px;background:#fef2f2;border:1px solid var(--red);color:var(--red);border-radius:8px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Archivo',sans-serif;cursor:pointer" onclick="showPage('settings');showSection('sec-receivers')" title="Receivers muted — click to manage">🔕 MUTED</span>
-    <span id="sbPauseBadge" style="display:none;margin-left:2px;background:#fff7ed;border:1px solid #f97316;color:#c2410c;border-radius:8px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Archivo',sans-serif;cursor:pointer" onclick="showPage('settings');showSection('sec-supabase')" title="Supabase paused — click to manage">⏸ SYNC OFF</span>
+    <span id="muteBadge" style="display:none;margin-left:4px;background:#fef2f2;border:1px solid var(--red);color:var(--red);border-radius:8px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Archivo',sans-serif;cursor:pointer" onclick="quickUnmuteFromBadge()" title="Receivers muted — click to unmute">🔕 MUTED</span>
+    <span id="sbPauseBadge" style="display:none;margin-left:2px;background:#fff7ed;border:1px solid #f97316;color:#c2410c;border-radius:8px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Archivo',sans-serif;cursor:pointer" onclick="quickResumeSyncFromBadge()" title="Supabase paused — click to resume">⏸ SYNC OFF</span>
     <button id="monitorRefreshBtn" onclick="location.reload()" title="ताजा गर्नुहोस् — पासवर्ड फेरि चाहिँदैन (Refresh — no password needed)">🔄</button>
   </div>
 </div>
@@ -1748,6 +1749,8 @@ gemini-1.5-flash</textarea>
     <div id="tfxFormRoot"></div>
     <!-- Burnt register card (rendered by JS) -->
     <div id="tfxBurntRoot"></div>
+    <!-- Letter writer — पत्र लेख्ने (transformer-format only), opened from a saved record -->
+    <div id="tfxLetterRoot"></div>
   </div>
 </div>
 <!-- Modal root for transformer modals (kept outside page so it overlays properly) -->
@@ -2149,15 +2152,23 @@ async function sha256(str){
 /* ============================================================
    DUAL PASSWORD SYSTEM
    Entry password    → app_config key: 'app_password'
-                       Hash of 'Peace' as default fallback
+                       Has a hardcoded fallback hash below, used only
+                       until it's changed via Settings → Change Password.
    Settings password → app_config key: 'settings_password'
-                       Set on first use by the author
-   Both stored as SHA-256 hashes. Fallback hash is SHA-256 of
-   'Peace' — the plaintext is nowhere in this file.
+                       Set on first use by the author — never hardcoded,
+                       never stored anywhere in this file.
+   Both stored as SHA-256 hashes. The plaintext these fallback hashes
+   were generated from is intentionally NOT written anywhere in this
+   file — not even in a comment — since a hash sitting next to its own
+   plaintext gives an attacker (or anyone this file is shared with,
+   including an AI assistant) the password for free, no cracking
+   needed. If you ever need to know a fallback password, generate a
+   fresh one and replace the hash below — don't write the plaintext
+   next to it.
    ============================================================ */
-// SHA-256('Peace') — only the hash, not the password
+// Fallback hash only — see note above. Change via Settings → Change Password.
 const ENTRY_HASH_FALLBACK='9faf7e5a6d8c908b34cd8f48def377b9716a63e8df1bdcdff75a70e0334dd84a';
-// SHA-256('11111') — Monitoring staff (view-only): can see Status panel + Log,
+// Monitoring staff (view-only) hash: can see Status panel + Log,
 // select a substation to view its feeders, but cannot enter/dispatch anything.
 const MONITOR_HASH='d17f25ecfbcc7857f7bebea469308be0b2580943e96d13a3ad98a13675c4bfc2';
 
@@ -3212,6 +3223,18 @@ async function dispatchToAll(msg, type){
       if(cloudBlocked){
         const lbl = FS_BADGE[targetStatus]?.label || targetStatus;
         toast(`⚠ Already ${lbl} — already active for one or more of these feeders. Restore first.`, 3500);
+        return;
+      }
+      // 3. Cross-status check — a feeder open under a DIFFERENT outage type
+      //    (e.g. currently Trip while this dispatch is Shutdown) must be
+      //    charged first, with a real time-verification prompt, before this
+      //    dispatch can proceed. All-or-nothing: if the operator declines to
+      //    charge any one of them, the whole dispatch is cancelled so the
+      //    message text (already built above) never disagrees with what
+      //    actually changed status.
+      const crossClear = await fsEnsureFeedersClearFor(selFeeders, targetStatus);
+      if(!crossClear){
+        toast('Dispatch cancelled — charge the existing outage first, then try again.', 3500);
         return;
       }
     }
@@ -5825,6 +5848,12 @@ function isIncomerFailedActive(station){ return !!incomerFailedMap[station]; }
 // which was producing duplicate Failed/restored messages on laggy connections.
 const outageOpLock = {};
 
+// Per-FEEDER in-flight lock — same idea as outageOpLock but scoped to a single
+// feeder, used by the trip/shutdown cross-status guard below. Prevents two
+// devices (or a double-tap) from both reading "no open outage" during the
+// same charge-then-reopen sequence and racing each other into a duplicate.
+const feederOpLock = {};
+
 // Per-feeder local write timestamps (ISO strings).
 // When we push a status change locally, we record its timestamp here.
 // syncFromCloud will only accept a cloud row if its updated_at is strictly
@@ -5869,6 +5898,114 @@ const FS_ICON={
   'kv33'          :'⚠️',
   'restored'      :'💧'
 };
+
+/* ============================================================
+   TRIP/SHUTDOWN CROSS-STATUS GUARD
+   "A feeder in trip in log cannot be tripped again without first
+   charging it" — and the same rule applies across outage TYPES: a
+   feeder already Trip cannot be set to Shutdown (or vice-versa)
+   without charging the open one first. The exact-same-status case
+   (trip→trip, shutdown→shutdown) was already blocked elsewhere
+   (dispatchToAll's state guard, onFeederStatusAction's cur.status
+   check) — this covers the CROSS case those didn't.
+   Multi-device safety: every check re-reads the LIVE local map (kept
+   fresh by cloud polling) plus one direct Supabase read at the moment
+   of the attempt, and a per-feeder lock (feederOpLock) stops two
+   concurrent attempts — this device or another — from both seeing
+   "clear" and racing into a duplicate open event.
+   ============================================================ */
+const FS_OUTAGE_STATUSES = ['trip','shutdown','system-gone','incomer-failed','kv33'];
+
+// Returns {status,time} for a feeder's outage status as of RIGHT NOW,
+// preferring a fresh cloud read (catches another device's very recent
+// change) but falling back to the local map if offline/unreachable.
+async function fsLiveFeederStatus(name){
+  const local = feederStatusMap[name] || {status:'normal', time:''};
+  if(!sbReady()) return local;
+  try{
+    const rows = await sbFetch('feeder_status?select=feeder_name,status,time_label&feeder_name=eq.'+encodeURIComponent(name));
+    if(rows && rows.length) return {status: rows[0].status||'normal', time: rows[0].time_label||''};
+    return local;
+  }catch(e){
+    console.warn('fsLiveFeederStatus check failed:', e.message);
+    return local; // offline/error → trust local, don't hard-block the operator
+  }
+}
+
+// Core guard: given a feeder and the outage type the operator is ABOUT to
+// apply, checks whether that feeder is already open in a DIFFERENT outage
+// type. If so, walks the operator through charging the old one (asking the
+// real charge time, same as the normal Charged flow) before returning true.
+// Returns true  → clear to proceed (nothing open, or the old one was just charged).
+// Returns false → operator cancelled the charge prompt; caller must abort.
+async function fsEnsureFeederClearFor(name, newType){
+  if(feederOpLock[name]){
+    toast(`⚠ ${name} — अर्को कार्य पहिले नै चलिरहेको छ, केही सेकेन्ड पर्खनुहोस्`);
+    return false;
+  }
+  feederOpLock[name] = true;
+  try{
+    const live = await fsLiveFeederStatus(name);
+    // Nothing open, or already open in the SAME type (that duplicate case is
+    // handled by the callers themselves) — nothing for this guard to do.
+    if(!FS_OUTAGE_STATUSES.includes(live.status) || live.status===newType) return true;
+
+    // A DIFFERENT outage type is open on this feeder — must be charged first.
+    const oldLabel = FS_BADGE[live.status]?.label || live.status;
+    const newLabel = FS_BADGE[newType]?.label || newType;
+    const proceed = confirm(
+      `⚠ ${name} हाल ${oldLabel} अवस्थामा छ (${live.time||'—'} बाट)।\n\n`+
+      `यसलाई ${newLabel} बनाउनु अघि पहिलेको ${oldLabel} लाई चार्ज (Charged) गर्नुपर्छ।\n\n`+
+      `अघिल्लो ${oldLabel} लाई अहिले नै चार्ज गर्ने हो?`
+    );
+    if(!proceed) return false;
+
+    // Ask the REAL time the old outage was actually charged — this is the
+    // "time-verification pop up" so the old event closes at the true time,
+    // not silently at "now".
+    const chargeTime = dtAskTime(`✓ ${name} — पहिलेको ${oldLabel} कति बजे Charged भयो?`);
+    if(chargeTime===null) return false; // operator backed out — abort the whole new-status action too
+
+    // Re-check right before writing — another device may have already
+    // charged/changed this feeder while the operator was answering the prompts.
+    const recheck = await fsLiveFeederStatus(name);
+    if(recheck.status===newType) return true; // someone already moved it to what we wanted
+    if(recheck.status!==live.status){
+      // State moved to something else entirely while we were asking — restart
+      // the guard once against the fresh state rather than charging stale data.
+      feederOpLock[name] = false;
+      return fsEnsureFeederClearFor(name, newType);
+    }
+
+    dtCloseTimeOverride = chargeTime;
+    try{
+      feederStatusMap[name] = {status:'charged', time:chargeTime, ts:Date.now()};
+    } finally { dtCloseTimeOverride = null; }
+    renderFeederStatus();
+    sbPushOneFeedStatus(name, {status:'charged', time:chargeTime, ts:Date.now()});
+    // Send the same Charged notice a normal charge would send, so receivers
+    // still get told the old outage ended — nothing silently skipped.
+    dispatchChargedMsg(name, `${name} Charged at ${chargeTime}`);
+    toast(`✓ ${name} — पहिलेको ${oldLabel} चार्ज भयो। अब ${newLabel} थप्न सकिन्छ।`, 3000);
+    return true;
+  } finally {
+    feederOpLock[name] = false;
+  }
+}
+
+// Bulk version for the multi-feeder dispatch form — walks each feeder in
+// sequence (so each gets its own time-verification prompt where needed).
+// All-or-nothing: the dispatch message and feeder list are already fixed by
+// the time this runs, so if the operator declines/cancels charging even ONE
+// feeder, the whole batch aborts rather than silently dispatching a message
+// that no longer matches which feeders actually changed status.
+async function fsEnsureFeedersClearFor(names, newType){
+  for(const name of names){
+    const ok = await fsEnsureFeederClearFor(name, newType);
+    if(!ok) return false;
+  }
+  return true;
+}
 
 // station given → is THAT substation in System Gone; no argument → is ANY.
 function isSystemGoneActive(station){
@@ -5934,12 +6071,20 @@ function renderFeederStatus(){
   updateTripAllToggleUI();
   const st=$('station').value;
 
-  // NOTE: the "Restore All Substations" action now lives INSIDE the
-  // per-station System Gone banner below (renderFeederStatusBlock) — it
-  // automatically becomes the primary button there whenever 2+ substations
-  // are simultaneously down, so whichever station's screen the operator
-  // happens to be looking at, one obvious click restores everyone. This
-  // avoids a station being silently forgotten behind a look-alike banner.
+  // ── Global "Restore All Substations" shortcut — only shown when 2+
+  // substations are simultaneously in System Gone, since a single active
+  // station is already handled by its own per-station banner below. ──
+  const sgActiveStations = Object.keys(systemGoneMap);
+  const restoreAllBannerHtml = (sgActiveStations.length>1 && !monitorMode) ? `
+    <div class="sg-banner" style="margin-bottom:10px;background:linear-gradient(135deg,#fef2f2,#fff1f2);border:1.5px solid #e11d48">
+      <div class="sg-banner-left">
+        <div class="sg-banner-label">⛔ System Gone — ${sgActiveStations.length} substations</div>
+        <div class="sg-banner-sub">${esc(sgActiveStations.join(', '))}</div>
+      </div>
+      <button class="sg-restore-btn" onclick="restoreAllSystemGone()">
+        ⚡ Restore All Substations
+      </button>
+    </div>` : '';
 
   // Monitor (view-only) with no single substation picked → "🌐 All
   // Substations" is selected: render every substation's feeders in one
@@ -5969,7 +6114,7 @@ function renderFeederStatus(){
     panel.innerHTML='<div class="fs-empty">Select a substation to see feeder statuses.</div>';
     return;
   }
-  panel.innerHTML='';
+  panel.innerHTML=restoreAllBannerHtml;
   renderFeederStatusBlock(st, feeders, panel);
 }
 
@@ -5982,40 +6127,18 @@ function renderFeederStatusBlock(st, feeders, panel){
   const kv33Active    = isKv33Active(st);
 
   // ── System Gone banner (PER-STATION) with prominent Restore button ──
-  // When 2+ substations are simultaneously down (the common case — one
-  // upstream/grid fault usually takes the whole DCS out together, and comes
-  // back together too), the PRIMARY button here becomes "Restore All
-  // Substations" so the operator doesn't have to hunt down every affected
-  // station one by one. A small secondary link still allows restoring just
-  // this one substation for the rare case they genuinely differ.
   if(sgActive){
     const sgTime=systemGoneMap[st].time||'';
-    const sgActiveStations=Object.keys(systemGoneMap);
-    const groupOutage=sgActiveStations.length>1;
     const banner=document.createElement('div');
-    banner.className='sg-banner'+(groupOutage?' sg-banner-group':'');
-    if(groupOutage){
-      banner.innerHTML=`
-        <div class="sg-banner-left">
-          <div class="sg-banner-label">⛔ System Gone — ${sgActiveStations.length} substations down</div>
-          <div class="sg-banner-sub">${esc(sgActiveStations.join(', '))}${sgTime?' · since '+sgTime:''}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
-          <button class="sg-restore-btn" onclick="restoreAllSystemGone()">
-            ⚡ Restore All Substations
-          </button>
-          <a href="javascript:void(0)" onclick="restoreSystemGoneFor('${esc(st)}')" style="font-size:10px;color:#a21caf;text-decoration:underline;cursor:pointer;font-family:'Archivo',sans-serif">restore only ${esc(st)}</a>
-        </div>`;
-    } else {
-      banner.innerHTML=`
-        <div class="sg-banner-left">
-          <div class="sg-banner-label">⛔ System Gone</div>
-          <div class="sg-banner-sub">${sgTime?'Since '+sgTime+' — click to restore this substation':''}</div>
-        </div>
-        <button class="sg-restore-btn" onclick="restoreSystemGoneFor('${esc(st)}')">
-          ⚡ System Restored
-        </button>`;
-    }
+    banner.className='sg-banner';
+    banner.innerHTML=`
+      <div class="sg-banner-left">
+        <div class="sg-banner-label">⛔ System Gone</div>
+        <div class="sg-banner-sub">${sgTime?'Since '+sgTime+' — click to restore this substation':''}</div>
+      </div>
+      <button class="sg-restore-btn" onclick="restoreSystemGoneFor('${esc(st)}')">
+        ⚡ System Restored
+      </button>`;
     panel.appendChild(banner);
   }
 
@@ -6120,7 +6243,7 @@ function renderFeederStatusBlock(st, feeders, panel){
   });
 }
 
-function onFeederStatusAction(feederName,sel){
+async function onFeederStatusAction(feederName,sel){
   const action=sel.value; sel.value='';
   if(!action) return;
   let t=nowHM();
@@ -6132,7 +6255,8 @@ function onFeederStatusAction(feederName,sel){
     t=asked;
   }
   if(action==='charged'){
-    markFeederCharged(feederName);
+    if(cur.status==='charged'){ toast('Already Charged — this feeder is already Charged. No duplicate.'); return; }
+    await markFeederCharged(feederName);
   } else if(action==='normal'){
     if(cur.status==='normal'){ toast('Already Normal — no change'); return; }
     feederStatusMap[feederName]={status:'normal',time:''};
@@ -6144,100 +6268,72 @@ function onFeederStatusAction(feederName,sel){
   } else if(action==='incomer-failed'){
     applyIncomerFailed(t);
   } else {
-    // trip / shutdown on any feeder — status update PLUS a short one-line
-    // notice (separate, simpler wording from the full Entry-form dispatch).
+    // trip / shutdown on any feeder — silent status update only, no message.
     // Skip if the feeder is already in this exact status (no duplicate write).
     if(cur.status===action){ toast(`Already ${FS_BADGE[action]?.label||action} — no change`); return; }
+    // Cross-status guard: if this feeder is open under a DIFFERENT outage
+    // type (e.g. currently Trip and the operator is now setting Shutdown),
+    // it must be charged first — with a real time-verification prompt —
+    // before the new status can be applied.
+    const clear = await fsEnsureFeederClearFor(feederName, action);
+    if(!clear) return; // operator declined/cancelled the charge step — abort
     feederStatusMap[feederName]={status:action,time:t};
     renderFeederStatus();
     sbPushOneFeedStatus(feederName,{status:action,time:t});
-    const station=DATA.feeders.find(f=>f.name===feederName)?.station||$('station').value||'';
-    const typeLabel = action==='trip' ? 'Trip' : 'Shutdown';
-    const msg = action==='trip'
-      ? `${feederName} of ${station} auto tripped at ${t}`
-      : `${feederName} of ${station} is under shutdown since ${t}`;
-    dispatchQuickStatusMsg(feederName, station, typeLabel, t, msg);
   }
 }
 
-async function dispatchQuickStatusMsg(feederName, station, typeLabel, t, msg){
-  // Duplicate/double-click guard — block an identical notice for the same
-  // feeder within the window (synchronous, before any await).
-  const _now = Date.now();
-  const _ck = (typeLabel==='Trip' ? 'QTR:' : 'QSD:') + feederName;
-  if(recentDispatched[_ck] && (_now - recentDispatched[_ck]) < DISPATCH_DEDUP_WINDOW){
-    toast(`⚠ ${typeLabel} notice already sent for this feeder moments ago`); return;
-  }
-  recentDispatched[_ck] = _now;
-  for(const k in recentDispatched){
-    if(_now - recentDispatched[k] > DISPATCH_DEDUP_WINDOW) delete recentDispatched[k];
-  }
-  // Receiver mute check — same behaviour as Charged notices
-  if(receiversMuted){
-    toast(`🔕 All Muted — ${typeLabel} notice logged but NOT sent`, 3000);
-    recordLogDirect({
-      type:typeLabel,
-      recipients: DATA.receivers.filter(r=>r.enabled).map(r=>r.name).join(', ') || 'None',
-      status:'MUTED — not sent', station, feeder:feederName, time:t, msg
-    });
+async function markFeederCharged(feederName){
+  // Normal feeder charged — status update + one charged msg sent.
+  // Same per-feeder lock used by the cross-status guard below — stops a
+  // second device (or a double-tap) from charging this feeder again while
+  // this device's own charge is still in flight.
+  if(feederOpLock[feederName]){
+    toast(`⚠ ${feederName} — अर्को कार्य पहिले नै चलिरहेको छ, केही सेकेन्ड पर्खनुहोस्`);
     return;
   }
-  const enabled=DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
-  if(!enabled.length){toast(`${typeLabel} noted — no receivers configured`);return;}
-  toast(`Sending ${typeLabel} notice for ${feederName}…`,2000);
-  const wrap=$('sendStatusWrap');
-  wrap.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--dim2);margin:6px 0 3px;text-transform:uppercase;letter-spacing:.06em">${typeLabel} Notice…</div>`;
-  const statusDiv=document.createElement('div'); wrap.appendChild(statusDiv);
-  enabled.forEach(r=>{
-    const el=document.createElement('div'); el.className='send-row';
-    el.innerHTML=`<span class="send-name">${esc(r.name)}</span><span class="send-state st-q" id="qss_${r.id}">queued…</span>`;
-    statusDiv.appendChild(el);
-  });
-  let ok=0;
-  for(const r of enabled){
-    const stEl=$(`qss_${r.id}`);
-    if(stEl){stEl.textContent='sending…';stEl.className='send-state st-s';}
-    if(await sendSilent(r,msg,stEl)) ok++;
-  }
-  const result=ok+'/'+enabled.length+' sent';
-  recordLogDirect({
-    type:typeLabel, recipients:enabled.map(r=>r.name).join(', '),
-    status:result, station, feeder:feederName, time:t, msg
-  });
-  sbInsertLog(LOG[0]);
-  toast(`${typeLabel} notice sent: ${ok}/${enabled.length}`);
-}
-
-function markFeederCharged(feederName){
-  // Guard against duplicate/no-op "Charged" notices:
-  //  • already Charged  → pure no-op, don't even ask for a time.
-  //  • already Normal   → the feeder is already effectively fine (e.g. a
-  //    "System Restored" bulk revert already brought it back). Still record
-  //    a fresh charge time locally/in the cloud for accurate downtime
-  //    reporting, but skip the WhatsApp/SMS notice and log entry — a
-  //    message already went out for the event that fixed it, so a second
-  //    "Charged" notice per feeder would just be noise.
-  const cur=feederStatusMap[feederName]||{status:'normal',time:''};
-  if(cur.status==='charged'){
-    toast('Already Charged — no duplicate.'); return;
-  }
-  // Charging is often noticed a few minutes late — ask the ACTUAL time; the
-  // message, status label, and downtime end all use it.
-  const t=dtAskTime('✓ '+feederName+' — कति बजे Charged भयो?');
-  if(t===null) return;   // operator cancelled
-  dtCloseTimeOverride=t;
+  feederOpLock[feederName]=true;
   try{
-    feederStatusMap[feederName]={status:'charged',time:t,ts:Date.now()};
-  } finally { dtCloseTimeOverride=null; }
-  renderFeederStatus();
-  sbPushOneFeedStatus(feederName,{status:'charged',time:t,ts:Date.now()});
-  if(cur.status==='normal'){
-    toast('Feeder was already Normal — charge time recorded, no duplicate message sent.',3500);
-    return;
+    // Live check (local + one direct cloud read) — another device may have
+    // already charged this feeder moments ago, before this device's poll
+    // cycle picked it up.
+    let live=await fsLiveFeederStatus(feederName);
+    if(live.status==='charged'){
+      toast('Already Charged — already charged on another device just now.');
+      if((feederStatusMap[feederName]||{}).status!=='charged'){
+        feederStatusMap[feederName]={status:'charged',time:live.time,ts:Date.now()};
+        renderFeederStatus();
+      }
+      return;
+    }
+    // Charging is often noticed a few minutes late — ask the ACTUAL time; the
+    // message, status label, and downtime end all use it.
+    const t=dtAskTime('✓ '+feederName+' — कति बजे Charged भयो?');
+    if(t===null) return;   // operator cancelled
+
+    // Re-check right before writing — another device may have charged (or
+    // otherwise changed) this feeder while the operator was answering the
+    // time prompt.
+    live=await fsLiveFeederStatus(feederName);
+    if(live.status==='charged'){
+      toast('Already Charged — already charged on another device just now.');
+      if((feederStatusMap[feederName]||{}).status!=='charged'){
+        feederStatusMap[feederName]={status:'charged',time:live.time,ts:Date.now()};
+        renderFeederStatus();
+      }
+      return;
+    }
+    dtCloseTimeOverride=t;
+    try{
+      feederStatusMap[feederName]={status:'charged',time:t,ts:Date.now()};
+    } finally { dtCloseTimeOverride=null; }
+    renderFeederStatus();
+    sbPushOneFeedStatus(feederName,{status:'charged',time:t,ts:Date.now()});
+    const msg=`${feederName} Charged at ${t}`;
+    dispatchChargedMsg(feederName,msg);
+  } finally {
+    feederOpLock[feederName]=false;
   }
-  const station=DATA.feeders.find(f=>f.name===feederName)?.station||$('station').value||'';
-  const msg=`${feederName} of ${station} charged at ${t}. Thanks for your patience.`;
-  dispatchChargedMsg(feederName,msg);
 }
 
 async function dispatchChargedMsg(feederName,msg){
@@ -6334,6 +6430,30 @@ async function cloudAlreadyInState(feederNames, targetStatus){
 }
 
 /* ============================================================
+   STATION-WIDE OVERRIDE MUTUAL EXCLUSION
+   System Gone, 33 KV Incomer Failed, 11 KV Incomer Failed, and Trip All each
+   snapshot a station's feeders (whatever they are — Normal, Trip, or
+   Shutdown) right before overriding them, then restore that exact snapshot
+   later. That only works if ONE such override is active per station at a
+   time: if a second one were applied on top, it would snapshot the FIRST
+   override's status (e.g. 'system-gone') instead of the true original
+   (e.g. 'trip'), and restoring the second would wrongly hand the feeder back
+   as if nothing had happened before it — losing the original Trip/Shutdown
+   the operator needs to see again once everything clears.
+   So: whichever of these four is applied first "wins" the station until it
+   is restored; the others are blocked (with a clear message telling the
+   operator which one to restore first) rather than silently corrupting the
+   snapshot chain.
+   ============================================================ */
+function stationOverrideActiveLabel(st, exclude){
+  if(exclude!=='system-gone'    && isSystemGoneActive(st))    return FS_BADGE['system-gone'].label;
+  if(exclude!=='kv33'           && isKv33Active(st))          return FS_BADGE['kv33'].label;
+  if(exclude!=='incomer-failed' && isIncomerFailedActive(st)) return FS_BADGE['incomer-failed'].label;
+  if(exclude!=='tripall'        && isTripAllActive(st))       return 'Trip All';
+  return '';
+}
+
+/* ============================================================
    SYSTEM GONE  (GLOBAL — affects ALL feeders of ALL substations)
    One banner at top of the panel. Restore reverts every feeder to its
    pre-outage state and sends ONE "System restored at hh:mm" message.
@@ -6347,11 +6467,23 @@ async function applySystemGone(t, stations){
   // Omitted/empty → ALL substations (original behavior).
   const allStations=[...new Set(DATA.feeders.map(f=>f.station))];
   let targets=(stations&&stations.length)?stations.slice():allStations.slice();
-  // Skip stations already in System Gone (cannot re-enter until restored)
-  const skipped=targets.filter(st=>isSystemGoneActive(st));
-  targets=targets.filter(st=>!isSystemGoneActive(st));
-  if(skipped.length && !targets.length){ toast('⚠ System Gone already active for the selected substation(s) — restore first.',3500); return; }
-  if(skipped.length) toast('Already System Gone (skipped): '+skipped.join(', '),3000);
+  // Skip stations already in System Gone (cannot re-enter until restored),
+  // and stations where a DIFFERENT station-wide override (33 KV / 11 KV
+  // Incomer Failed, Trip All) is active — that one must be restored first so
+  // its snapshot chain stays clean (see STATION-WIDE OVERRIDE MUTUAL EXCLUSION above).
+  const blockedInfo={};
+  targets.forEach(st=>{ const lbl=stationOverrideActiveLabel(st,'system-gone'); if(lbl) blockedInfo[st]=lbl; });
+  const skipped=Object.keys(blockedInfo);
+  targets=targets.filter(st=>!blockedInfo[st]);
+  if(skipped.length && !targets.length){
+    const detail=skipped.map(st=>`${st} (${blockedInfo[st]})`).join(', ');
+    toast('⚠ Already under another override — restore first: '+detail,4000);
+    return;
+  }
+  if(skipped.length){
+    const detail=skipped.map(st=>`${st} (${blockedInfo[st]})`).join(', ');
+    toast('Skipped (restore first): '+detail,3500);
+  }
   const time=t||nowHM();
   const affected=[];   // feeder names across all target stations
 
@@ -6423,9 +6555,12 @@ async function restoreSystemGoneFor(st, presetTime, suppressMsg){
     });
   } finally { dtCloseTimeOverride=null; }
   renderFeederStatus();
-  for(const name of stFeeders){ await sbPushOneFeedStatus(name,feederStatusMap[name]); }
+  const failedPush = await pushFeederStatusBatch(stFeeders);
 
-  if(suppressMsg) return;   // caller (e.g. restoreAllSystemGone) sends ONE combined message instead
+  if(suppressMsg){
+    if(failedPush.length) toast('⚠ '+failedPush.length+' feeder(s) did not sync to cloud: '+failedPush.join(', ')+'. They may still show as System Gone on other devices — reopen the substation to retry.',7000);
+    return;   // caller (e.g. restoreAllSystemGone) sends ONE combined message instead
+  }
 
   if(!anyStillGoneInCloud){
     toast('✅ System already restored by another user — feeders reverted, no duplicate message.',3000);
@@ -6433,7 +6568,11 @@ async function restoreSystemGoneFor(st, presetTime, suppressMsg){
   }
   const msg=`System of ${st} restored at ${t}`;
   dispatchBulkMsg(msg,'System Restored',st);
-  toast(`✅ System Restored — ${st} feeders reverted and notice sent.`,3500);
+  if(failedPush.length){
+    toast('⚠ System Restored — notice sent, but '+failedPush.length+' feeder(s) did not sync to cloud: '+failedPush.join(', ')+'. They may still show as System Gone on other devices — reopen the substation to retry.',7000);
+  } else {
+    toast(`✅ System Restored — ${st} feeders reverted and notice sent.`,3500);
+  }
   } finally { delete outageOpLock[st]; }
 }
 // Legacy alias (older banner markup / stray calls)
@@ -6490,6 +6629,8 @@ async function applyKv33Failed(t){
   const st=$('station').value;
   if(!st){ toast('Select a substation first'); return; }
   if(isKv33Active(st)){ toast('33 KV Incomer Failed already active for this substation — restore first.'); return; }
+  const blockedBy=stationOverrideActiveLabel(st,'kv33');
+  if(blockedBy){ toast(`⚠ ${blockedBy} is active for this substation — restore it first before 33 KV Incomer Failed.`,3500); return; }
   if(outageOpLock[st]){ toast('An outage operation is already in progress for this substation — please wait'); return; }
   outageOpLock[st]=true;
   try{
@@ -6544,11 +6685,15 @@ async function restoreKv33Failed(st){
     });
   } finally { dtCloseTimeOverride=null; }
   renderFeederStatus();
-  for(const name of all){ await sbPushOneFeedStatus(name,feederStatusMap[name]); }
+  const failedPush = await pushFeederStatusBatch(all);
 
   const msg=`33 KV Incomer of ${st} Restored at ${t}`;
   dispatchBulkMsg(msg,'33KV Incomer Restored',st);
-  toast('✅ 33 KV Incomer Restored — '+st+' feeders reverted and notice sent.',3000);
+  if(failedPush.length){
+    toast('⚠ 33 KV Incomer Restored — notice sent, but '+failedPush.length+' feeder(s) did not sync to cloud: '+failedPush.join(', ')+'. They may still show as 33 KV Incomer Failed on other devices — reopen the substation to retry.',7000);
+  } else {
+    toast('✅ 33 KV Incomer Restored — '+st+' feeders reverted and notice sent.',3000);
+  }
   } finally { delete outageOpLock[st]; }
 }
 
@@ -6576,6 +6721,8 @@ async function applyIncomerFailed(t){
   const st=$('station').value;
   if(!st){ toast('Select a substation first'); return; }
   if(isIncomerFailedActive(st)){ toast('11 KV Incomer Failed already active for this substation'); return; }
+  const blockedBy=stationOverrideActiveLabel(st,'incomer-failed');
+  if(blockedBy){ toast(`⚠ ${blockedBy} is active for this substation — restore it first before 11 KV Incomer Failed.`,3500); return; }
   if(outageOpLock[st]){ toast('An outage operation is already in progress for this substation — please wait'); return; }
   outageOpLock[st]=true;
   try{
@@ -6647,7 +6794,7 @@ async function restoreFromIncomerFailed(){
     });
   } finally { dtCloseTimeOverride=null; }
   renderFeederStatus();
-  for(const name of all){ await sbPushOneFeedStatus(name,feederStatusMap[name]); }
+  const failedPush = await pushFeederStatusBatch(all);
 
   if(!anyStillFailedInCloud){
     toast('✅ 11 KV Incomer already restored by another user — feeders reverted, no duplicate message.',3000);
@@ -6655,7 +6802,11 @@ async function restoreFromIncomerFailed(){
   }
   const msg=`11 KV Incomer of ${st} Restored at ${t}`;
   dispatchBulkMsg(msg,'11KV Incomer Restored',st);
-  toast('✅ 11 KV Incomer Restored — substation feeders reverted and notice sent.',3000);
+  if(failedPush.length){
+    toast('⚠ 11 KV Incomer Restored — notice sent, but '+failedPush.length+' feeder(s) did not sync to cloud: '+failedPush.join(', ')+'. They may still show as 11 KV Incomer Failed on other devices — reopen the substation to retry.',7000);
+  } else {
+    toast('✅ 11 KV Incomer Restored — substation feeders reverted and notice sent.',3000);
+  }
   } finally { delete outageOpLock[st]; }
 }
 
@@ -7112,7 +7263,7 @@ create policy "anon_update_tfx_docs" on storage.objects for update to anon
 create policy "anon_delete_tfx_docs" on storage.objects for delete to anon
   using (bucket_id = 'transformer-docs');
 
--- ── Seed default entry password (SHA-256 of 'Peace') ─────────────
+-- ── Seed default entry password (matches ENTRY_HASH_FALLBACK in the app) ──
 insert into app_config (key, value, updated_at)
 values ('app_password', '9faf7e5a6d8c908b34cd8f48def377b9716a63e8df1bdcdff75a70e0334dd84a', now())
 on conflict (key) do nothing;
@@ -7252,6 +7403,20 @@ async function sbSelfTestFeederWrite(){
   }
 }
 
+// Topbar "⏸ SYNC OFF" badge → resume sync directly, without opening the
+// full Settings page. Settings itself stays password-gated (see
+// openSettings()); this bypass is intentionally scoped to ONLY the resume
+// action — most useful for Monitor-mode users, who have no other way to
+// clear a stuck fresh-device sync pause and can never open Settings at all.
+// It must never be a doorway into the rest of Settings (Device Access
+// approval in particular), which is why it calls toggleSupabaseConn()
+// directly instead of showPage('settings').
+function quickResumeSyncFromBadge(){
+  if(!supabasePaused) return;
+  if(!confirm('Resume Supabase sync for this device?')) return;
+  toggleSupabaseConn();
+}
+
 function toggleSupabaseConn(){
   supabasePaused = !supabasePaused;
   // (pause state is session-only — not persisted to localStorage)
@@ -7329,6 +7494,16 @@ function updateSbConnUI(){
    actual sending but still log the action locally.
    ────────────────────────────────────────────────────────── */
 let receiversMuted = (localStorage.getItem('sms2_rcv_muted') === '1');
+
+// Topbar "🔕 MUTED" badge → unmute directly, without opening the full
+// Settings page. See quickResumeSyncFromBadge() above for why this must
+// stay scoped to just the one action instead of routing through
+// showPage('settings').
+function quickUnmuteFromBadge(){
+  if(!receiversMuted) return;
+  if(!confirm('Unmute all receivers? Messages will start sending again.')) return;
+  toggleReceiverMute();
+}
 
 function toggleReceiverMute(){
   receiversMuted = !receiversMuted;
@@ -7558,7 +7733,7 @@ async function sbPushOneFeedStatus(name, info){
     if(rowsUpdated){
       noteLocalFeederWrite(name, nowIso);
       console.log('[SB] ✓ PATCH updated row for', name);
-      return;
+      return true;
     }
 
     // Step 2: Row doesn't exist yet — INSERT
@@ -7571,7 +7746,7 @@ async function sbPushOneFeedStatus(name, info){
     if(postRes.ok){
       noteLocalFeederWrite(name, nowIso);
       console.log('[SB] ✓ INSERT ok for', name);
-      return;
+      return true;
     }
     // Step 3: INSERT got duplicate key (another device inserted between our PATCH and POST) — PATCH again
     const postBody = await postRes.text().catch(()=>'');
@@ -7583,14 +7758,37 @@ async function sbPushOneFeedStatus(name, info){
           headers:{...sbHeaders(), 'Prefer':'return=minimal'},
           body: JSON.stringify({station, status:info.status, time_label:info.time||'', updated_at:nowIso}) }
       );
-      if(r2.ok){ noteLocalFeederWrite(name, nowIso); console.log('[SB] ✓ retry PATCH ok for', name); return; }
+      if(r2.ok){ noteLocalFeederWrite(name, nowIso); console.log('[SB] ✓ retry PATCH ok for', name); return true; }
     }
     throw new Error('INSERT failed ('+postRes.status+') '+postBody);
   }catch(e){
     console.error('[SB] ✗ push failed for', name, e.message);
     feederPushFailures++;
     flagFeederSyncProblem(e.message);
+    return false;
   }
+}
+
+// Push a batch of feeder statuses (used by the group-restore flows: 33 KV
+// Incomer, 11 KV Incomer, System Gone). sbPushOneFeedStatus swallows its own
+// errors internally (so one bad row never aborts the loop for the rest), but
+// that previously meant a single feeder could silently fail to reach the
+// cloud while the operator still saw a plain "✅ Restored" success toast —
+// the exact scenario that leaves OTHER devices' banner stuck (see
+// reconcileOutageStateFromMap, which by design keeps a group banner active
+// until every feeder in it lands cleanly on normal/charged). This helper
+// retries any failures once, then reports which feeder(s) are still
+// unsynced so the caller can warn the operator instead of overstating
+// success.
+async function pushFeederStatusBatch(names){
+  let pending = names.slice();
+  let failed  = [];
+  for(let attempt=0; attempt<2 && pending.length; attempt++){
+    const results = await Promise.all(pending.map(name=>sbPushOneFeedStatus(name, feederStatusMap[name])));
+    failed  = pending.filter((name,i)=>results[i]!==true);
+    pending = failed;
+  }
+  return failed; // names still unsynced after the retry, if any
 }
 
 // Track + surface feeder-status push failures (so a broken table doesn't fail silently)
@@ -8059,7 +8257,7 @@ function recordLog(type, recipients, status){
    • If the device_registry table doesn't exist yet (setup SQL not
      run), the gate stays open — legacy behavior — so nothing bricks.
    ============================================================ */
-const APP_VERSION = 'v14.3';   // ← bump this on every released file update
+const APP_VERSION = 'v14.5';   // ← bump this on every released file update
 
 function getDeviceCode(){
   let c = localStorage.getItem('nea_device_code');
@@ -8741,7 +8939,8 @@ try{
 
 const TFX_KEYS = {
   INSPECTIONS: 'nea_tfx_inspections_v1',
-  BURNT      : 'nea_tfx_burnt_v1'
+  BURNT      : 'nea_tfx_burnt_v1',
+  LETTERS    : 'nea_tfx_letters_v1'
 };
 
 function tfxLoad(key, fallback){
@@ -8754,12 +8953,14 @@ function tfxSave(key, data){
 
 const TFX_DB = {
   inspections: tfxLoad(TFX_KEYS.INSPECTIONS, []),
-  burnt      : tfxLoad(TFX_KEYS.BURNT, [])
+  burnt      : tfxLoad(TFX_KEYS.BURNT, []),
+  letters    : tfxLoad(TFX_KEYS.LETTERS, [])
 };
 
 function tfxPersist(which){
   if(which==='inspections') tfxSave(TFX_KEYS.INSPECTIONS, TFX_DB.inspections);
   if(which==='burnt')       tfxSave(TFX_KEYS.BURNT,       TFX_DB.burnt);
+  if(which==='letters')     tfxSave(TFX_KEYS.LETTERS,     TFX_DB.letters);
 }
 
 function tfxUid(prefix){
@@ -8773,6 +8974,122 @@ function tfxEscapeHtml(s){
 
 // Toast: reuse the existing app-wide toast() function
 function tfxToast(msg){ try{ toast(msg); }catch(e){ /* no-op */ } }
+
+/* ============================================================
+   पत्र सेटिङ — Letter Settings
+   • चालू आ.व. (current fiscal year, BS) → auto-fills प.सं. (patra
+     sankhya) on every new letter as "२०८३/८४" style Devanagari text.
+   • चालू मिति (today's BS date) → auto-fills मिति on every new
+     letter, and advances by one BS day every real calendar day.
+     Kept correct across BS month/year-end using a lookup table for
+     the years around now; if that table is ever missing a year
+     (far future), the user just re-types today's date once and the
+     app resumes auto-incrementing from that corrected date.
+   All of this lives only inside the transformer-letter module and
+   does not touch the rest of the app's data or sync.
+   ============================================================ */
+const TFX_SETTINGS_KEY = 'nea_tfx_letter_settings_v1';
+const TFX_DEV_DIGITS = ['०','१','२','३','४','५','६','७','८','९'];
+function tfxToDevanagariDigits(n){
+  return String(n).replace(/[0-9]/g, d => TFX_DEV_DIGITS[+d]);
+}
+function tfxFromDevanagariDigits(s){
+  const map = {'०':'0','१':'1','२':'2','३':'3','४':'4','५':'5','६':'6','७':'7','८':'8','९':'9'};
+  return String(s||'').replace(/[०-९]/g, d => map[d]!==undefined ? map[d] : d);
+}
+
+// Days-per-month (Baisakh..Chaitra) for each BS year. Covers the years
+// around the present; add more rows here in future years if needed —
+// everything else (fiscal year default, auto-advance) keeps working via
+// the manual-correction fallback even for years outside this table.
+const TFX_BS_CALENDAR = {
+  2079:[31,31,32,32,31,30,30,29,30,29,30,30],
+  2080:[31,32,31,32,31,30,30,29,30,29,30,31],
+  2081:[30,32,31,32,31,30,30,30,29,30,29,31],
+  2082:[31,31,32,31,31,31,30,29,30,29,30,30],
+  2083:[31,32,31,32,31,30,30,29,30,29,30,30],
+  2084:[31,31,32,31,31,31,29,30,29,30,29,31],
+  2085:[31,32,31,32,30,31,30,29,30,29,30,30],
+  2086:[31,31,32,32,31,30,30,29,30,29,30,30],
+  2087:[31,32,31,32,31,30,30,29,30,29,30,31],
+  2088:[30,32,31,32,31,31,29,30,29,30,29,31],
+  2089:[31,31,32,31,31,31,30,29,30,29,30,30],
+  2090:[31,32,31,32,31,30,30,29,30,29,30,30]
+};
+const TFX_BS_MONTH_NAMES = ['बैशाख','जेठ','असार','साउन','भदौ','असोज','कार्तिक','मंसिर','पुष','माघ','फागुन','चैत'];
+
+// Adds `n` BS-calendar days to a {y,m,d} object, rolling over months/years
+// using TFX_BS_CALENDAR. Falls back to a flat 30-day month for any year not
+// in the table (rare — only matters many years from now, and self-corrects
+// the moment the user re-enters today's date).
+function tfxBsAddDays(y, m, d, n){
+  for(let i=0;i<n;i++){
+    const dim = (TFX_BS_CALENDAR[y] && TFX_BS_CALENDAR[y][m-1]) ? TFX_BS_CALENDAR[y][m-1] : 30;
+    d++;
+    if(d > dim){ d = 1; m++; if(m>12){ m=1; y++; } }
+  }
+  return {y,m,d};
+}
+// Parses "२०८३-०४-०५" / "2083-04-05" / "२०८३/४/५" style text into {y,m,d}.
+function tfxParseBsDate(str){
+  const s = tfxFromDevanagariDigits(str||'').trim();
+  const m = s.match(/(\d{4})[\-\/.](\d{1,2})[\-\/.](\d{1,2})/);
+  if(!m) return null;
+  return { y:+m[1], m:+m[2], d:+m[3] };
+}
+function tfxFormatBsDate(y,m,d){
+  const pad = n => tfxToDevanagariDigits(String(n).padStart(2,'0'));
+  return `${tfxToDevanagariDigits(y)}-${pad(m)}-${pad(d)}`;
+}
+
+function tfxDefaultLetterSettings(){
+  // Seed defaults matching the fiscal year / date the office is currently on.
+  return {
+    fiscalYearStart: 2083,     // आ.व. शुरु (BS) — प.सं. shows this as "२०८३/८४"
+    bsAnchorY: 2083, bsAnchorM: 4, bsAnchorD: 5,     // last known-correct BS date
+    adAnchorMs: (function(){ const d=new Date(); d.setHours(0,0,0,0); return d.getTime(); })(), // real date that BS date corresponds to
+    autoDate: true,             // if false, मिति is never auto-filled/advanced
+    bodyOverrides: {}           // { [templateId]: 'custom body text with {{key}} placeholders' }
+  };
+}
+function tfxLoadLetterSettings(){
+  const s = tfxLoad(TFX_SETTINGS_KEY, null);
+  if(!s) return tfxDefaultLetterSettings();
+  const d = tfxDefaultLetterSettings();
+  return Object.assign(d, s, { bodyOverrides: Object.assign({}, s.bodyOverrides||{}) });
+}
+let TFX_LETTER_SETTINGS = tfxLoadLetterSettings();
+function tfxSaveLetterSettings(){
+  tfxSave(TFX_SETTINGS_KEY, TFX_LETTER_SETTINGS);
+}
+
+// Current प.सं. text derived from the fiscal year setting, e.g. "२०८३/८४".
+function tfxCurrentPatraSankhya(){
+  const fy = TFX_LETTER_SETTINGS.fiscalYearStart;
+  const next2 = String((fy+1)).slice(-2);
+  return `${tfxToDevanagariDigits(fy)}/${tfxToDevanagariDigits(next2)}`;
+}
+// Today's BS date text, advanced from the stored anchor by however many real
+// calendar days have passed since it was set/confirmed.
+function tfxCurrentBsMitiObj(){
+  const s = TFX_LETTER_SETTINGS;
+  const today0 = new Date(); today0.setHours(0,0,0,0);
+  const daysPassed = Math.round((today0.getTime() - s.adAnchorMs) / 86400000);
+  if(daysPassed <= 0) return {y:s.bsAnchorY, m:s.bsAnchorM, d:s.bsAnchorD};
+  return tfxBsAddDays(s.bsAnchorY, s.bsAnchorM, s.bsAnchorD, daysPassed);
+}
+function tfxCurrentBsMitiText(){
+  const o = tfxCurrentBsMitiObj();
+  return tfxFormatBsDate(o.y, o.m, o.d);
+}
+// Called whenever the user confirms/corrects today's date in Settings —
+// re-anchors so future auto-advance counts forward from this exact date.
+function tfxSetTodayBsDate(y,m,d){
+  TFX_LETTER_SETTINGS.bsAnchorY = y; TFX_LETTER_SETTINGS.bsAnchorM = m; TFX_LETTER_SETTINGS.bsAnchorD = d;
+  const t = new Date(); t.setHours(0,0,0,0);
+  TFX_LETTER_SETTINGS.adAnchorMs = t.getTime();
+  tfxSaveLetterSettings();
+}
 
 // -------------------------- Blank record templates ------------------
 function tfxBlankInspection(){
@@ -9612,6 +9929,7 @@ function tfxRenderSavedList(){
           <button class="tfx-btn tfx-small tfx-secondary" onclick="tfxLoadInspection('${d.id}')">खोल्नुहोस्</button>
           <button class="tfx-btn tfx-small tfx-ghost" onclick="tfxDownloadWordById('${d.id}')">Word</button>
           <button class="tfx-btn tfx-small tfx-ghost" onclick="tfxPrintInspectionById('${d.id}')">🖨 Print</button>
+          <button class="tfx-btn tfx-small tfx-ghost" onclick="tfxWriteLetterFromInspection('${d.id}')" title="यो रेकर्डबाट पत्र लेख्नुहोस्">✉ पत्र</button>
           <button class="tfx-btn tfx-small tfx-danger" onclick="tfxDeleteInspection('${d.id}')">मेट्नुहोस्</button>
         </td>
       </tr>`).join('')}
@@ -9628,8 +9946,47 @@ function tfxLoadInspection(id){
   tfxToast('फारम लोड भयो');
   $('tfxFormRoot').scrollIntoView({behavior:'smooth'});
 }
-function tfxDeleteInspection(id){
-  if(!confirm('यो फारम मेट्न पक्का हुनुहुन्छ? (जलेको रेकर्ड चाहिं यथावत् रहन्छ)')) return;
+// -------------------------- Password-gated delete ------------------
+// Transformer records (inspection forms + जलेको रेकर्ड) are official field
+// documents. Deleting one now requires the same Settings password that
+// gates the rest of the app's admin actions, instead of a plain confirm()
+// that anyone with the page open could click through.
+async function tfxConfirmDeletePassword(title, question){
+  if(cachedSettingsHash==null){ try{ await fetchPasswordHashes(); }catch(e){} }
+  if(!settingsPwExists){
+    tfxToast('⚠ Settings पासवर्ड अझै सेट गरिएको छैन — पहिले ⚙ Settings बाट सेट गर्नुहोस्, त्यसपछि रेकर्ड मेट्न मिल्छ।', 5000);
+    return false;
+  }
+  return new Promise(resolve=>{
+    tfxOpenModal(`
+      <h3>🔒 ${tfxEscapeHtml(title)}</h3>
+      <p style="font-size:12.5px;color:#5a6178;margin:0 0 12px;">${tfxEscapeHtml(question)} मेट्नु अघि Settings पासवर्ड प्रविष्ट गर्नुहोस्।</p>
+      <div class="tfx-field"><label>Settings पासवर्ड</label><input type="password" id="tfxDelPwInput" autocomplete="off"></div>
+      <p id="tfxDelPwError" style="color:#c0392b;font-size:12px;min-height:16px;margin:4px 0 0;"></p>
+      <div class="tfx-modal-close-row">
+        <button class="tfx-btn tfx-ghost" id="tfxDelPwCancel">रद्द गर्नुहोस्</button>
+        <button class="tfx-btn tfx-danger" id="tfxDelPwConfirm">मेट्नुहोस्</button>
+      </div>
+    `);
+    const input = $('tfxDelPwInput'), err = $('tfxDelPwError');
+    if(input) input.focus();
+    const finish = (result)=>{ tfxCloseModal(); resolve(result); };
+    $('tfxDelPwCancel').onclick = ()=>finish(false);
+    const attempt = async ()=>{
+      const val = input.value;
+      if(!val){ err.textContent='पासवर्ड प्रविष्ट गर्नुहोस्।'; return; }
+      const hash = await sha256(val);
+      if(hash===cachedSettingsHash){ finish(true); }
+      else { err.textContent='गलत पासवर्ड।'; input.value=''; input.focus(); }
+    };
+    $('tfxDelPwConfirm').onclick = attempt;
+    input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); attempt(); } });
+  });
+}
+
+async function tfxDeleteInspection(id){
+  const ok = await tfxConfirmDeletePassword('निरीक्षण फारम मेट्नुहोस्', 'यो फारम मेट्न पक्का हुनुहुन्छ? (जलेको रेकर्ड चाहिं यथावत् रहन्छ)');
+  if(!ok) return;
   TFX_DB.inspections = TFX_DB.inspections.filter(x=>x.id!==id);
   tfxPersist('inspections');
   tfxMarkInspDirty(id);   // dirty even after local delete → sends tombstone
@@ -10016,6 +10373,7 @@ function tfxRenderBurntTable(){
           <td>${tfxEscapeHtml(r.cause)}</td>
           <td>
             <button class="tfx-btn tfx-small tfx-secondary" onclick="tfxOpenBurntModal('${r.id}')">सम्पादन</button>
+            <button class="tfx-btn tfx-small tfx-ghost" onclick="tfxWriteLetterFromBurnt('${r.id}')" title="यो रेकर्डबाट पत्र लेख्नुहोस्">✉ पत्र</button>
             <button class="tfx-btn tfx-small tfx-danger" onclick="tfxDeleteBurntRecord('${r.id}')">मेट्नुहोस्</button>
           </td>
         </tr>`).join('')}
@@ -10031,6 +10389,143 @@ function tfxOpenModal(innerHtml){
   });
 }
 function tfxCloseModal(){ $('tfxModalRoot').innerHTML = ''; }
+
+/* ============================================================
+   पत्र सेटिङ मोडल — fiscal year + today's BS date + body-format editor
+   ============================================================ */
+function tfxOpenLetterSettings(){
+  const s = TFX_LETTER_SETTINGS;
+  const liveMiti = tfxCurrentBsMitiText();
+  tfxOpenModal(`
+    <div class="tfx-modal-box-wide">
+    <h3>⚙️ पत्र सेटिङ</h3>
+    <p style="font-size:12px;color:#5a6178;margin:0 0 14px;">यहाँको सेटिङ अनुसार हरेक नयाँ पत्रमा प.सं. र मिति स्वतः भरिन्छ। मिति हरेक दिन आफै एक-एक दिन बढ्दै जान्छ।</p>
+
+    <div class="tfx-field">
+      <label>चालू आ.व. शुरु वर्ष (BS) — प.सं. मा देखिने गरी</label>
+      <input type="text" id="tfxSet_fy" value="${tfxEscapeHtml(String(s.fiscalYearStart))}" placeholder="2083" inputmode="numeric">
+      <p class="tfx-hint">उदाहरण: <b>2083</b> लेख्दा प.सं. मा <b>${tfxEscapeHtml(tfxCurrentPatraSankhya())}</b> यसरी देखिन्छ। साउन १ गते आ.व. फेरिँदा यहाँ अद्यावधिक गर्नुहोस्।</p>
+    </div>
+
+    <hr class="tfx-divider">
+
+    <div class="tfx-field">
+      <label>आजको मिति (BS)</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="tfxSet_miti" value="${tfxEscapeHtml(liveMiti)}" placeholder="२०८३-०४-०५" style="max-width:180px;">
+        <button type="button" class="tfx-btn tfx-small" onclick="tfxConfirmTodayMiti()">✓ आजको मिति यही हो</button>
+      </div>
+      <p class="tfx-hint">यो मिति अहिले <b>${tfxEscapeHtml(liveMiti)}</b> देखाइरहेको छ, र भोलिदेखि आफै <b>१</b> गते-गते बढ्नेछ। महिना/वर्ष सकिँदा वा मिति नमिलेमा यहाँ सहि मिति टाइप गरी माथिको बटन थिच्नुहोस् — त्यसपछि यहीँबाट फेरि आफै बढ्न थाल्छ।</p>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-weight:500;">
+        <input type="checkbox" id="tfxSet_autoDate" style="width:auto;" ${s.autoDate?'checked':''}> नयाँ पत्रमा प.सं./मिति स्वतः भर्ने
+      </label>
+    </div>
+
+    <hr class="tfx-divider">
+
+    <div class="tfx-field">
+      <label>पत्रको मुख्य भाग (Body) ढाँचा सम्पादन</label>
+      <p class="tfx-hint" style="margin-bottom:8px;">कुनै पत्र ढाँचाको Body लाई सधैका लागि आफ्नै शैलीमा बदल्न चाहानुहुन्छ भने तल छान्नुहोस्।</p>
+      <select id="tfxSet_bodyTplPick">
+        <option value="">— ढाँचा छान्नुहोस् —</option>
+        ${TFX_LETTER_TEMPLATES.map(t=>`<option value="${t.id}">${tfxEscapeHtml(t.title)}${TFX_LETTER_SETTINGS.bodyOverrides[t.id]?' (सम्पादन गरिएको)':''}</option>`).join('')}
+      </select>
+      <button type="button" class="tfx-btn tfx-secondary tfx-small" style="margin-top:8px;" onclick="tfxOpenBodyFormatEditor()">✏️ छानिएको ढाँचाको Body सम्पादन गर्नुहोस्</button>
+    </div>
+
+    <div class="tfx-modal-close-row">
+      <button class="tfx-btn tfx-ghost" onclick="tfxCloseModal()">बन्द</button>
+      <button class="tfx-btn" onclick="tfxSaveLetterSettingsFromModal()">✓ सेटिङ सेभ गर्नुहोस्</button>
+    </div>
+    </div>
+  `);
+}
+window.tfxOpenLetterSettings = tfxOpenLetterSettings;
+
+function tfxConfirmTodayMiti(){
+  const raw = $('tfxSet_miti').value;
+  const parsed = tfxParseBsDate(raw);
+  if(!parsed || parsed.m<1 || parsed.m>12 || parsed.d<1 || parsed.d>32){
+    tfxToast('मिति चिन्न सकिएन — २०८३-०४-०५ जस्तो ढाँचामा लेख्नुहोस्');
+    return;
+  }
+  tfxSetTodayBsDate(parsed.y, parsed.m, parsed.d);
+  $('tfxSet_miti').value = tfxCurrentBsMitiText();
+  tfxToast('✓ आजको मिति अद्यावधिक भयो — भोलिदेखि यहीँबाट स्वतः बढ्नेछ');
+}
+window.tfxConfirmTodayMiti = tfxConfirmTodayMiti;
+
+function tfxSaveLetterSettingsFromModal(){
+  const fyRaw = tfxFromDevanagariDigits($('tfxSet_fy').value).trim();
+  const fy = parseInt(fyRaw, 10);
+  if(!fy || fy < 2000 || fy > 2199){
+    tfxToast('आ.व. वर्ष मिलेन — जस्तै: 2083');
+    return;
+  }
+  TFX_LETTER_SETTINGS.fiscalYearStart = fy;
+  TFX_LETTER_SETTINGS.autoDate = !!$('tfxSet_autoDate').checked;
+  // Also commit whatever miti is currently in the box, same as the confirm button,
+  // so pressing "सेटिङ सेभ गर्नुहोस्" alone still saves a manually corrected date.
+  const parsed = tfxParseBsDate($('tfxSet_miti').value);
+  if(parsed) tfxSetTodayBsDate(parsed.y, parsed.m, parsed.d);
+  tfxSaveLetterSettings();
+  tfxCloseModal();
+  tfxToast('✓ पत्र सेटिङ सेभ भयो');
+}
+window.tfxSaveLetterSettingsFromModal = tfxSaveLetterSettingsFromModal;
+
+// ---- Permanent body-format editor for a chosen template ----
+function tfxOpenBodyFormatEditor(){
+  const picker = $('tfxSet_bodyTplPick');
+  const tplId = picker ? picker.value : '';
+  if(!tplId){ tfxToast('पहिले माथिबाट ढाँचा छान्नुहोस्'); return; }
+  const tpl = tfxLetterTemplateById(tplId);
+  if(!tpl) return;
+  const existingOverride = TFX_LETTER_SETTINGS.bodyOverrides[tplId];
+  const sampleVars = {};
+  (tpl.fields||[]).forEach(f=> sampleVars[f.key] = `[${f.label}]`);
+  if(tpl.table) sampleVars[tpl.table.key] = `[${tpl.table.headers.join(' | ')} — तालिका यहाँ देखिनेछ]`;
+  const defaultText = tpl.bodyTemplate(sampleVars);
+  const placeholderList = (tpl.fields||[]).map(f=>`{{${f.key}}} = ${f.label}`).concat(tpl.table?[`{{${tpl.table.key}}} = तपसिल तालिका`]:[]);
+  tfxOpenModal(`
+    <div class="tfx-modal-box-wide">
+    <h3>✏️ Body ढाँचा सम्पादन — ${tfxEscapeHtml(tpl.title)}</h3>
+    <p class="tfx-hint" style="margin-bottom:8px;">यहाँ लेखेको ढाँचा <b>सधैका लागि सेभ</b> हुन्छ र यसपछि यो पत्र ढाँचा प्रयोग गर्दा सधैं यही Body ढाँचा प्रयोग हुनेछ। तलका ठाउँमा उपलब्ध प्लेसहोल्डरहरू राख्न सकिन्छ:</p>
+    <div style="background:#f6f8fc;border:1px solid #d8ddec;border-radius:8px;padding:8px 10px;font-size:11.5px;color:#4a5066;margin-bottom:10px;font-family:'JetBrains Mono',monospace;line-height:1.7;">
+      ${placeholderList.length ? placeholderList.map(p=>tfxEscapeHtml(p)).join('<br>') : '(यो ढाँचामा छुट्टै भर्नुपर्ने फिल्ड छैन)'}
+    </div>
+    <div class="tfx-field">
+      <label>Body ढाँचा</label>
+      <textarea id="tfxSet_bodyOverrideText" rows="10" style="font-family:'Mangal','Kalimati','Noto Sans Devanagari',serif;">${tfxEscapeHtml(existingOverride || defaultText)}</textarea>
+    </div>
+    <div class="tfx-modal-close-row" style="justify-content:space-between;">
+      <button class="tfx-btn tfx-danger tfx-small" onclick="tfxResetBodyFormat('${tplId}')">↺ सामान्य (पूर्वनिर्धारित) मा फर्काउनुहोस्</button>
+      <div style="display:flex;gap:8px;">
+        <button class="tfx-btn tfx-ghost" onclick="tfxOpenLetterSettings()">← फर्कनुहोस्</button>
+        <button class="tfx-btn" onclick="tfxSaveBodyFormat('${tplId}')">✓ सधैंको लागि सेभ गर्नुहोस्</button>
+      </div>
+    </div>
+    </div>
+  `);
+}
+window.tfxOpenBodyFormatEditor = tfxOpenBodyFormatEditor;
+
+function tfxSaveBodyFormat(tplId){
+  const text = $('tfxSet_bodyOverrideText').value;
+  TFX_LETTER_SETTINGS.bodyOverrides[tplId] = text;
+  tfxSaveLetterSettings();
+  tfxToast('✓ यो पत्र ढाँचाको Body सधैंको लागि सेभ भयो');
+  tfxOpenLetterSettings();
+}
+window.tfxSaveBodyFormat = tfxSaveBodyFormat;
+
+function tfxResetBodyFormat(tplId){
+  delete TFX_LETTER_SETTINGS.bodyOverrides[tplId];
+  tfxSaveLetterSettings();
+  tfxToast('✓ पूर्वनिर्धारित Body ढाँचामा फर्काइयो');
+  tfxOpenLetterSettings();
+}
+window.tfxResetBodyFormat = tfxResetBodyFormat;
 
 function tfxOpenBurntModal(id){
   const rec = id ? TFX_DB.burnt.find(x=>x.id===id) : tfxBlankBurntRecord();
@@ -10095,8 +10590,9 @@ function tfxOpenBurntModal(id){
   };
 }
 
-function tfxDeleteBurntRecord(id){
-  if(!confirm('यो रेकर्ड मेट्न पक्का हुनुहुन्छ?')) return;
+async function tfxDeleteBurntRecord(id){
+  const ok = await tfxConfirmDeletePassword('जलेको ट्रान्सफर्मर रेकर्ड मेट्नुहोस्', 'यो रेकर्ड मेट्न पक्का हुनुहुन्छ?');
+  if(!ok) return;
   TFX_DB.burnt = TFX_DB.burnt.filter(x=>x.id!==id);
   // Also break the link from any linked inspection
   const affectedInspIds = [];
@@ -10125,16 +10621,613 @@ function tfxExportBurntCsv(){
   URL.revokeObjectURL(url);
 }
 
+// ===================================================================
+// पत्र लेख्ने — write a letter directly from a saved transformer record
+// Ported from the transformer-record letter feature (v19.html), scoped to
+// ONLY the transformer-tagged (ट्रान्सफर्मर) letter formats — the general
+// letter-writing system (loss reports, HR, procurement, etc.) is not
+// included, on purpose, since this module only ever deals with transformer
+// records. AI-drafting, the recipient directory, and a persisted
+// "sent letters" log from the source app were left out as out-of-scope for
+// this port; everything from the picker through print is included.
+// ===================================================================
+const TFX_KVA_OPTIONS = ['25','50','100','200','250','300','400','500'];
+const TFX_PHASE_OPTIONS = ['R फेज','Y फेज','B फेज','R र Y फेज','Y र B फेज','R र B फेज','R, Y र B फेज (तीनै)'];
+const TFX_RECIPIENT_PRADESHIK = 'श्री लुम्बिनी प्रादेशिक कार्यालय,\nकालिकानगर, बुटवल ।';
+
+const TFX_LETTER_TEMPLATES = [
+  {
+    id:'tpl_transformer_burnt_single',
+    title:'जलेको ट्रान्सफर्मर पठाइएको सम्बन्धमा ।',
+    desc:'एक ठाउँको जलेको ट्रान्सफर्मर मर्मतका लागि पठाउने पत्र।',
+    recipientDefault:TFX_RECIPIENT_PRADESHIK,
+    subjectDefault:'जलेको ट्रान्सफर्मर पठाइएको सम्बन्धमा ।',
+    fields:[
+      {key:'location', label:'जडान भएको स्थान', type:'text', placeholder:'सुध्दोधन, वार्ड नं. ६, नर्खोरिया'},
+      {key:'capacity', label:'क्षमता (KVA)', type:'select', options:TFX_KVA_OPTIONS},
+      {key:'driver', label:'स.चा. (चालक) को नाम', type:'text', placeholder:'Ajay Chaudhary'},
+      {key:'vehicleNo', label:'गाडी नं.', type:'text', placeholder:'B AB 9512'},
+      {key:'make', label:'Transformer Company / Make', type:'text', placeholder:'China'},
+      {key:'serialNo', label:'Serial No.', type:'text', placeholder:'019-101'}
+    ],
+    bodyTemplate:(d)=>`उपरोक्त सम्बन्धमा यस वितरण केन्द्र अन्तर्गत ${d.location||'[स्थान]'} मा जडान रहेको ${d.capacity||'[क्षमता]'} के.भी.ए. क्षमताको ट्रान्सफर्मर जलेको हुँदा उक्त जलेको ट्रान्सफर्मर स.चा. ${d.driver||'[चालक]'} गाडी नं. ${d.vehicleNo||'[गाडी नं.]'} बाट मर्मतको लागि पठाइएको व्यहोरा अनुरोध छ ।\nतपसिल :\nTransformer Company: ${d.make||'[Make]'}\nCapacity: ${d.capacity||'[क्षमता]'} KVA\nSerial No. ${d.serialNo||'[S.No.]'}`,
+    closingDefault:'वितरण केन्द्र प्रमुख'
+  },
+  {
+    id:'tpl_transformer_burnt_and_request',
+    title:'जलेको ट्रान्सफर्मर पठाई सोही स्थानको लागि ट्रान्सफर्मर माग',
+    desc:'एक ठाउँको जलेको ट्रान्सफर्मर मर्मतका लागि पठाई, उक्त स्थानकै लागि सोही क्षमताको ट्रान्सफर्मर उपलब्ध गराइदिने माग एकै पत्रमा गर्ने।',
+    recipientDefault:TFX_RECIPIENT_PRADESHIK,
+    subjectDefault:'जलेको ट्रान्सफर्मर पठाई सोही क्षमताको ट्रान्सफर्मर उपलब्ध गराइदिने सम्बन्धमा ।',
+    fields:[
+      {key:'location', label:'जडान भएको स्थान', type:'text', placeholder:'सुध्दोधन, वार्ड नं. ६, नर्खोरिया'},
+      {key:'capacity', label:'क्षमता (KVA)', type:'select', options:TFX_KVA_OPTIONS},
+      {key:'phaseDetail', label:'फेज विवरण (जलेको)', type:'select', options:TFX_PHASE_OPTIONS},
+      {key:'driver', label:'स.चा. (चालक) को नाम', type:'text', placeholder:'Ajay Chaudhary'},
+      {key:'vehicleNo', label:'गाडी नं.', type:'text', placeholder:'B AB 9512'},
+      {key:'make', label:'Transformer Company / Make', type:'text', placeholder:'China'},
+      {key:'serialNo', label:'Serial No.', type:'text', placeholder:'019-101'}
+    ],
+    bodyTemplate:(d)=>`उपरोक्त सम्बन्धमा यस वितरण केन्द्र अन्तर्गत ${d.location||'[स्थान]'} मा जडान रहेको ${d.capacity||'[क्षमता]'} के.भी.ए. क्षमताको ट्रान्सफर्मरको ${d.phaseDetail||'[फेज विवरण]'} जलेको हुँदा उक्त जलेको ट्रान्सफर्मर स.चा. ${d.driver||'[चालक]'} गाडी नं. ${d.vehicleNo||'[गाडी नं.]'} बाट मर्मतको लागि पठाइएको व्यहोरा अनुरोध छ ।\nसाथै उक्त स्थानको लागि एक (१) थान ${d.capacity||'[क्षमता]'} के.भी.ए. को ट्रान्सफर्मर उपलब्ध गराइदिनु हुन समेत अनुरोध छ ।\nतपसिल :\nTransformer Company: ${d.make||'[Make]'}\nCapacity: ${d.capacity||'[क्षमता]'} KVA\nSerial No. ${d.serialNo||'[S.No.]'}`,
+    closingDefault:'वितरण केन्द्र प्रमुख'
+  },
+  {
+    id:'tpl_transformer_request_only',
+    title:'ट्रान्सफर्मर उपलब्ध गराइदिने माग (मात्र)',
+    desc:'कुनै स्थानको ट्रान्सफर्मरको फेज जलेकोले सोही क्षमताको ट्रान्सफर्मर माग गर्ने छोटो पत्र (ट्रान्सफर्मर नपठाई)।',
+    recipientDefault:TFX_RECIPIENT_PRADESHIK,
+    subjectDefault:'ट्रान्सफर्मर उपलब्ध गराइदिने सम्बन्धमा ।',
+    fields:[
+      {key:'location', label:'जडान भएको स्थान', type:'text', placeholder:'माया देवी गाउँपालिका-०१ पिचुर्खी'},
+      {key:'capacity', label:'क्षमता (KVA)', type:'select', options:TFX_KVA_OPTIONS},
+      {key:'phaseDetail', label:'फेज विवरण (जलेको)', type:'select', options:TFX_PHASE_OPTIONS}
+    ],
+    bodyTemplate:(d)=>`उपरोक्त सम्बन्धमा यस वितरण केन्द्र अन्तर्गत ${d.location||'[स्थान]'} मा जडान भएको ${d.capacity||'[क्षमता]'} के.भी.ए. को ट्रान्सफर्मरको ${d.phaseDetail||'[फेज विवरण]'} जलेको हुँदा उक्त स्थानको लागि एक (१) थान ${d.capacity||'[क्षमता]'} के.भी.ए. को ट्रान्सफर्मर उपलब्ध गराइदिनु हुन अनुरोध छ ।`,
+    closingDefault:'वितरण केन्द्र प्रमुख'
+  },
+  {
+    id:'tpl_damage_report_multi',
+    title:'विपद्/क्षति विवरण (बहु-स्थान) पठाउने पत्र',
+    desc:'हावाहुरी/चट्याङ आदिले धेरै ठाउँमा भएको ट्रान्सफर्मर क्षतिको तालिका सहितको विवरण पठाउने पत्र।',
+    recipientDefault:TFX_RECIPIENT_PRADESHIK,
+    subjectDefault:'क्षति विवरण पठाइएको सम्बन्धमा ।',
+    fields:[
+      {key:'eventDate', label:'घटना मिति', type:'text', placeholder:'२०८२/१२/०६ र ०७'},
+      {key:'causeEvent', label:'कारण (घटना)', type:'text', placeholder:'हावा हुरी तथा चट्याङ'},
+      {key:'requiredTransformers', label:'आवश्यक ट्रान्सफर्मर (संख्या र क्षमता)', type:'text', placeholder:'५० kva को ३ थान र १०० kva को १ थान'}
+    ],
+    table:{ key:'damageTable', headers:['क्र.सं.','क्षति भएको स्थान','क्षतिको विवरण','हालको अवस्था','कैफियत'], sample:['१.','वाणगंगा न.पा-०४ डुंगा','५० kva ट्रान्सफरमर १ फेज जलेको','series मा लाइन चालु',''] },
+    bodyTemplate:(d)=>`उपरोक्त सम्बन्धमा मिति ${d.eventDate||'[मिति]'} गते आएको ${d.causeEvent||'हावा हुरी तथा चट्याङ'} को कारणले भएको क्षति विवरण तपसिल बमोजिम रहेको व्यहोरा जानकारीको लागि अनुरोध छ ।\n\nतपसिल:-\n\n${d.damageTable||'(तपसिल तालिका — स्थान, क्षतिको विवरण, हालको अवस्था)'}\n\nसाथै उपरोक्त स्थान को लागि ${d.requiredTransformers||'[आवश्यक ट्रान्सफर्मर संख्या र क्षमता]'} यथासिघ्र उपलब्ध गराइदिनुहुन अनुरोध छ ।`,
+    closingDefault:'नि. केन्द्र प्रमुख'
+  },
+  {
+    id:'tpl_power_transformer_upgrade',
+    title:'Power Transformer Upgrade सम्बन्धी पत्र',
+    desc:'सबस्टेशनको Power Transformer अर्को सबस्टेशनमा रहेको spare ठूलो क्षमताको Power Transformer ले upgrade गर्न माग गर्ने पत्र।',
+    recipientDefault:TFX_RECIPIENT_PRADESHIK,
+    subjectDefault:'Power Transformer upgrade सम्बन्धमा ।',
+    fields:[
+      {key:'ourSS', label:'आफ्नो सबस्टेशन', type:'text', placeholder:'तौलिहवा सबस्टेशन ३३/११ के.भी.'},
+      {key:'ourCap', label:'हालको Power Transformer क्षमता', type:'text', placeholder:'3 MVA'},
+      {key:'spareSS', label:'Spare रहेको सबस्टेशन / केन्द्र', type:'text', placeholder:'बुटवल वि.के. अन्तर्गत ३३/११ के.भी. सौराहा स/स'},
+      {key:'spareCap', label:'Spare Power Transformer क्षमता', type:'text', placeholder:'6/8 MVA'}
+    ],
+    bodyTemplate:(d)=>`उपरोक्त सम्बन्धमा यस वितरण केन्द्र अन्तर्गत ${d.ourSS||'[सबस्टेशन]'} मा रहेको ${d.ourCap||'[क्षमता]'} को Power Transformer upgrade गर्नु पर्ने भएको र ${d.spareSS||'[Spare सबस्टेशन]'} मा एक थान ${d.spareCap||'[क्षमता]'} को Power Transformer (spare) मौज्दात रहेको बुझिन आएको हुँदा यस वितरण केन्द्र अन्तर्गत ${d.ourSS||'[सबस्टेशन]'} मा रहेको ${d.ourCap||'[क्षमता]'} को Power Transformer upgrade गर्न उक्त ${d.spareCap||'[क्षमता]'} को Power Transformer उपलब्ध गराइदिनु हुन अनुरोध छ ।`,
+    closingDefault:'वितरण केन्द्र प्रमुख'
+  },
+  {
+    id:'tpl_charging_station_transformer',
+    title:'Charging Station का लागि Transformer (जवाफी सूचना)',
+    desc:'प्रादेशिक कार्यालयको माग अनुसार Charging Station निर्माणका लागि ट्रान्सफर्मर माग निवेदन आए/नआएको जानकारी दिने पत्र।',
+    recipientDefault:TFX_RECIPIENT_PRADESHIK,
+    subjectDefault:'Charging Station को लागि आवश्यक Transformer सम्बन्धमा ।',
+    fields:[
+      {key:'requestDate', label:'माग पत्र मिति', type:'text', placeholder:'२०८२-०८-११'},
+      {key:'requestPatra', label:'माग पत्र प.सं.', type:'text', placeholder:'२०८२/०८३'},
+      {key:'requestChalani', label:'माग पत्र च.नं.', type:'text', placeholder:'११४९'},
+      {key:'statusText', label:'अवस्था (निवेदन आए/नआएको)', type:'text', placeholder:'transformer माग गरी निवेदन पर्न नआएको'}
+    ],
+    bodyTemplate:(d)=>`उपरोक्त सम्बन्धमा तहाँ कार्यालयको मिति ${d.requestDate||'[माग मिति]'} को प.सं. ${d.requestPatra||'[प.सं.]'} च.नं. ${d.requestChalani||'[च.नं.]'} बाट माग भए बमोजिम हाल यस वितरण केन्द्र मा Charging Station निर्माण गर्नको लागि ${d.statusText||'transformer माग गरी निवेदन पर्न नआएको'} व्यहोरा जानकारीको लागि अनुरोध छ ।`,
+    closingDefault:'वितरण केन्द्र प्रमुख'
+  },
+  {
+    id:'tpl_burnt_transformer_record',
+    title:'जलेको ट्रान्सफर्मर — वर्षगत विवरण',
+    desc:'वर्षगत रूपमा यस वितरण केन्द्रमा जलेका ट्रान्सफर्मरको क्षमता र संख्या विवरण पठाउने पत्र।',
+    recipientDefault:TFX_RECIPIENT_PRADESHIK,
+    subjectDefault:'विवरण सम्बन्धमा ।',
+    table:{ key:'burntTable', headers:['S.No.','Item Description','UoM','F/y up to 2079/80 Qty','F/y 2080/81 Qty','Remarks'], sample:['1','11/0.4 KV, 100 KVA Transformer','Nos.','5','1',''] },
+    bodyTemplate:(d)=>`उपर्युक्त विषयमा यस वितरण केन्द्रमा तपसिल बमोजिम जलेको ट्रान्सफर्मरको विवरण रहेको व्यहोरा अनुरोध छ ।\n\nतपसिलः\n\n${d.burntTable||'(जलेको ट्रान्सफर्मर तालिका)'}`,
+    closingDefault:'केन्द्र प्रमुख'
+  },
+  {
+    id:'tpl_transformer_maag_list',
+    title:'ट्रान्सफर्मर उपलब्ध गराई दिनुहुन (सूची सहित)',
+    desc:'लाईन विस्तार तथा वितरण कार्यको लागि विभिन्न क्षमताका ट्रान्सफर्मर माग गर्ने पत्र।',
+    recipientDefault:TFX_RECIPIENT_PRADESHIK,
+    subjectDefault:'ट्रान्सफर्मर उपलब्ध गराई दिनुहुन ।',
+    table:{ key:'txTable', headers:['S.No.','Item Description','UoM','Qty','कैफियत'], sample:['1','11/0.4 KV, 100 KVA Transformer','Nos.','8',''] },
+    bodyTemplate:(d)=>`उपर्युक्त विषयमा यस वितरण केन्द्रलाई लाईन विस्तार तथा वितरण कार्यको लागि तपसिल बमोजिमका ट्रान्सफर्मर उपलब्ध गराई दिनु हुन अनुरोध छ ।\n\nतपसिलः\n\n${d.txTable||'(ट्रान्सफर्मर तालिका)'}`,
+    closingDefault:'केन्द्र प्रमुख',
+    bodantha:['ने.वि.प्रा. केन्द्रिय स्टोर हेटौँडा, मकवानपुर ।']
+  },
+  {
+    id:'tpl_transformer_repair_send',
+    title:'ट्रान्सफर्मर मर्मतको लागि पठाइएको',
+    desc:'जलेको तथा विग्रिएको ट्रान्सफर्मर मर्मतका लागि पठाउँदा प्रादेशिक कार्यालयलाई जानकारी दिने पत्र (सिरियल नम्बर सहित)।',
+    recipientDefault:TFX_RECIPIENT_PRADESHIK,
+    subjectDefault:'ट्रान्सफर्मर मर्मत सम्बन्धमा ।',
+    fields:[
+      {key:'vehicleNo', label:'गाडी नं.', type:'text', placeholder:'लु२ख1376'},
+      {key:'driverName', label:'सवारी चालकको नाम', type:'text', placeholder:'गोपाल टण्डन (983174709)'}
+    ],
+    table:{ key:'txRepairTable', headers:['क्र.सं.','क्षमता','सिरियल नं.','कैफियत'], sample:['1','100 Kva','971557',''] },
+    bodyTemplate:(d)=>`उपर्युक्त सम्बन्धमा यस वितरण केन्द्रमा जलेको तथा विग्रिएको अवस्थामा रहेका तपसिल बमोजिमका ट्रान्सफर्मर${d.driverName ? ` स.चा. ${d.driverName} गाडी नं. ${d.vehicleNo||'[गाडी नं.]'} बाट` : ''} मर्मतको लागि पठाइएको व्यहोरा निर्देशानुसार अनुरोध छ ।\n\nतपसिलः\n\n${d.txRepairTable||'(ट्रान्सफर्मर तपसिल तालिका)'}`,
+    closingDefault:'केन्द्र प्रमुख'
+  }
+];
+function tfxLetterTemplateById(id){ return TFX_LETTER_TEMPLATES.find(t=>t.id===id); }
+
+// ---- Bridge: build a prefill object straight from a saved record ----
+function tfxPhaseDetailFromInspection(insp){
+  const burnt = [];
+  ['R','Y','B'].forEach(ph=>{
+    if(insp.lightningArrester && insp.lightningArrester.khati && insp.lightningArrester.khati[ph]) burnt.push(ph);
+  });
+  return burnt.length ? burnt.join(' र ') + ' फेज' : '';
+}
+function tfxWriteLetterFromBurnt(id){
+  const rec = TFX_DB.burnt.find(x=>x.id===id);
+  if(!rec) return;
+  tfxPickLetterTemplate({
+    location: rec.location, capacity: rec.capacity, make: rec.make,
+    serialNo: rec.serialNo, phaseDetail: ''
+  });
+}
+window.tfxWriteLetterFromBurnt = tfxWriteLetterFromBurnt;
+function tfxWriteLetterFromInspection(id){
+  const insp = TFX_DB.inspections.find(x=>x.id===id);
+  if(!insp) return;
+  tfxPickLetterTemplate({
+    location: [insp.gavisNapa, insp.wardNo?('वार्ड नं. '+insp.wardNo):'', insp.tole, insp.sthan].filter(Boolean).join(', ') || insp.jadanSthan,
+    capacity: insp.kva,
+    phaseDetail: tfxPhaseDetailFromInspection(insp),
+    make: insp.manufacturer,
+    serialNo: insp.transformerSN
+  });
+}
+window.tfxWriteLetterFromInspection = tfxWriteLetterFromInspection;
+
+// Ask which ट्रान्सफर्मर letter to write, then jump to the editor pre-filled
+// with whatever the source record (burnt / inspection) provided.
+function tfxPickLetterTemplate(prefillVars){
+  tfxOpenModal(`
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+      <h3 style="margin-bottom:2px;">✉️ कुन पत्र लेख्ने हो छान्नुहोस्</h3>
+      <button type="button" class="tfx-btn tfx-ghost tfx-small" style="flex:none;white-space:nowrap;" onclick="tfxOpenLetterSettings()">⚙️ पत्र सेटिङ</button>
+    </div>
+    <p style="font-size:12.5px;color:#5a6178;margin:0 0 12px;">ट्रान्सफर्मर सम्बन्धी उपलब्ध ढाँचाहरुमध्ये एक छान्नुहोस् — रेकर्डबाट भरिएको विवरण सम्भव भएसम्म स्वतः सर्नेछ। प.सं. र मिति हाल सेटिङ अनुसार <b>${tfxEscapeHtml(tfxCurrentPatraSankhya())}</b> / <b>${tfxEscapeHtml(tfxCurrentBsMitiText())}</b> स्वतः भरिनेछ।</p>
+    <div style="display:flex;flex-direction:column;gap:8px;max-height:56vh;overflow-y:auto;">
+      ${TFX_LETTER_TEMPLATES.map(t=>`
+        <div class="tfx-letter-card" data-tplid="${t.id}" style="border:1px solid #d8ddec;border-radius:9px;padding:10px 12px;cursor:pointer;transition:background .15s;">
+          <div style="font-weight:700;font-size:13.5px;color:#082a66;">${tfxEscapeHtml(t.title)}</div>
+          <div style="font-size:12px;color:#5a6178;margin-top:2px;">${tfxEscapeHtml(t.desc)}</div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="tfx-modal-close-row"><button class="tfx-btn tfx-ghost" onclick="tfxCloseModal()">रद्द</button></div>
+  `);
+  document.querySelectorAll('#tfxModalRoot [data-tplid]').forEach(card=>{
+    card.addEventListener('mouseenter', ()=>card.style.background='#eef3ff');
+    card.addEventListener('mouseleave', ()=>card.style.background='');
+    card.addEventListener('click', ()=>{
+      const tplId = card.dataset.tplid;
+      tfxCloseModal();
+      tfxStartLetterFromTemplate(tplId, Object.assign({}, prefillVars));
+    });
+  });
+}
+
+// Fills {{key}} placeholders in a saved custom body-format string using the
+// same vars object the built-in bodyTemplate functions receive.
+function tfxFillBodyOverride(text, vars){
+  return String(text||'').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (m,k)=> (vars && vars[k]!==undefined && vars[k]!=='') ? vars[k] : m);
+}
+// Returns the body text for a template — the user's saved custom format if
+// they've permanently edited this template's body, otherwise the built-in one.
+function tfxBuildLetterBody(tpl, vars){
+  const override = TFX_LETTER_SETTINGS.bodyOverrides[tpl.id];
+  if(override) return tfxFillBodyOverride(override, vars||{});
+  return tpl.bodyTemplate(vars||{});
+}
+
+let tfxActiveLetterDraft = null;
+function tfxStartLetterFromTemplate(tplId, prefillVars){
+  const tpl = tfxLetterTemplateById(tplId);
+  if(!tpl) return;
+  const vars = Object.assign({}, prefillVars||{});
+  tfxActiveLetterDraft = {
+    templateId: tpl.id,
+    templateTitle: tpl.title,
+    recipient: tpl.recipientDefault,
+    subject: tpl.subjectDefault,
+    patraSankhya: TFX_LETTER_SETTINGS.autoDate ? tfxCurrentPatraSankhya() : '',
+    chalaniNo: '',
+    miti: TFX_LETTER_SETTINGS.autoDate ? tfxCurrentBsMitiText() : '',
+    vars: vars,
+    body: tfxBuildLetterBody(tpl, vars),
+    bodantha: tpl.bodantha ? tpl.bodantha.join('\n') : '',
+    closing: tpl.closingDefault || '',
+    signerName: ''
+  };
+  tfxShowView('letter');
+  tfxRenderLetterEditor();
+}
+
+function tfxRebuildLetterBody(){
+  const d = tfxActiveLetterDraft; if(!d) return;
+  const tpl = tfxLetterTemplateById(d.templateId); if(!tpl) return;
+  d.body = tfxBuildLetterBody(tpl, d.vars||{});
+  const el = $('tfxL_body'); if(el) el.value = d.body;
+}
+function tfxOnFillFieldChange(key, value){
+  const d = tfxActiveLetterDraft; if(!d) return;
+  d.vars = d.vars || {};
+  d.vars[key] = value;
+  tfxRebuildLetterBody();
+}
+window.tfxOnFillFieldChange = tfxOnFillFieldChange;
+
+function tfxRenderFillFieldsHtml(tpl, vars){
+  if(!tpl.fields || !tpl.fields.length){
+    return `<p style="font-size:12px;color:#5a6178;">यो ढाँचामा छुट्टै भर्नुपर्ने बक्स छैन — सिधै मुख्य भाग (Body) मा लेख्नुहोस्।</p>`;
+  }
+  return tpl.fields.map(f=>{
+    const val = tfxEscapeHtml(vars[f.key]||'');
+    const fid = 'tfxFV_'+f.key;
+    if(f.type==='select'){
+      const opts = ['<option value="">— छान्नुहोस् —</option>'].concat(
+        (f.options||[]).map(o=>`<option value="${tfxEscapeHtml(o)}" ${vars[f.key]===o?'selected':''}>${tfxEscapeHtml(o)}</option>`)
+      ).join('');
+      return `<div class="tfx-field"><label>${tfxEscapeHtml(f.label)}</label><select id="${fid}">${opts}</select></div>`;
+    }
+    return `<div class="tfx-field"><label>${tfxEscapeHtml(f.label)}</label><input type="text" id="${fid}" value="${val}" placeholder="${tfxEscapeHtml(f.placeholder||'')}"></div>`;
+  }).join('');
+}
+
+// ---- तपसिल table editor (for the 4 templates that need one) ----
+function tfxRenderTableEditorHtml(tableDef, savedRows){
+  const rows = (savedRows && savedRows.length) ? savedRows : [tableDef.sample.slice()];
+  const headHtml = tableDef.headers.map(h=>`<th>${tfxEscapeHtml(h)}</th>`).join('') + '<th></th>';
+  const rowsHtml = rows.map((r,ri)=>{
+    const cells = tableDef.headers.map((h,ci)=>{
+      if(ci===0) return `<td style="text-align:center;color:#5a6178;font-weight:600;">${ri+1}</td>`;
+      return `<td><input type="text" data-r="${ri}" data-c="${ci}" value="${tfxEscapeHtml(r[ci]||'')}"></td>`;
+    }).join('');
+    return `<tr>${cells}<td style="text-align:center;"><button type="button" class="tfx-tbl-rowdel" data-del="${ri}" title="पंक्ति हटाउनुहोस्" style="border:none;background:none;color:#c0392b;font-size:15px;cursor:pointer;">×</button></td></tr>`;
+  }).join('');
+  return `
+    <div id="tfxL_tblContainer" style="margin-top:14px;">
+      <h3 style="font-size:13.5px;margin:0 0 4px;color:#082a66;">📋 तपसिल तालिका</h3>
+      <p style="font-size:11.5px;color:#5a6178;margin:0 0 8px;">पंक्ति भर्नुहोस् — क्र.सं. स्वतः मिल्छ।</p>
+      <div style="overflow-x:auto;">
+        <table id="tfxL_tblEditor" style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr>${headHtml}</tr></thead><tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+      <button type="button" class="tfx-btn tfx-small tfx-ghost" id="tfxL_tblAddRow" style="margin-top:8px;">+ पंक्ति थप्नुहोस्</button>
+    </div>
+  `;
+}
+function tfxCollectTableRows(tableDef){
+  const tbl = $('tfxL_tblEditor'); if(!tbl) return [];
+  const rows = [];
+  tbl.querySelectorAll('tbody tr').forEach((tr,ri)=>{
+    const r = [String(ri+1)];
+    tableDef.headers.slice(1).forEach((h,ci0)=>{
+      const ci = ci0+1;
+      const inp = tr.querySelector(`input[data-c="${ci}"]`);
+      r.push(inp ? inp.value : '');
+    });
+    rows.push(r);
+  });
+  return rows;
+}
+function tfxTableRowsToText(tableDef, rows){
+  const lines = [tableDef.headers.join(' | ')];
+  rows.forEach(r=>lines.push(r.join(' | ')));
+  return lines.join('\n');
+}
+function tfxSyncTableIntoVars(tableDef){
+  const d = tfxActiveLetterDraft; if(!d) return;
+  d.vars = d.vars || {};
+  const rows = tfxCollectTableRows(tableDef);
+  d.vars[tableDef.key+'__rows'] = rows;
+  d.vars[tableDef.key] = tfxTableRowsToText(tableDef, rows);
+  tfxRebuildLetterBody();
+}
+function tfxRenumberTableRows(tbl){
+  tbl.querySelectorAll('tbody tr').forEach((tr,ri)=>{
+    const sn = tr.querySelector('td'); if(sn) sn.textContent = String(ri+1);
+  });
+}
+function tfxWireTableEditor(tableDef){
+  const tbl = $('tfxL_tblEditor'); if(!tbl) return;
+  tbl.addEventListener('input', ()=>tfxSyncTableIntoVars(tableDef));
+  tbl.addEventListener('click', (e)=>{
+    const del = e.target.closest('.tfx-tbl-rowdel');
+    if(del){
+      const tr = del.closest('tr');
+      if(tbl.querySelectorAll('tbody tr').length>1) tr.remove();
+      tfxRenumberTableRows(tbl);
+      tfxSyncTableIntoVars(tableDef);
+    }
+  });
+  const addBtn = $('tfxL_tblAddRow');
+  if(addBtn) addBtn.addEventListener('click', ()=>{
+    const tbody = tbl.querySelector('tbody');
+    const ri = tbody.querySelectorAll('tr').length;
+    const cells = tableDef.headers.map((h,ci)=>{
+      if(ci===0) return `<td style="text-align:center;color:#5a6178;font-weight:600;">${ri+1}</td>`;
+      return `<td><input type="text" data-r="${ri}" data-c="${ci}" value=""></td>`;
+    }).join('');
+    const tr = document.createElement('tr');
+    tr.innerHTML = cells + `<td style="text-align:center;"><button type="button" class="tfx-tbl-rowdel" title="पंक्ति हटाउनुहोस्" style="border:none;background:none;color:#c0392b;font-size:15px;cursor:pointer;">×</button></td>`;
+    tbody.appendChild(tr);
+    tfxSyncTableIntoVars(tableDef);
+  });
+  tfxSyncTableIntoVars(tableDef); // initial sync so body has the table text
+}
+
+function tfxRenderLetterEditor(){
+  const d = tfxActiveLetterDraft;
+  const root = $('tfxLetterRoot');
+  if(!d || !root) return;
+  const tpl = tfxLetterTemplateById(d.templateId) || {};
+  root.innerHTML = `
+    <div class="tfx-card">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <h2 style="margin:0;">✍️ पत्र सम्पादन <span style="font-weight:500;color:#5a6178;font-size:13px;">— ${tfxEscapeHtml(d.templateTitle)}</span></h2>
+        <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="tfx-btn tfx-ghost tfx-small" onclick="tfxOpenLetterSettings()">⚙️ पत्र सेटिङ</button>
+          <button class="tfx-btn tfx-ghost tfx-small" onclick="tfxDiscardLetterDraft()">← रद्द गरी फर्कनुहोस्</button>
+        </div>
+      </div>
+
+      <div class="tfx-letter-2col">
+        <div>
+          <div class="tfx-grid tfx-grid-3">
+            <div class="tfx-field"><label>प.सं.</label><input type="text" id="tfxL_patraSankhya" value="${tfxEscapeHtml(d.patraSankhya)}" placeholder="२०८२/८३"></div>
+            <div class="tfx-field"><label>च.नं.</label><input type="text" id="tfxL_chalaniNo" value="${tfxEscapeHtml(d.chalaniNo)}"></div>
+            <div class="tfx-field"><label>मिति</label><input type="text" id="tfxL_miti" value="${tfxEscapeHtml(d.miti)}" placeholder="२०८२-०३-०८"></div>
+          </div>
+
+          <div class="tfx-field"><label>प्राप्तकर्ता</label><textarea id="tfxL_recipient" rows="2">${tfxEscapeHtml(d.recipient)}</textarea></div>
+          <div class="tfx-field"><label>विषय</label><input type="text" id="tfxL_subject" value="${tfxEscapeHtml(d.subject)}"></div>
+
+          <div class="tfx-field"><label>पत्रको मुख्य भाग (Body)</label>
+            <textarea id="tfxL_body" rows="9" style="font-family:'Mangal','Kalimati','Noto Sans Devanagari',serif;">${tfxEscapeHtml(d.body)}</textarea>
+            <p style="font-size:11px;color:#5a6178;margin:4px 0 0;">दायाँको विवरण भर्दा यो खण्ड स्वतः अद्यावधिक हुन्छ। आवश्यक भए यहाँ हातैले पनि सम्पादन गर्न सकिन्छ।</p>
+          </div>
+
+          <div class="tfx-field"><label>बोधार्थ (वैकल्पिक — हरेक लाइन छुट्टै)</label><textarea id="tfxL_bodantha" rows="2">${tfxEscapeHtml(d.bodantha)}</textarea></div>
+
+          <div class="tfx-grid tfx-grid-2">
+            <div class="tfx-field"><label>दस्तखत गर्ने व्यक्तिको नाम</label><input type="text" id="tfxL_signerName" value="${tfxEscapeHtml(d.signerName)}"></div>
+            <div class="tfx-field"><label>पद</label><input type="text" id="tfxL_closing" value="${tfxEscapeHtml(d.closing)}"></div>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+            <button class="tfx-btn" id="tfxL_printBtn">🖨️ प्रिन्ट / PDF</button>
+          </div>
+        </div>
+
+        <div style="background:#f6f8fc;border:1px solid #d8ddec;border-radius:10px;padding:12px;">
+          <h3 style="font-size:13.5px;margin:0 0 4px;color:#082a66;">📝 भर्नुपर्ने विवरण</h3>
+          <p style="font-size:11.5px;color:#5a6178;margin:0 0 10px;">यहाँ भर्नुहोस् — पत्रको बायाँतिरको खण्ड स्वतः भरिन्छ।</p>
+          <div id="tfxL_fillFields">${tfxRenderFillFieldsHtml(tpl, d.vars||{})}</div>
+          ${tpl.table ? tfxRenderTableEditorHtml(tpl.table, (d.vars||{})[tpl.table.key+'__rows']) : ''}
+        </div>
+      </div>
+    </div>
+    <div id="tfxL_datalists"></div>
+  `;
+  $('tfxL_printBtn').addEventListener('click', ()=>{ tfxSyncLetterDraftFromDOM(); tfxPrintLetter(tfxActiveLetterDraft); });
+  ['tfxL_patraSankhya','tfxL_chalaniNo','tfxL_miti','tfxL_recipient','tfxL_subject','tfxL_bodantha','tfxL_signerName','tfxL_closing'].forEach(id=>{
+    const el = $(id); if(el) el.addEventListener('input', tfxSyncLetterDraftFromDOM);
+  });
+  const bodyEl = $('tfxL_body'); if(bodyEl) bodyEl.addEventListener('input', ()=>{ d.body = bodyEl.value; });
+  (tpl.fields||[]).forEach(f=>{
+    const el = $('tfxFV_'+f.key);
+    if(el){
+      el.addEventListener('input', ()=>tfxOnFillFieldChange(f.key, el.value));
+      el.addEventListener('change', ()=>tfxOnFillFieldChange(f.key, el.value));
+    }
+  });
+  if(tpl.table) tfxWireTableEditor(tpl.table);
+  tfxAttachLetterDatalists(tpl);
+  root.scrollIntoView({behavior:'smooth'});
+}
+
+// Wires "last 10 entries" suggestions onto every letter field (the fixed
+// fields: प्राप्तकर्ता, विषय, बोधार्थ, दस्तखत नाम, पद — and every
+// template-specific fill-in field), pulled from previously printed letters
+// saved in TFX_DB.letters. प.सं./मिति/च.नं. are excluded since those are
+// meant to auto-fill from the आ.व./मिति settings instead.
+const TFX_LETTER_FIXED_FIELD_MAP = {
+  tfxL_recipient : 'recipient',
+  tfxL_subject   : 'subject',
+  tfxL_bodantha  : 'bodantha',
+  tfxL_signerName: 'signerName',
+  tfxL_closing   : 'closing'
+};
+function tfxAttachLetterDatalists(tpl){
+  const container = document.getElementById('tfxL_datalists');
+  if(!container) return;
+  const history = (TFX_DB.letters||[]).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const parts = [];
+  function buildOptionsFromValues(getVal){
+    const seen = new Set(); const opts = [];
+    for(const rec of history){
+      if(opts.length >= 10) break;
+      const v = getVal(rec);
+      if(typeof v === 'string' && v.trim() && !seen.has(v)){ seen.add(v); opts.push(v); }
+    }
+    return opts;
+  }
+  // Fixed fields — suggestions drawn from ALL past letters (any template),
+  // since recipient/subject/signer/closing are usually reused across formats.
+  Object.keys(TFX_LETTER_FIXED_FIELD_MAP).forEach(inputId=>{
+    const input = document.getElementById(inputId);
+    if(!input) return;
+    const key = TFX_LETTER_FIXED_FIELD_MAP[inputId];
+    const opts = buildOptionsFromValues(rec => rec[key]);
+    if(!opts.length) return;
+    const dlId = 'dl_' + inputId;
+    input.setAttribute('list', dlId);
+    input.setAttribute('autocomplete', 'off');
+    parts.push(`<datalist id="${dlId}">${opts.map(o=>`<option value="${tfxEscapeHtml(o)}"></option>`).join('')}</datalist>`);
+  });
+  // Template-specific fill-in fields — suggestions drawn from past letters
+  // of THIS SAME template only, since e.g. "location" values differ in
+  // shape/meaning between templates.
+  (tpl.fields||[]).forEach(f=>{
+    const inputId = 'tfxFV_' + f.key;
+    const input = document.getElementById(inputId);
+    if(!input) return;
+    const opts = buildOptionsFromValues(rec => (rec.vars && rec.templateId===tpl.id) ? rec.vars[f.key] : undefined);
+    if(!opts.length) return;
+    const dlId = 'dl_' + inputId;
+    input.setAttribute('list', dlId);
+    if(input.tagName !== 'SELECT') input.setAttribute('autocomplete', 'off');
+    parts.push(`<datalist id="${dlId}">${opts.map(o=>`<option value="${tfxEscapeHtml(o)}"></option>`).join('')}</datalist>`);
+  });
+  container.innerHTML = parts.join('');
+}
+function tfxSyncLetterDraftFromDOM(){
+  const d = tfxActiveLetterDraft; if(!d) return d;
+  d.patraSankhya = $('tfxL_patraSankhya').value;
+  d.chalaniNo    = $('tfxL_chalaniNo').value;
+  d.miti         = $('tfxL_miti').value;
+  d.recipient    = $('tfxL_recipient').value;
+  d.subject      = $('tfxL_subject').value;
+  d.body         = $('tfxL_body').value;
+  d.bodantha     = $('tfxL_bodantha').value;
+  d.signerName   = $('tfxL_signerName').value;
+  d.closing      = $('tfxL_closing').value;
+  return d;
+}
+function tfxDiscardLetterDraft(){
+  if(!confirm('यो पत्र मस्यौदा हटाउने हो?')) return;
+  tfxActiveLetterDraft = null;
+  $('tfxLetterRoot').innerHTML = '';
+  tfxShowView('burnt');
+}
+window.tfxDiscardLetterDraft = tfxDiscardLetterDraft;
+
+// ---- Print (matches this app's existing official letterhead style) ----
+function tfxLetterheadHtml(){
+  return `
+    <table style="width:100%;border:none;margin:0 0 6pt 0;"><tr><td style="text-align:center;">
+      <h1 style="font-size:22pt;margin:0;font-family:'Mangal','Kalimati','Noto Sans Devanagari',serif;">नेपाल विद्युत प्राधिकरण</h1>
+      <p style="font-size:11pt;margin:2pt 0;">वितरण तथा ग्राहक सेवा निर्देशनालय</p>
+      <p style="font-size:11pt;margin:2pt 0;">लुम्बिनी प्रादेशिक कार्यालय, बुटवल</p>
+      <p style="font-size:13pt;font-weight:700;margin:2pt 0;">${tfxEscapeHtml(currentDcs().center || 'तौलिहवा वितरण केन्द्र')}${currentDcs().location ? ', '+tfxEscapeHtml(currentDcs().location) : ''}</p>
+    </td></tr></table>
+    <div style="border-bottom:3px solid #0d3b8c;margin-bottom:14px;"></div>
+  `;
+}
+function tfxLetterMetaRowHtml(patraSankhya, chalaniNo, miti){
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;font-family:'Mangal','Kalimati',serif;font-size:13px;margin-bottom:16px;">
+      <div style="text-align:left;">
+        <div>प.सं.: ${tfxEscapeHtml(patraSankhya||'')}</div>
+        <div>च.नं.: ${tfxEscapeHtml(chalaniNo||'')}</div>
+      </div>
+      <div style="text-align:right;">मिति: ${tfxEscapeHtml(miti||'')}</div>
+    </div>
+  `;
+}
+function tfxPrintTapsilTableHtml(d){
+  const tpl = tfxLetterTemplateById(d.templateId);
+  if(!tpl || !tpl.table || !d.vars || !d.vars[tpl.table.key+'__rows']) return '';
+  const rows = d.vars[tpl.table.key+'__rows'];
+  if(!rows.length || !rows.some(r=>r.some(c=>String(c||'').trim()!==''))) return '';
+  const head = '<tr>'+tpl.table.headers.map(h=>`<th style="border:1px solid #333;padding:4pt 6pt;background:#e8eefb;">${tfxEscapeHtml(h)}</th>`).join('')+'</tr>';
+  const body = rows.map(r=>'<tr>'+r.map(c=>`<td style="border:1px solid #333;padding:4pt 6pt;">${tfxEscapeHtml(c||'')}</td>`).join('')+'</tr>').join('');
+  return `<table style="width:100%;border-collapse:collapse;font-size:11.5px;margin:8px 0;">${head}${body}</table>`;
+}
+// Saves a snapshot of this letter into TFX_DB.letters so future letters can
+// suggest from it (last-10-entries datalists). Called right before print —
+// that's the "this letter is actually being used" moment, not every keystroke.
+function tfxSaveLetterToHistory(d){
+  TFX_DB.letters.push({
+    id: tfxUid('ltr'),
+    createdAt: Date.now(),
+    templateId: d.templateId,
+    recipient: d.recipient,
+    subject: d.subject,
+    bodantha: d.bodantha,
+    signerName: d.signerName,
+    closing: d.closing,
+    vars: Object.assign({}, d.vars||{})
+  });
+  // Keep the history from growing without bound — 300 most recent is plenty.
+  if(TFX_DB.letters.length > 300) TFX_DB.letters = TFX_DB.letters.slice(-300);
+  tfxPersist('letters');
+}
+
+function tfxPrintLetter(d){
+  tfxSaveLetterToHistory(d);
+  const bodanthaHtml = (d.bodantha||'').split('\n').filter(x=>x.trim()).map(line=>`<div style="margin-bottom:2px;">- ${tfxEscapeHtml(line)}</div>`).join('');
+  const tpl = tfxLetterTemplateById(d.templateId);
+  let bodyText = d.body||'';
+  const tableHtml = tfxPrintTapsilTableHtml(d);
+  if(tpl && tpl.table && tableHtml){
+    const marker = (d.vars && d.vars[tpl.table.key]) || '';
+    if(marker) bodyText = bodyText.replace(marker, '___TAPSIL_TABLE___');
+  }
+  const bodyHtml = bodyText.split('\n').map(line=>{
+    if(line.indexOf('___TAPSIL_TABLE___')>=0) return tableHtml;
+    return line.trim()==='' ? '<div style="height:10px;"></div>' : `<p style="margin:0 0 9px 0;text-align:justify;">${tfxEscapeHtml(line)}</p>`;
+  }).join('');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>पत्र</title>
+<style>
+  @page { size: A4 portrait; margin: 18mm 16mm; }
+  body { font-family:'Mangal','Kalimati','Noto Sans Devanagari',serif; font-size:13.5px; color:#000; margin:0; line-height:1.7; }
+  @media print { body{ margin:0; } }
+</style></head><body>
+  ${tfxLetterheadHtml()}
+  ${tfxLetterMetaRowHtml(d.patraSankhya, d.chalaniNo, d.miti)}
+  <div style="margin-bottom:14px;white-space:pre-line;">${tfxEscapeHtml(d.recipient)}</div>
+  <div style="text-align:center;font-weight:700;text-decoration:underline;margin-bottom:14px;">विषय : ${tfxEscapeHtml(d.subject)}</div>
+  <div style="margin-bottom:18px;">${bodyHtml}</div>
+  ${bodanthaHtml ? `<div style="margin-top:18px;font-size:12.5px;"><b>बोधार्थ:-</b>${bodanthaHtml}</div>` : ''}
+  <div style="margin-top:60px;text-align:right;">
+    <div>.............................</div>
+    <div style="font-weight:700;">${tfxEscapeHtml(d.signerName)}</div>
+    <div>${tfxEscapeHtml(d.closing)}</div>
+  </div>
+</body></html>`;
+  const win = window.open('', '_blank', 'width=900,height=1000');
+  if(!win){ tfxToast('Popup blocked — allow popups to print'); return; }
+  win.document.open(); win.document.write(html); win.document.close();
+  const doPrint = ()=>{ try{ win.focus(); win.print(); }catch(e){} };
+  if(win.document.readyState === 'complete') setTimeout(doPrint, 250);
+  else win.addEventListener('load', ()=>setTimeout(doPrint, 250));
+}
+
 // Master renderer (called by showPage('transformer'))
 /* ── VIEW SWITCHER ──────────────────────────────────────────────
    The जलेको ट्रान्सफर्मर रेकर्ड opens as its OWN page (like the
    transformer page itself) instead of stacking below the entry form. */
-let tfxView = 'form';   // 'form' | 'burnt'
+let tfxView = 'form';   // 'form' | 'burnt' | 'letter'
 function tfxShowView(v){
   tfxView = v;
-  const f = $('tfxFormRoot'), b = $('tfxBurntRoot');
-  if(f) f.style.display = (v==='form')  ? '' : 'none';
-  if(b) b.style.display = (v==='burnt') ? '' : 'none';
+  const f = $('tfxFormRoot'), b = $('tfxBurntRoot'), l = $('tfxLetterRoot');
+  if(f) f.style.display = (v==='form')   ? '' : 'none';
+  if(b) b.style.display = (v==='burnt')  ? '' : 'none';
+  if(l) l.style.display = (v==='letter') ? '' : 'none';
   if(v==='burnt') tfxRenderBurntTable();
   try{ window.scrollTo(0,0); }catch(e){}
 }
