@@ -30,7 +30,7 @@ body{background:var(--bg);color:var(--txt);font-family:'Archivo',sans-serif;line
   max-height:40px;overflow:hidden;transition:max-height .35s ease,opacity .3s ease,padding .3s ease}
 .topbar.hdr-compact .topbar-brand{max-height:0;opacity:0;padding-top:0;padding-bottom:0}
 .topbar.hdr-compact .topbar-subtitle{max-height:0;opacity:0;padding-bottom:0}
-.topbar-nav{display:flex;align-items:center;justify-content:center;gap:0;border-top:1px solid var(--line);padding:0 20px;
+.topbar-nav{display:flex;align-items:center;justify-content:flex-start;gap:0;border-top:1px solid var(--line);padding:0 8px;
   overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .topbar-nav::-webkit-scrollbar{display:none}
 .nav-tab{background:none;border:none;font-family:'Archivo',sans-serif;font-size:14px;font-weight:500;color:var(--dim);cursor:pointer;padding:10px 20px;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;flex:none}
@@ -526,10 +526,6 @@ select.big option,
   .topbar-brand{font-size:18px;padding:7px 20px 1px}
   .topbar-subtitle{font-size:10px;padding-bottom:5px}
   .nav-tab{padding:7px 12px;font-size:13px;white-space:nowrap}
-  /* justify-content:center clips BOTH ends when tabs overflow a narrow screen
-     ("Entry" was cut off on the left) — left-align on mobile so every tab is
-     reachable with a horizontal swipe. */
-  .topbar-nav{justify-content:flex-start;padding:0 8px}
 
   /* Page fills viewport below topbar */
   #page-main{
