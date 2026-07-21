@@ -10478,10 +10478,15 @@ function tfxOpenBodyFormatEditor(){
   const tpl = tfxLetterTemplateById(tplId);
   if(!tpl) return;
   const existingOverride = TFX_LETTER_SETTINGS.bodyOverrides[tplId];
-  const sampleVars = {};
-  (tpl.fields||[]).forEach(f=> sampleVars[f.key] = `[${f.label}]`);
-  if(tpl.table) sampleVars[tpl.table.key] = `[${tpl.table.headers.join(' | ')} — तालिका यहाँ देखिनेछ]`;
-  const defaultText = tpl.bodyTemplate(sampleVars);
+  // IMPORTANT: default text must contain the literal {{key}} tokens (not resolved
+  // sample values like "[स्थान]"). Otherwise a user who saves this default as-is
+  // (without hand-typing {{key}} back in) ends up with an override that has no
+  // live placeholders — every future edit to भर्नुपर्ने विवरण then silently does
+  // nothing, because tfxFillBodyOverride only replaces literal {{key}} tokens.
+  const tokenVars = {};
+  (tpl.fields||[]).forEach(f=> tokenVars[f.key] = `{{${f.key}}}`);
+  if(tpl.table) tokenVars[tpl.table.key] = `{{${tpl.table.key}}}`;
+  const defaultText = tpl.bodyTemplate(tokenVars);
   const placeholderList = (tpl.fields||[]).map(f=>`{{${f.key}}} = ${f.label}`).concat(tpl.table?[`{{${tpl.table.key}}} = तपसिल तालिका`]:[]);
   tfxOpenModal(`
     <div class="tfx-modal-box-wide">
@@ -10833,9 +10838,20 @@ function tfxFillBodyOverride(text, vars){
 // they've permanently edited this template's body, otherwise the built-in one.
 function tfxBuildLetterBody(tpl, vars){
   const override = TFX_LETTER_SETTINGS.bodyOverrides[tpl.id];
-  if(override) return tfxFillBodyOverride(override, vars||{});
+  if(override){
+    // Safety check: if this override has lost its {{key}} tokens (e.g. saved
+    // from resolved preview text instead of the placeholder version), typing
+    // into भर्नुपर्ने विवरण will silently do nothing. Warn instead of failing quiet.
+    const missing = (tpl.fields||[]).filter(f => !override.includes(`{{${f.key}}}`));
+    if(missing.length && !tfxWarnedBodyOverrides.has(tpl.id)){
+      tfxWarnedBodyOverrides.add(tpl.id);
+      tfxToast('⚠️ यो पत्रको सेभ गरिएको Body ढाँचामा ' + missing.map(f=>f.label).join(', ') + ' को {{...}} प्लेसहोल्डर छैन — त्यसैले भर्नुपर्ने विवरणमा लेख्दा त्यो अद्यावधिक हुँदैन। पत्र सेटिङ → Body ढाँचा सम्पादन बाट ठीक गर्नुहोस् वा पूर्वनिर्धारितमा फर्काउनुहोस्।');
+    }
+    return tfxFillBodyOverride(override, vars||{});
+  }
   return tpl.bodyTemplate(vars||{});
 }
+const tfxWarnedBodyOverrides = new Set();
 
 let tfxActiveLetterDraft = null;
 function tfxStartLetterFromTemplate(tplId, prefillVars){
