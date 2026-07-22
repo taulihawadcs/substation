@@ -6264,7 +6264,10 @@ async function onFeederStatusAction(feederName,sel){
   } else if(action==='incomer-failed'){
     applyIncomerFailed(t);
   } else {
-    // trip / shutdown on any feeder — silent status update only, no message.
+    // trip / shutdown on any feeder from the status panel — status update
+    // PLUS logged entry and message dispatch to all receivers (same as the
+    // main entry form), so a quick per-row Set no longer skips the Log page
+    // or the WhatsApp/SMS notice.
     // Skip if the feeder is already in this exact status (no duplicate write).
     if(cur.status===action){ toast(`Already ${FS_BADGE[action]?.label||action} — no change`); return; }
     // Cross-status guard: if this feeder is open under a DIFFERENT outage
@@ -6276,7 +6279,90 @@ async function onFeederStatusAction(feederName,sel){
     feederStatusMap[feederName]={status:action,time:t};
     renderFeederStatus();
     sbPushOneFeedStatus(feederName,{status:action,time:t});
+    dispatchTripShutdownFromPanel(feederName, action, t);
   }
+}
+
+/* ============================================================
+   DISPATCH — Trip / Shutdown set directly from the Feeder Status
+   panel's per-row "Set" dropdown (not the main entry form).
+   Mirrors dispatchChargedMsg's standalone send+log flow: builds the
+   same formal message via buildTemplate(), sends it to every enabled
+   receiver, and writes a Log page entry — so panel-side Trip/Shutdown
+   is no longer a silent, unlogged status flip.
+   ============================================================ */
+async function dispatchTripShutdownFromPanel(feederName, action, time){
+  const label = FS_BADGE[action]?.label || action;
+  const station = DATA.feeders.find(f=>f.name===feederName)?.station || $('station').value || '';
+
+  // Optional reason — Cancel or leave blank just skips it, never blocks the
+  // status change (which has already been applied by the caller).
+  const reason = (prompt(`${label} — ${feederName}\nकारण (वैकल्पिक — खाली छोड्न सक्नुहुन्छ):`, '') || '').trim();
+
+  const f = {
+    station, feeders:[feederName], condition: action,
+    tripReasons: (action==='trip' && reason) ? [reason] : [],
+    reasons:     (action==='shutdown' && reason) ? [reason] : [],
+    askedBy:'', askedByTrip:'',
+    givenBy: $('givenBy')?.value || '',
+    site:'', tripSite:'', tripNote:'', workDetail:'',
+    time, eta:''
+  };
+  const msg = buildTemplate(f);
+
+  // Duplicate/double-click guard, same window/pattern as other dispatch paths.
+  const _now = Date.now();
+  const _ck = 'FS:'+action.toUpperCase()+':'+feederName;
+  if(recentDispatched[_ck] && (_now - recentDispatched[_ck]) < DISPATCH_DEDUP_WINDOW){
+    toast(`⚠ ${label} notice already sent for this feeder moments ago`); return;
+  }
+  recentDispatched[_ck] = _now;
+  for(const k in recentDispatched){
+    if(_now - recentDispatched[k] > DISPATCH_DEDUP_WINDOW) delete recentDispatched[k];
+  }
+
+  if(receiversMuted){
+    toast(`🔕 All Muted — ${label} notice logged but NOT sent`, 3000);
+    recordLogDirect({
+      type:label,
+      recipients: DATA.receivers.filter(r=>r.enabled).map(r=>r.name).join(', ') || 'None',
+      status:'MUTED — not sent', station, feeder:feederName, time, msg, reason
+    });
+    return;
+  }
+
+  const enabled=DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
+  if(!enabled.length){
+    toast(`${label} noted — no receivers configured`);
+    recordLogDirect({ type:label, recipients:'None', status:'No receivers configured', station, feeder:feederName, time, msg, reason });
+    return;
+  }
+
+  toast(`Sending ${label} alert for ${feederName}…`,2000);
+  const wrap=$('sendStatusWrap');
+  if(wrap){
+    wrap.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--dim2);margin:6px 0 3px;text-transform:uppercase;letter-spacing:.06em">${esc(label)} Alert…</div>`;
+    const statusDiv=document.createElement('div'); wrap.appendChild(statusDiv);
+    enabled.forEach(r=>{
+      const el=document.createElement('div'); el.className='send-row';
+      el.innerHTML=`<span class="send-name">${esc(r.name)}</span><span class="send-state st-q" id="fss_${r.id}">queued…</span>`;
+      statusDiv.appendChild(el);
+    });
+  }
+
+  let ok=0;
+  for(const r of enabled){
+    const stEl=$(`fss_${r.id}`);
+    if(stEl){stEl.textContent='sending…';stEl.className='send-state st-s';}
+    if(await sendSilent(r,msg,stEl)) ok++;
+  }
+  const result=ok+'/'+enabled.length+' sent';
+  recordLogDirect({
+    type:label, recipients:enabled.map(r=>r.name).join(', '),
+    status:result, station, feeder:feederName, time, msg, reason
+  });
+  sbInsertLog(LOG[0]);
+  toast(`${label} alert sent: ${ok}/${enabled.length}`);
 }
 
 async function markFeederCharged(feederName){
@@ -9045,7 +9131,8 @@ function tfxDefaultLetterSettings(){
     bsAnchorY: 2083, bsAnchorM: 4, bsAnchorD: 5,     // last known-correct BS date
     adAnchorMs: (function(){ const d=new Date(); d.setHours(0,0,0,0); return d.getTime(); })(), // real date that BS date corresponds to
     autoDate: true,             // if false, मिति is never auto-filled/advanced
-    bodyOverrides: {}           // { [templateId]: 'custom body text with {{key}} placeholders' }
+    bodyOverrides: {},           // { [templateId]: 'custom body text with {{key}} placeholders' }
+    logoDataUrl: ''             // base64 data URL of uploaded office logo, shown in letter header
   };
 }
 function tfxLoadLetterSettings(){
@@ -9692,7 +9779,11 @@ function tfxRenderForm(){
       <div class="tfx-field">
         <label>(१५) अर्थिङ विवरण</label>
         <div class="tfx-table-scroll">
-        <table class="tfx-recordtable">
+        <table class="tfx-recordtable" id="tfxEarthTable" style="table-layout:fixed;">
+          <colgroup>
+            <col style="width:15%"><col style="width:12%"><col style="width:12%">
+            <col style="width:10%"><col style="width:12.75%"><col style="width:12.75%"><col style="width:12.75%"><col style="width:12.75%">
+          </colgroup>
           <thead><tr><th>भाग / अवस्था</th><th>छ</th><th>छैन</th><th>टुटेको</th><th>तामा (साइज)</th><th>जी.आई साइज</th><th>काउन्टर साइज</th><th>केबुल साइज</th></tr></thead>
           <tbody>
             ${['neutral','body','la'].map(key=>{
@@ -10040,6 +10131,10 @@ function tfxBuildWordHtml(d){
   // Earthing: full-width dense table
   const earthTbl = `
     <table>
+      <colgroup>
+        <col style="width:16%"><col style="width:11%"><col style="width:11%">
+        <col style="width:10%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:13%">
+      </colgroup>
       <tr><th>भाग</th><th>छ</th><th>छैन</th><th>टुटेको</th><th>तामा</th><th>जी.आई</th><th>काउन्टर</th><th>केबुल</th></tr>
       ${['neutral','body','la'].map(key=>{
         const labels={neutral:'निउट्रल',body:'बडी',la:'एल.ए.'};
@@ -10406,6 +10501,22 @@ function tfxOpenLetterSettings(){
     <hr class="tfx-divider">
 
     <div class="tfx-field">
+      <label>कार्यालयको लोगो (पत्रको हेडरमा देखिने)</label>
+      <p class="tfx-hint" style="margin-bottom:8px;">लोगो अपलोड गर्नुभयो भने त्यो हरेक पत्रको हेडरमा बायाँ-बीचतिर देखिनेछ।</p>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div id="tfxLogoPreviewWrap" style="width:70px;height:70px;border:1px dashed #b9c0d4;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fafbff;flex:none;">
+          ${s.logoDataUrl ? `<img src="${s.logoDataUrl}" style="max-width:100%;max-height:100%;object-fit:contain;">` : `<span style="font-size:10px;color:#9aa1b5;text-align:center;">कुनै लोगो छैन</span>`}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <input type="file" id="tfxSet_logoFile" accept="image/*" style="font-size:12px;">
+          ${s.logoDataUrl ? `<button type="button" class="tfx-btn tfx-danger tfx-small" onclick="tfxRemoveLogo()">🗑️ लोगो हटाउनुहोस्</button>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <hr class="tfx-divider">
+
+    <div class="tfx-field">
       <label>आजको मिति (BS)</label>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <input type="text" id="tfxSet_miti" value="${tfxEscapeHtml(liveMiti)}" placeholder="२०८३-०४-०५" style="max-width:180px;">
@@ -10435,8 +10546,55 @@ function tfxOpenLetterSettings(){
     </div>
     </div>
   `);
+  const logoFileEl = $('tfxSet_logoFile');
+  if(logoFileEl) logoFileEl.addEventListener('change', tfxHandleLogoFile);
 }
 window.tfxOpenLetterSettings = tfxOpenLetterSettings;
+
+// Reads the chosen image file, downsizes it (so localStorage doesn't bloat),
+// stores it as a base64 data URL, and saves immediately so the logo persists
+// even if the user closes the modal without pressing "सेटिङ सेभ गर्नुहोस्".
+function tfxHandleLogoFile(e){
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  if(!file.type.startsWith('image/')){ tfxToast('कृपया image फाइल छान्नुहोस्'); return; }
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    const img = new Image();
+    img.onload = function(){
+      // Downscale to a reasonable max dimension so the base64 string stays
+      // small in localStorage (which has limited quota).
+      const maxDim = 300;
+      let w = img.width, h = img.height;
+      if(w > maxDim || h > maxDim){
+        const scale = maxDim / Math.max(w, h);
+        w = Math.round(w * scale); h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/png');
+      TFX_LETTER_SETTINGS.logoDataUrl = dataUrl;
+      tfxSaveLetterSettings();
+      tfxToast('✓ लोगो सेभ भयो');
+      tfxOpenLetterSettings();
+    };
+    img.onerror = function(){ tfxToast('लोगो पढ्न सकिएन — अर्को फाइल प्रयास गर्नुहोस्'); };
+    img.src = ev.target.result;
+  };
+  reader.onerror = function(){ tfxToast('फाइल पढ्न सकिएन'); };
+  reader.readAsDataURL(file);
+}
+window.tfxHandleLogoFile = tfxHandleLogoFile;
+
+function tfxRemoveLogo(){
+  TFX_LETTER_SETTINGS.logoDataUrl = '';
+  tfxSaveLetterSettings();
+  tfxToast('✓ लोगो हटाइयो');
+  tfxOpenLetterSettings();
+}
+window.tfxRemoveLogo = tfxRemoveLogo;
 
 function tfxConfirmTodayMiti(){
   const raw = $('tfxSet_miti').value;
@@ -11139,13 +11297,24 @@ window.tfxDiscardLetterDraft = tfxDiscardLetterDraft;
 
 // ---- Print (matches this app's existing official letterhead style) ----
 function tfxLetterheadHtml(){
+  const logo = TFX_LETTER_SETTINGS.logoDataUrl;
+  // 3-column layout: logo cell (left, vertically centered) — centered org
+  // text — an empty spacer cell of the same width as the logo cell, so the
+  // text block stays truly centered on the page instead of drifting right.
+  const logoCell = logo
+    ? `<img src="${logo}" style="max-width:64pt;max-height:64pt;object-fit:contain;">`
+    : '';
   return `
-    <table style="width:100%;border:none;margin:0 0 6pt 0;"><tr><td style="text-align:center;">
-      <h1 style="font-size:22pt;margin:0;font-family:'Mangal','Kalimati','Noto Sans Devanagari',serif;">नेपाल विद्युत प्राधिकरण</h1>
-      <p style="font-size:11pt;margin:2pt 0;">वितरण तथा ग्राहक सेवा निर्देशनालय</p>
-      <p style="font-size:11pt;margin:2pt 0;">लुम्बिनी प्रादेशिक कार्यालय, बुटवल</p>
-      <p style="font-size:13pt;font-weight:700;margin:2pt 0;">${tfxEscapeHtml(currentDcs().center || 'तौलिहवा वितरण केन्द्र')}${currentDcs().location ? ', '+tfxEscapeHtml(currentDcs().location) : ''}</p>
-    </td></tr></table>
+    <table style="width:100%;border:none;margin:0 0 6pt 0;"><tr>
+      <td style="width:70pt;border:none;text-align:left;vertical-align:middle;padding:0;">${logoCell}</td>
+      <td style="border:none;text-align:center;vertical-align:middle;padding:0;">
+        <h1 style="font-size:22pt;margin:0;font-family:'Mangal','Kalimati','Noto Sans Devanagari',serif;">नेपाल विद्युत प्राधिकरण</h1>
+        <p style="font-size:11pt;margin:2pt 0;">वितरण तथा ग्राहक सेवा निर्देशनालय</p>
+        <p style="font-size:11pt;margin:2pt 0;">लुम्बिनी प्रादेशिक कार्यालय, बुटवल</p>
+        <p style="font-size:13pt;font-weight:700;margin:2pt 0;">${tfxEscapeHtml(currentDcs().center || 'तौलिहवा वितरण केन्द्र')}${currentDcs().location ? ', '+tfxEscapeHtml(currentDcs().location) : ''}</p>
+      </td>
+      <td style="width:70pt;border:none;padding:0;"></td>
+    </tr></table>
     <div style="border-bottom:3px solid #0d3b8c;margin-bottom:14px;"></div>
   `;
 }
