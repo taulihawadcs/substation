@@ -885,6 +885,7 @@ body.log-page-open #page-log{
     <button class="nav-tab active" onclick="showPage('main')">📋 Entry</button>
     <button class="nav-tab" id="navLog" onclick="showPage('log')">📊 Log</button>
     <button class="nav-tab" id="navTransformer" onclick="showPage('transformer')">⚡ विग्रेको ट्रान्सफर्मर</button>
+    <button class="nav-tab" onclick="openModeSwitch()">🔀 Mode</button>
     <button class="nav-tab" onclick="openSettings()">⚙ Settings</button>
     <button class="nav-tab" onclick="toggleHelpGuide()" title="प्रयोग निर्देशन">❓ सहयोग</button>
     <span id="syncDot" title="Live sync active" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--dim2);margin-left:4px;font-family:'JetBrains Mono',monospace">
@@ -1569,7 +1570,7 @@ gemini-1.5-flash</textarea>
             </div>
             <div class="field">
               <label>API URL <span style="font-weight:400;color:var(--dim2)">(copy exact value from instance panel)</span></label>
-              <input type="text" id="greenApiUrl" placeholder="https://api.green-api.com" oninput="saveGreenApiCreds()">
+              <input type="text" id="greenApiUrl" placeholder="https://7107.api.greenapi.com" oninput="saveGreenApiCreds()">
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
               <button class="btn btn-blue btn-sm" onclick="checkGreenApiStatus()">⟳ Check Status / Show QR</button>
@@ -1660,6 +1661,12 @@ gemini-1.5-flash</textarea>
                 <button class="btn btn-ghost btn-sm" onclick="sbPullData(false)" style="justify-content:flex-start">↓ Pull Settings</button>
                 <button class="btn btn-ghost btn-sm" onclick="sbPushData(false)" style="justify-content:flex-start">↑ Push Settings</button>
               </div>
+
+              <div class="divider"></div>
+              <p style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Export Current Data (JSON)</p>
+              <p class="hint" style="margin-bottom:10px">Click <b>↓ Pull Settings</b> above first to make sure this device has the latest cloud data, then export it here as JSON to copy elsewhere.</p>
+              <button class="btn btn-ghost btn-sm" onclick="exportSeedDataJson()" style="margin-bottom:8px">📋 Export Feeders / Reasons / Asked By / Operators (JSON)</button>
+              <textarea id="exportSeedDataBox" readonly onclick="this.select()" placeholder="Click the export button above…" style="display:none;width:100%;min-height:200px;font-family:'JetBrains Mono',monospace;font-size:11px;padding:8px;border:1px solid var(--line,#dbe2ea);border-radius:8px;box-sizing:border-box"></textarea>
 
               <div class="divider"></div>
 
@@ -1848,7 +1855,38 @@ gemini-1.5-flash</textarea>
   </div>
 </div>
 
-<!-- FOOTER -->
+<!-- MODE SWITCH: Operator <-> Monitor, mid-session, no reload needed -->
+<div id="modeOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:28px 28px 24px;width:min(340px,92vw);box-shadow:0 8px 40px rgba(0,0,0,.22);text-align:center">
+    <div style="font-size:28px;margin-bottom:8px">🔀</div>
+    <div style="font-size:17px;font-weight:700;color:var(--txt);margin-bottom:4px">Switch Mode</div>
+    <div style="font-size:12px;color:var(--dim2);margin-bottom:14px">
+      Currently: <strong id="modeCurrentLabel">Operator</strong>
+    </div>
+
+    <div id="modeTargetToggle" style="display:flex;gap:6px;background:#f1f5f9;border-radius:10px;padding:4px;margin-bottom:14px">
+      <button type="button" id="modeTargetOperator" onclick="setModeTarget('operator')"
+        style="flex:1;padding:9px 8px;border:none;border-radius:7px;font-family:'Archivo',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
+        👷 Operator
+      </button>
+      <button type="button" id="modeTargetMonitor" onclick="setModeTarget('monitor')"
+        style="flex:1;padding:9px 8px;border:none;border-radius:7px;font-family:'Archivo',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
+        👁 Monitor
+      </button>
+    </div>
+
+    <input type="text" id="modePwInput" placeholder="Enter password"
+      autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+      data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other"
+      style="width:100%;padding:10px 14px;border:1.5px solid var(--line2);border-radius:8px;font-size:15px;font-family:'Archivo',sans-serif;text-align:center;letter-spacing:.12em;margin-bottom:8px;-webkit-text-security:disc;text-security:disc"
+      onkeydown="if(event.key==='Enter')confirmModeSwitch()">
+    <div id="modePwError" style="font-size:12px;color:var(--red);min-height:16px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="closeModeSwitch()" style="flex:1;padding:9px;border:1.5px solid var(--line2);border-radius:8px;background:#fff;font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;color:var(--dim);cursor:pointer">Cancel</button>
+      <button onclick="confirmModeSwitch()" style="flex:1;padding:9px;border:none;border-radius:8px;background:var(--blue);color:#fff;font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Switch</button>
+    </div>
+  </div>
+</div>
 <footer id="siteFooter" style="margin-top:40px;padding:28px 20px 36px;text-align:center;border-top:1px solid var(--line);background:var(--card);max-height:200px;overflow:hidden;transition:max-height .35s ease,opacity .3s ease,padding .3s ease,margin .3s ease">
   <div style="max-width:860px;margin:0 auto">
     <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Designed &amp; Developed by</div>
@@ -1972,9 +2010,7 @@ const DEFAULTS = {
     {name:"राम औतार कुर्मी",      station:"तौलिहवा सबस्टेशन ३३/११ के.भी."}
   ],
   receivers:[
-    {id:1,name:"Chuhawat Group",     type:"group",    contact:"https://chat.whatsapp.com/REPLACE_LINK", cmbkey:"", enabled:true},
-    {id:2,name:"Marmat Group",       type:"group",    contact:"https://chat.whatsapp.com/REPLACE_LINK", cmbkey:"", enabled:true},
-    {id:3,name:"JE / Shift Officer", type:"wa",       contact:"", cmbkey:"", enabled:true}
+    {id:1,name:"Substation Alert",   type:"greenapi", contact:"", cmbkey:"", enabled:true}
   ]
 };
 
@@ -2247,6 +2283,7 @@ async function appUnlock(){
     (async () => {
       try{ await sbMigrateLegacyRows(); }catch(e){ console.warn('migrate failed:', e.message); }
       try{ await sbPullData(true); }catch(e){ console.warn('pull failed:', e.message); }
+      markInitialPullDone(); // safe to auto-push settings from here on
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
       try{ sbAutoDailyBackup(); }catch(e){ console.warn('daily backup failed:', e.message); }
       try{ startSync(); }catch(e){ console.warn('startSync failed:', e.message); }
@@ -2331,6 +2368,87 @@ function showAppLock(){
   lock.style.display='flex'; lock.style.opacity='1';
   setTimeout(()=>$('appLockInput').focus(),150);
   fetchPasswordHashes(); // pre-load hashes while user reads screen
+}
+
+/* ── Mode Switch (Operator <-> Monitor), mid-session, no reload ──
+   Lives on its own nav tab (visible in both modes, unlike Settings which
+   monitor staff can't see) and re-uses the SAME two password hashes as the
+   initial lock screen — the Operator password and the Monitor password —
+   so there is no new credential to manage. */
+let modeTarget = 'operator'; // which role the switch modal is currently aimed at
+
+function openModeSwitch(){
+  modeTarget = monitorMode ? 'operator' : 'monitor'; // default to the OTHER mode
+  $('modeCurrentLabel').textContent = monitorMode ? 'Monitor (view-only)' : 'Operator (full access)';
+  setModeTarget(modeTarget);
+  const overlay=$('modeOverlay');
+  overlay.style.display='flex';
+  $('modePwInput').value=''; $('modePwError').textContent='';
+  if(!cachedEntryHash) fetchPasswordHashes(); // pre-load while user reads screen
+  setTimeout(()=>$('modePwInput').focus(),80);
+}
+function closeModeSwitch(){ $('modeOverlay').style.display='none'; }
+
+function setModeTarget(target){
+  modeTarget = target;
+  const opBtn=$('modeTargetOperator'), monBtn=$('modeTargetMonitor'), input=$('modePwInput');
+  const active='flex:1;padding:9px 8px;border:none;border-radius:7px;font-family:\'Archivo\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;background:#fff;color:var(--blue);box-shadow:0 1px 3px rgba(0,0,0,.08)';
+  const idle='flex:1;padding:9px 8px;border:none;border-radius:7px;font-family:\'Archivo\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;background:transparent;color:var(--dim2)';
+  if(target==='operator'){
+    if(opBtn) opBtn.style.cssText=active;
+    if(monBtn) monBtn.style.cssText=idle;
+    if(input) input.placeholder='Operator password';
+  } else {
+    if(monBtn) monBtn.style.cssText=active;
+    if(opBtn) opBtn.style.cssText=idle;
+    if(input) input.placeholder='Monitor password';
+  }
+  if(input){ input.value=''; input.focus(); }
+  const err=$('modePwError'); if(err) err.textContent='';
+}
+
+async function confirmModeSwitch(){
+  const input=$('modePwInput'), err=$('modePwError');
+  const val=input.value;
+  if(!val){ err.textContent='Enter a password.'; return; }
+  err.textContent='Checking…';
+  if(!cachedEntryHash) await fetchPasswordHashes();
+  const hash=await sha256(val);
+  const isMonitorPw  = (hash===MONITOR_HASH);
+  const isOperatorPw = (hash===(cachedEntryHash||ENTRY_HASH_FALLBACK));
+
+  const wantsMonitor = (modeTarget==='monitor');
+  const ok = wantsMonitor ? isMonitorPw : isOperatorPw;
+  if(!ok){
+    if(wantsMonitor && isOperatorPw) err.textContent='That is the Operator password. Enter the Monitor password instead.';
+    else if(!wantsMonitor && isMonitorPw) err.textContent='That is the Monitor password. Enter the Operator password instead.';
+    else err.textContent='Incorrect password.';
+    input.value=''; input.focus();
+    return;
+  }
+
+  // Already in the target mode — nothing to do.
+  if(monitorMode===wantsMonitor){
+    err.textContent=''; closeModeSwitch();
+    toast(wantsMonitor ? 'Already in Monitor mode' : 'Already in Operator mode');
+    return;
+  }
+
+  monitorMode = wantsMonitor;
+  loginRole = wantsMonitor ? 'monitor' : 'operator';
+  if(wantsMonitor){
+    grantMonitorSession(); // so a refresh / reopened tab stays in Monitor
+  } else {
+    // Switching to Operator: clear any stay-signed-in Monitor session so a
+    // later reload doesn't silently bounce back into Monitor mode.
+    try{ localStorage.removeItem(MONITOR_SESSION_KEY); }catch(e){}
+  }
+  applyMonitorMode();
+  closeModeSwitch();
+  toast(wantsMonitor ? '👁 Switched to Monitor mode (view-only)' : '👷 Switched to Operator mode (full access)');
+  // Land on the main Entry page after switching, since Settings/other pages
+  // may not be valid or visible in the newly-active mode.
+  showPage('main');
 }
 
 /* ── Settings unlock (author only) ── */
@@ -3380,7 +3498,7 @@ async function testHttpSms(){
 /* ── Green API ─────────────────────────────────────── */
 function getGreenApiInstanceId(){ return ($('greenApiInstanceId')?.value||'').trim(); }
 function getGreenApiToken()      { return ($('greenApiToken')?.value||'').trim(); }
-function getGreenApiUrl()        { return ($('greenApiUrl')?.value||'https://api.green-api.com').trim().replace(/\/+$/,''); }
+function getGreenApiUrl()        { return ($('greenApiUrl')?.value||'https://7107.api.greenapi.com').trim().replace(/\/+$/,''); }
 
 function saveGreenApiCreds(){
   try{
@@ -3393,7 +3511,7 @@ function loadGreenApiCreds(){
   try{
     const id  = localStorage.getItem('sms2_ga_id')  || '';
     const tok = localStorage.getItem('sms2_ga_tok') || '';
-    const url = localStorage.getItem('sms2_ga_url') || '';
+    const url = localStorage.getItem('sms2_ga_url') || 'https://7107.api.greenapi.com';
     if(id)  $('greenApiInstanceId').value = id;
     if(tok) $('greenApiToken').value      = tok;
     if(url) $('greenApiUrl').value        = url;
@@ -4742,6 +4860,10 @@ function dtAggregateRange(ds, de){
     if(!S.mainCounts){ S.mainCounts={}; S.mainDur={}; S.mainTotalCount=0; S.mainTotalDur=0;
       DT_OUTAGE_TYPES.forEach(t=>{ S.mainCounts[t]=0; S.mainDur[t]=0; }); }
   });
+  // Kept chronological (oldest → newest) here since this feeds Excel/CSV
+  // exports too, where chronological order is the expected record-keeping
+  // convention. The on-screen Log page table re-sorts newest-first for
+  // display — see dtRenderSummary().
   agg.events.sort((a,b)=>new Date(a.start)-new Date(b.start));
   return agg;
 }
@@ -5040,7 +5162,11 @@ function dtRenderSummary(){
     return;
   }
   h+=`<table class="log-tbl"><thead><tr><th>Substation</th><th>Feeder</th><th>Type</th><th>Start (date · time)</th><th>End</th><th>Duration (this period)</th>${canEdit?'<th></th>':''}</tr></thead><tbody>`;
-  a.events.forEach(ev=>{
+  // Newest first for on-screen display, so the most recent outages are
+  // visible at the top without scrolling. (Excel/CSV exports stay
+  // chronological — see dtAggregateRange.)
+  const displayEvents = a.events.slice().sort((x,y)=>new Date(y.start)-new Date(x.start));
+  displayEvents.forEach(ev=>{
     const inSty='padding:3px 5px;font-size:11px;border:1px solid var(--line,#dbe2ea);border-radius:6px';
     const sd=String(ev.start).slice(0,10);
     const ed=ev.end?String(ev.end).slice(0,10):sd;
@@ -6239,6 +6365,64 @@ function renderFeederStatusBlock(st, feeders, panel){
   });
 }
 
+// ── Reason picker modal for panel Trip/Shutdown ──────────────────────────
+// Shows a <select> built from the SAME editable reason lists used by the main
+// form (DATA.tripreasons for Trip, DATA.reasons for Shutdown), plus an inline
+// "+ नयाँ कारण थप्नुहोस्" option. Picking "+ नयाँ" reveals a text box; whatever
+// is typed there is ALSO pushed into the underlying list and saved, so it
+// shows up as a normal option next time (same "edit feature" as Settings).
+// Resolves to the chosen reason string, or null if the operator cancels.
+function fsAskReason(kind, feederName){
+  return new Promise((resolve)=>{
+    const listKey = kind==='trip' ? 'tripreasons' : 'reasons';
+    const list = DATA[listKey] || [];
+    const title = kind==='trip' ? 'Trip कारण' : 'Shutdown कारण';
+    const existingId = 'fsReasonModalRoot';
+    const old = document.getElementById(existingId);
+    if(old) old.remove();
+    const optsHtml = list.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');
+    const html = `
+      <div id="${existingId}" style="display:flex;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:center;justify-content:center">
+        <div style="background:#fff;border-radius:14px;width:min(420px,92vw);box-shadow:0 8px 40px rgba(0,0,0,.22);padding:16px">
+          <div style="font-size:14px;font-weight:700;color:var(--txt);margin-bottom:2px">${esc(title)}</div>
+          <div style="font-size:12px;color:var(--dim2);margin-bottom:10px">${esc(feederName)}</div>
+          <select id="fsReasonSelect" style="width:100%;padding:8px;font-size:13px;border-radius:8px;border:1px solid var(--line);margin-bottom:8px">
+            ${optsHtml}
+            <option value="__new__">+ नयाँ कारण थप्नुहोस्…</option>
+          </select>
+          <input type="text" id="fsReasonNewInput" placeholder="नयाँ कारण लेख्नुहोस्" style="display:none;width:100%;padding:8px;font-size:13px;border-radius:8px;border:1px solid var(--line);margin-bottom:8px;box-sizing:border-box">
+          <div style="display:flex;gap:7px;justify-content:flex-end;margin-top:6px">
+            <button class="btn btn-ghost btn-sm" id="fsReasonCancel">✕ रद्द</button>
+            <button class="btn btn-sm" id="fsReasonOk">✓ ठीक छ</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+    const root=document.getElementById(existingId);
+    const sel=document.getElementById('fsReasonSelect');
+    const newInput=document.getElementById('fsReasonNewInput');
+    sel.addEventListener('change', ()=>{
+      newInput.style.display = sel.value==='__new__' ? '' : 'none';
+      if(sel.value==='__new__') newInput.focus();
+    });
+    const cleanup=(val)=>{ root.remove(); resolve(val); };
+    document.getElementById('fsReasonCancel').onclick=()=>cleanup(null);
+    document.getElementById('fsReasonOk').onclick=()=>{
+      let reason;
+      if(sel.value==='__new__'){
+        reason=(newInput.value||'').trim();
+        if(!reason){ toast('कारण लेख्नुहोस्'); return; }
+        if(!list.includes(reason)){ list.push(reason); saveData(listKey); }
+      } else {
+        reason=sel.value;
+        if(!reason){ toast('कारण छान्नुहोस्'); return; }
+      }
+      cleanup(reason);
+    };
+    root.addEventListener('click', (e)=>{ if(e.target===root) cleanup(null); });
+  });
+}
+
 async function onFeederStatusAction(feederName,sel){
   const action=sel.value; sel.value='';
   if(!action) return;
@@ -6264,10 +6448,7 @@ async function onFeederStatusAction(feederName,sel){
   } else if(action==='incomer-failed'){
     applyIncomerFailed(t);
   } else {
-    // trip / shutdown on any feeder from the status panel — status update
-    // PLUS logged entry and message dispatch to all receivers (same as the
-    // main entry form), so a quick per-row Set no longer skips the Log page
-    // or the WhatsApp/SMS notice.
+    // trip / shutdown on any feeder from the quick panel dropdown.
     // Skip if the feeder is already in this exact status (no duplicate write).
     if(cur.status===action){ toast(`Already ${FS_BADGE[action]?.label||action} — no change`); return; }
     // Cross-status guard: if this feeder is open under a DIFFERENT outage
@@ -6276,93 +6457,59 @@ async function onFeederStatusAction(feederName,sel){
     // before the new status can be applied.
     const clear = await fsEnsureFeederClearFor(feederName, action);
     if(!clear) return; // operator declined/cancelled the charge step — abort
+
+    // Ask the reason (editable dropdown — same trip/shutdown reason lists
+    // used by the main form; a newly-typed reason is saved into that list).
+    const reason = await fsAskReason(action, feederName);
+    if(reason===null) return; // operator cancelled
+
+    const station = $('station').value || (DATA.feeders.find(f=>f.name===feederName)?.station) || '';
+
+    // Duplicate-send guard — same window used by the main form's dispatch.
+    const _ck = 'FS:'+action+':'+feederName;
+    const _now = Date.now();
+    if(recentDispatched[_ck] && (_now-recentDispatched[_ck]) < DISPATCH_DEDUP_WINDOW){
+      toast('⚠ Duplicate blocked — already sent for this feeder moments ago'); return;
+    }
+    recentDispatched[_ck]=_now;
+
+    const msg = action==='trip'
+      ? `${feederName} of ${station} is auto tripped at ${t} due to ${reason}`
+      : `${feederName} of ${station} is under shutdown since ${t} due to ${reason}`;
+
     feederStatusMap[feederName]={status:action,time:t};
     renderFeederStatus();
     sbPushOneFeedStatus(feederName,{status:action,time:t});
-    dispatchTripShutdownFromPanel(feederName, action, t);
+
+    const typeLabel = FS_BADGE[action]?.label || action;
+    if(receiversMuted){
+      toast('🔕 Receivers muted — logged but not sent. Unmute in Settings → Receivers.', 3500);
+      const names = DATA.receivers.filter(r=>r.enabled).map(r=>r.name).join(', ') || 'None';
+      recordLogDirect({type:typeLabel, recipients:names, status:'MUTED — not sent', station, feeder:feederName, time:t, msg, reason});
+      return;
+    }
+    const enabled = DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
+    if(!enabled.length){ toast(`${typeLabel} noted — no receivers configured`); return; }
+    toast(`Sending ${typeLabel} notice for ${feederName}…`, 2000);
+    const wrap=$('sendStatusWrap');
+    if(wrap){
+      wrap.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--dim2);margin:6px 0 3px;text-transform:uppercase;letter-spacing:.06em">${esc(typeLabel)} Notice…</div>`;
+      const statusDiv=document.createElement('div'); wrap.appendChild(statusDiv);
+      enabled.forEach(r=>{
+        const el=document.createElement('div'); el.className='send-row';
+        el.innerHTML=`<span class="send-name">${esc(r.name)}</span><span class="send-state st-q" id="fss_${r.id}">queued…</span>`;
+        statusDiv.appendChild(el);
+      });
+    }
+    let ok=0;
+    for(const r of enabled){
+      const stEl=$(`fss_${r.id}`);
+      if(stEl){stEl.textContent='sending…';stEl.className='send-state st-s';}
+      if(await sendSilent(r,msg,stEl)) ok++;
+    }
+    recordLogDirect({type:typeLabel, recipients:enabled.map(r=>r.name).join(', '), status:ok+'/'+enabled.length+' sent', station, feeder:feederName, time:t, msg, reason});
+    toast(`${typeLabel} notice sent: ${ok}/${enabled.length}`);
   }
-}
-
-/* ============================================================
-   DISPATCH — Trip / Shutdown set directly from the Feeder Status
-   panel's per-row "Set" dropdown (not the main entry form).
-   Mirrors dispatchChargedMsg's standalone send+log flow: builds the
-   same formal message via buildTemplate(), sends it to every enabled
-   receiver, and writes a Log page entry — so panel-side Trip/Shutdown
-   is no longer a silent, unlogged status flip.
-   ============================================================ */
-async function dispatchTripShutdownFromPanel(feederName, action, time){
-  const label = FS_BADGE[action]?.label || action;
-  const station = DATA.feeders.find(f=>f.name===feederName)?.station || $('station').value || '';
-
-  // Optional reason — Cancel or leave blank just skips it, never blocks the
-  // status change (which has already been applied by the caller).
-  const reason = (prompt(`${label} — ${feederName}\nकारण (वैकल्पिक — खाली छोड्न सक्नुहुन्छ):`, '') || '').trim();
-
-  const f = {
-    station, feeders:[feederName], condition: action,
-    tripReasons: (action==='trip' && reason) ? [reason] : [],
-    reasons:     (action==='shutdown' && reason) ? [reason] : [],
-    askedBy:'', askedByTrip:'',
-    givenBy: $('givenBy')?.value || '',
-    site:'', tripSite:'', tripNote:'', workDetail:'',
-    time, eta:''
-  };
-  const msg = buildTemplate(f);
-
-  // Duplicate/double-click guard, same window/pattern as other dispatch paths.
-  const _now = Date.now();
-  const _ck = 'FS:'+action.toUpperCase()+':'+feederName;
-  if(recentDispatched[_ck] && (_now - recentDispatched[_ck]) < DISPATCH_DEDUP_WINDOW){
-    toast(`⚠ ${label} notice already sent for this feeder moments ago`); return;
-  }
-  recentDispatched[_ck] = _now;
-  for(const k in recentDispatched){
-    if(_now - recentDispatched[k] > DISPATCH_DEDUP_WINDOW) delete recentDispatched[k];
-  }
-
-  if(receiversMuted){
-    toast(`🔕 All Muted — ${label} notice logged but NOT sent`, 3000);
-    recordLogDirect({
-      type:label,
-      recipients: DATA.receivers.filter(r=>r.enabled).map(r=>r.name).join(', ') || 'None',
-      status:'MUTED — not sent', station, feeder:feederName, time, msg, reason
-    });
-    return;
-  }
-
-  const enabled=DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
-  if(!enabled.length){
-    toast(`${label} noted — no receivers configured`);
-    recordLogDirect({ type:label, recipients:'None', status:'No receivers configured', station, feeder:feederName, time, msg, reason });
-    return;
-  }
-
-  toast(`Sending ${label} alert for ${feederName}…`,2000);
-  const wrap=$('sendStatusWrap');
-  if(wrap){
-    wrap.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--dim2);margin:6px 0 3px;text-transform:uppercase;letter-spacing:.06em">${esc(label)} Alert…</div>`;
-    const statusDiv=document.createElement('div'); wrap.appendChild(statusDiv);
-    enabled.forEach(r=>{
-      const el=document.createElement('div'); el.className='send-row';
-      el.innerHTML=`<span class="send-name">${esc(r.name)}</span><span class="send-state st-q" id="fss_${r.id}">queued…</span>`;
-      statusDiv.appendChild(el);
-    });
-  }
-
-  let ok=0;
-  for(const r of enabled){
-    const stEl=$(`fss_${r.id}`);
-    if(stEl){stEl.textContent='sending…';stEl.className='send-state st-s';}
-    if(await sendSilent(r,msg,stEl)) ok++;
-  }
-  const result=ok+'/'+enabled.length+' sent';
-  recordLogDirect({
-    type:label, recipients:enabled.map(r=>r.name).join(', '),
-    status:result, station, feeder:feederName, time, msg, reason
-  });
-  sbInsertLog(LOG[0]);
-  toast(`${label} alert sent: ${ok}/${enabled.length}`);
 }
 
 async function markFeederCharged(feederName){
@@ -8042,6 +8189,29 @@ function mergeSliceInto(key, dcsId, slice){
   }
 }
 
+// One-time export: current feeders, shutdown/trip reasons, asked-by, and
+// substation operators (givenby), as plain JSON — so this live data can be
+// pasted elsewhere to become the app's new hardcoded defaults. Only exports
+// the ACTIVE DCS's feeders/operators (matching what activeSliceFor gives the
+// rest of the sync system), since defaults are per-DCS anyway.
+function exportSeedDataJson(){
+  const payload = {
+    feeders:     activeSliceFor('feeders'),
+    reasons:     DATA.reasons,
+    tripreasons: DATA.tripreasons,
+    askedby:     DATA.askedby,
+    givenby:     activeSliceFor('givenby')
+  };
+  const box = $('exportSeedDataBox');
+  if(box){
+    box.value = JSON.stringify(payload, null, 2);
+    box.style.display = '';
+    box.select();
+  }
+  toast('✓ Exported below — tap the box to select all, then copy');
+}
+window.exportSeedDataJson = exportSeedDataJson;
+
 // Push all syncable DATA keys to Supabase app_settings
 /* ── Push all syncable settings to Supabase ─────────────────────
    Called automatically whenever any setting is saved.
@@ -8312,15 +8482,49 @@ window.sbMigrateLegacyRows = sbMigrateLegacyRows;
 /* ── Hook saveData → auto-push on every settings change ─────────
    This fires whenever any user with the settings password edits
    substations, feeders, staff, reasons, receivers, or asked-by.
+
+   GUARDED by initialPullDone: on a brand-new install, local DATA starts
+   from hardcoded defaults; on a DATA_VERSION bump (app update), reasons /
+   tripreasons / givenby get force-reset to hardcoded defaults too — both
+   BEFORE the startup pull has had a chance to bring in the real cloud
+   data. If a push slipped out in that window, it would overwrite good
+   cloud data (built up by other operators) with stale local defaults.
+   So: queue the key and push it later, once the pull has actually
+   finished — never push ahead of the first pull.
    ────────────────────────────────────────────────────────────── */
+let initialPullDone = false;
+const _pendingSyncKeys = new Set();
 const _saveDataOrig = saveData;
 // Reassignment (not a second `function saveData` declaration) — otherwise
 // hoisting makes both declarations point to the wrapper, and the wrapper's
 // call to _saveDataOrig would recurse into itself.
 saveData = function(key){
   _saveDataOrig(key);
-  if(DATA_SYNC_KEYS.includes(key)) sbPushData(true); // silent — avoid toast on every settings keystroke
+  if(!DATA_SYNC_KEYS.includes(key)) return;
+  if(initialPullDone){
+    sbPushData(true); // silent — avoid toast on every settings keystroke
+  } else {
+    // Defer — flush once markInitialPullDone() runs after the first pull.
+    _pendingSyncKeys.add(key);
+    console.warn('Push for "'+key+'" deferred until initial Supabase pull completes.');
+  }
 };
+// Called once, right after the FIRST sbPullData(true) of this session
+// resolves (see appUnlock() and the monitor auto-login path). From then
+// on, saveData() pushes immediately as before. If any edits were queued
+// during the brief pre-pull window, push them now (in that order) so
+// nothing the user actually typed gets silently lost.
+function markInitialPullDone(){
+  if(initialPullDone) return;
+  initialPullDone = true;
+  if(_pendingSyncKeys.size){
+    // sbPushData() pushes ALL DATA_SYNC_KEYS in one call — no need to
+    // iterate individual keys, just flush once now that it's safe.
+    sbPushData(true);
+    _pendingSyncKeys.clear();
+  }
+}
+window.markInitialPullDone = markInitialPullDone;
 function recordLog(type, recipients, status){
   _recordLogBase(type, recipients, status);
   if(LOG.length) sbInsertLog(LOG[0]);
@@ -9006,6 +9210,7 @@ try{
     (async () => {
       try{ await sbMigrateLegacyRows(); }catch(e){ console.warn('migrate failed:', e.message); }
       try{ await sbPullData(true); }catch(e){ console.warn('pull failed:', e.message); }
+      markInitialPullDone(); // safe to auto-push settings from here on
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
       try{ startSync(); }catch(e){ console.warn('startSync failed:', e.message); }
     })();
@@ -10116,6 +10321,9 @@ function tfxBuildWordHtml(d){
       .header-band-cell h1{font-size:16pt;font-weight:bold;letter-spacing:0.4pt;line-height:125%;margin:0;text-align:center;}
       .header-band-cell .sub1{font-size:9.5pt;margin:2pt 0;line-height:125%;text-align:center;}
       .header-band-cell .sub2{font-size:11pt;font-weight:bold;margin:2pt 0 0;line-height:125%;text-align:center;}
+      .header-logo-cell{border:none;border-bottom:1.5pt solid #000;width:60pt;padding:0 0 6pt 0;vertical-align:middle;text-align:left;}
+      .header-logo-cell img{max-width:52pt;max-height:52pt;object-fit:contain;}
+      .header-spacer-cell{border:none;border-bottom:1.5pt solid #000;width:60pt;padding:0 0 6pt 0;}
       .compact-grid{width:100%;border:none;margin:4pt 0;font-size:10.5pt;}
       .compact-grid td{border:none;padding:3pt 6pt 3pt 0;vertical-align:top;line-height:130%;}
       .sect-hdr{font-weight:bold;margin:7pt 0 4pt 0;font-size:10.5pt;}
@@ -10235,14 +10443,19 @@ function tfxBuildWordHtml(d){
     </table>
   `;
 
+  const logoDataUrl = TFX_LETTER_SETTINGS.logoDataUrl;
   const body = `
     <table class="layout-tbl" style="border:none;margin:0 0 6pt 0;">
-      <tr><td class="header-band-cell">
-        <h1>नेपाल विद्युत प्राधिकरण</h1>
-        <p class="sub1">वितरण तथा ग्राहक सेवा निर्देशनालय</p>
-        <p class="sub1">लुम्बिनी प्रादेशिक कार्यालय, बुटवल</p>
-        <p class="sub2">${tfxEscapeHtml(currentDcs().center || 'तौलिहवा वितरण केन्द्र')}${currentDcs().location ? ', '+tfxEscapeHtml(currentDcs().location) : ''}</p>
-      </td></tr>
+      <tr>
+        <td class="header-logo-cell">${logoDataUrl ? `<img src="${logoDataUrl}">` : ''}</td>
+        <td class="header-band-cell">
+          <h1>नेपाल विद्युत प्राधिकरण</h1>
+          <p class="sub1">वितरण तथा ग्राहक सेवा निर्देशनालय</p>
+          <p class="sub1">लुम्बिनी प्रादेशिक कार्यालय, बुटवल</p>
+          <p class="sub2">${tfxEscapeHtml(currentDcs().center || 'तौलिहवा वितरण केन्द्र')}${currentDcs().location ? ', '+tfxEscapeHtml(currentDcs().location) : ''}</p>
+        </td>
+        <td class="header-spacer-cell"></td>
+      </tr>
     </table>
     <div class="subject">विषय : विग्रेको ट्रान्सफर्मर विवरण</div>
 
