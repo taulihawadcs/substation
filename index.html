@@ -690,6 +690,61 @@ body.log-page-open #page-log{
   background:var(--bg,#f6f7fa);
 }
 
+/* Duty Chart page — same dedicated full-width treatment. */
+body.duty-page-open .page:not(#page-duty){display:none !important}
+body.duty-page-open #page-duty{
+  display:block !important;
+  max-width:none !important;
+  padding:0 !important;
+  margin:0 !important;
+  width:100% !important;
+  min-height:calc(100vh - 60px);
+  background:var(--bg,#f6f7fa);
+}
+
+/* ── Duty Chart page ────────────────────────────────────────── */
+#page-duty{padding:18px 16px 60px}
+#page-duty .duty-wrap{max-width:1100px;margin:0 auto}
+#page-duty .duty-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+#page-duty .duty-toolbar h2{font-size:18px;margin:0;font-weight:800;color:var(--txt)}
+#page-duty .duty-group{background:#fff;border:1px solid var(--line,#e3e7ee);border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(20,30,60,.05)}
+#page-duty .duty-group-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+#page-duty .duty-group-title{font-size:15px;font-weight:800;color:var(--txt);border:none;background:transparent;flex:1;min-width:160px;padding:4px 6px;border-radius:6px}
+#page-duty .duty-group-title:hover,#page-duty .duty-group-title:focus{background:#f4f6fb;outline:none}
+#page-duty .duty-section{border:1px solid var(--line,#e3e7ee);border-radius:10px;padding:12px;margin-bottom:12px;background:#fbfcfe}
+#page-duty .duty-section-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+#page-duty .duty-section-title{font-size:13.5px;font-weight:700;color:var(--txt);border:none;background:transparent;flex:1;min-width:140px;padding:3px 6px;border-radius:6px}
+#page-duty .duty-section-title:hover,#page-duty .duty-section-title:focus{background:#fff;outline:1px solid var(--line,#e3e7ee)}
+#page-duty table.duty-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+#page-duty table.duty-tbl th,#page-duty table.duty-tbl td{border:1px solid var(--line,#e3e7ee);padding:0;text-align:left;vertical-align:middle}
+#page-duty table.duty-tbl th{background:#f4f6fb;padding:6px 8px;font-weight:700;color:var(--dim,#5a6072)}
+#page-duty table.duty-tbl th input{width:100%;border:none;background:transparent;font-weight:700;color:var(--dim,#5a6072);font-size:12px;padding:2px 4px;box-sizing:border-box}
+#page-duty table.duty-tbl td input{width:100%;border:none;background:transparent;padding:7px 8px;font-size:12.5px;font-family:inherit;color:var(--txt);box-sizing:border-box}
+#page-duty table.duty-tbl td input:focus,#page-duty table.duty-tbl th input:focus{background:#eef3ff;outline:none}
+#page-duty table.duty-tbl td.duty-rm{width:34px;text-align:center;padding:0}
+#page-duty .duty-row-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+#page-duty .duty-btn{border:1px solid var(--line,#dbe2ea);background:#fff;border-radius:7px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;color:var(--txt);font-family:'Archivo',sans-serif}
+#page-duty .duty-btn:hover{background:#f4f6fb}
+#page-duty .duty-btn.duty-btn-danger{color:var(--red,#c0392b);border-color:var(--red,#c0392b)}
+#page-duty .duty-btn.duty-btn-danger:hover{background:#fdecea}
+#page-duty .duty-btn.duty-btn-primary{background:var(--blue,#2456c8);border-color:var(--blue,#2456c8);color:#fff}
+#page-duty .duty-btn.duty-btn-primary:hover{opacity:.92}
+#page-duty .duty-empty{text-align:center;color:var(--dim2,#9aa1b5);padding:40px 20px;font-size:13px}
+/* Current-shift highlighting */
+#page-duty table.duty-tbl th.duty-col-now{background:#fff3cd;position:relative}
+#page-duty table.duty-tbl td.duty-col-now{background:#fffdf5}
+#page-duty table.duty-tbl tr.duty-row-now{background:#eafaf0}
+#page-duty table.duty-tbl tr.duty-row-now td{background:#eafaf0}
+#page-duty table.duty-tbl td.duty-cell-now{background:#c8f2d9 !important;box-shadow:inset 0 0 0 2px #1e9e5a}
+#page-duty table.duty-tbl td.duty-cell-now input{font-weight:800;color:#0d6b3a}
+#page-duty .duty-now-tag{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.03em;background:#1e9e5a;color:#fff;border-radius:5px;padding:1px 5px;margin-left:5px;vertical-align:middle;white-space:nowrap}
+#page-duty table.duty-tbl th .duty-now-tag{background:#b9831a}
+#page-duty table.duty-tbl tr.duty-row-now td:first-child{font-weight:700}
+@media(max-width:640px){
+  #page-duty table.duty-tbl{font-size:11.5px}
+  #page-duty table.duty-tbl td input,#page-duty table.duty-tbl th input{padding:6px 5px;font-size:11.5px}
+}
+
 #page-transformer{
   --tfx-nea-blue:#0d3b8c; --tfx-nea-blue-dark:#082a66; --tfx-nea-blue-light:#e8eefb;
   --tfx-paper:#f6f4ee; --tfx-ink:#1c2230; --tfx-ink-soft:#4a5066;
@@ -885,6 +940,7 @@ body.log-page-open #page-log{
     <button class="nav-tab active" onclick="showPage('main')">📋 Entry</button>
     <button class="nav-tab" id="navLog" onclick="showPage('log')">📊 Log</button>
     <button class="nav-tab" id="navTransformer" onclick="showPage('transformer')">⚡ विग्रेको ट्रान्सफर्मर</button>
+    <button class="nav-tab" id="navDuty" onclick="showPage('duty')">🗓 Duty Chart</button>
     <button class="nav-tab" onclick="openModeSwitch()">🔀 Mode</button>
     <button class="nav-tab" onclick="openSettings()">⚙ Settings</button>
     <button class="nav-tab" onclick="toggleHelpGuide()" title="प्रयोग निर्देशन">❓ सहयोग</button>
@@ -1291,6 +1347,23 @@ body.log-page-open #page-log{
   </div>
 </div>
 
+<!-- ==================== PAGE: DUTY CHART ==================== -->
+<div class="page" id="page-duty">
+  <div class="duty-wrap">
+    <div class="duty-toolbar">
+      <h2>🗓 Duty Chart</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="duty-btn duty-btn-primary" onclick="dutyAddGroup()">+ नयाँ Duty Chart थप्नुहोस्</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:-6px 0 14px;font-size:11.5px;color:var(--dim,#5a6072)">
+      <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;border-radius:3px;background:#fff3cd;border:1px solid #e3d29a;display:inline-block"></span>आजको मिति अनुसार अहिलेको column</span>
+      <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;border-radius:3px;background:#c8f2d9;box-shadow:inset 0 0 0 1.5px #1e9e5a;display:inline-block"></span>अहिले ड्युटीमा भएको कर्मचारी</span>
+    </div>
+    <div id="dutyGroupsWrap"><div class="duty-empty">Loading…</div></div>
+  </div>
+</div>
+
 <!-- ==================== PAGE: SETTINGS ==================== -->
 <div class="page" id="page-settings">
   <div class="settings-grid">
@@ -1660,6 +1733,8 @@ gemini-1.5-flash</textarea>
                 <button class="btn btn-ghost btn-sm" onclick="sbPushFeederStatus()" style="justify-content:flex-start">↑ Push Feeder Status</button>
                 <button class="btn btn-ghost btn-sm" onclick="sbPullData(false)" style="justify-content:flex-start">↓ Pull Settings</button>
                 <button class="btn btn-ghost btn-sm" onclick="sbPushData(false)" style="justify-content:flex-start">↑ Push Settings</button>
+                <button class="btn btn-ghost btn-sm" onclick="sbPullDutyCharts(false)" style="justify-content:flex-start">↓ Pull Duty Chart</button>
+                <button class="btn btn-ghost btn-sm" onclick="sbPushDutyCharts(false)" style="justify-content:flex-start">↑ Push Duty Chart</button>
               </div>
 
               <div class="divider"></div>
@@ -1942,7 +2017,7 @@ const DEFAULTS = {
   ],
   feeders: [
     {name:"11 KV सौरहा फिडर",    station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
-    {name:"11 KV माक्रेट फिडर",   station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
+    {name:"11 KV मार्केट फिडर",   station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
     {name:"11 KV कृष्णनगर फिडर", station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
     {name:"11 KV रंगपुर फिडर",    station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
     {name:"11 KV महिता फिडर",     station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
@@ -1951,7 +2026,6 @@ const DEFAULTS = {
     {name:"शिबलवा फिडर",   station:"लबनी सबस्टेशन ३३/११ के.भी."},
     {name:"पकडी फिडर",     station:"लबनी सबस्टेशन ३३/११ के.भी."},
     {name:"मेहनिया फिडर",  station:"लबनी सबस्टेशन ३३/११ के.भी."},
-    {name:"Incomer",        station:"लबनी सबस्टेशन ३३/११ के.भी."},
     {name:"गजेहडा फिडर",   station:"जितपुर सबस्टेशन ३३/११ के.भी."},
     {name:"पिपरा फिडर",    station:"जितपुर सबस्टेशन ३३/११ के.भी."},
     {name:"ओदारी फिडर",    station:"जितपुर सबस्टेशन ३३/११ के.भी."},
@@ -1965,7 +2039,7 @@ const DEFAULTS = {
   ],
   reasons: [
     "मर्मत कार्य",
-    "लाइन मर्मत",
+    "आगलागी",
     "ट्रान्सफर्मर मर्मत",
     "वितरण ट्रान्सफर्मर जडान/फेरबदल",
     "चालक तार फेरबदल",
@@ -1982,7 +2056,6 @@ const DEFAULTS = {
     "मर्मत कार्य",
     "अर्थ फल्ट",
     "सर्ट सर्किट फल्ट",
-    "ओभरलोडिङ",
     "चट्याङ",
     "रुख पर्नु/तार छुनु",
     "जनावर पर्नु",
@@ -1991,23 +2064,44 @@ const DEFAULTS = {
     "इन्सुलेटर फल्ट",
     "जम्पर टुट्नु",
     "अटो रिक्लोजर",
-    "अज्ञात फल्ट"
+    "अज्ञात फल्ट",
+    "ओभरकरेन्ट"
   ],
   askedby: [
     // stations:[] means "shown for every substation" (general consumer askers).
     // Populate stations:[...names] to scope an asker to specific substation(s).
-    { name:"Rambalak Yadav",     stations:[] },
-    { name:"Tilakram Chaudhary", stations:[] },
-    { name:"Shivlochan Yadav",   stations:[] },
-    { name:"Nitesh Sah",         stations:[] },
-    { name:"Consumer",           stations:[] },
-    { name:"Ramesh Adhikari",    stations:[] }
+    { name:"Rambalak Yadav",       stations:[] },
+    { name:"Shivlochan Yadav",     stations:[] },
+    { name:"Nitesh Sah",           stations:[] },
+    { name:"Amit Pariyar",         stations:[] },
+    { name:"Rishiram Chaudhary",   stations:[] },
+    { name:"Pankaj Yadav",         stations:[] },
+    { name:"Nebulal Kurmi",        stations:[] },
+    { name:"Pitambar Poudel",      stations:[] },
+    { name:"Narayan P. Adhikari",  stations:[] },
+    { name:"Nabin Banjade",        stations:[] },
+    { name:"Saurav Tharu",         stations:[] },
+    { name:"Hajrat Ali",           stations:[] },
+    { name:"Bishnu Kori",          stations:[] },
+    { name:"Bijay Pokhrel",        stations:[] },
+    { name:"Khumananda Belbase",   stations:[] },
+    { name:"Pramod K. Yadav",      stations:[] },
+    { name:"Kamal KC",             stations:[] },
+    { name:"Chandraram Gadariya",  stations:[] }
   ],
   givenby: [
     {name:"दिनेश मौर्य",          station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
     {name:"केशव राज सापकोटा",     station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
-    {name:"कमल सापकोटा",          station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
-    {name:"राम औतार कुर्मी",      station:"तौलिहवा सबस्टेशन ३३/११ के.भी."}
+    {name:"राम औतार कुर्मी",      station:"तौलिहवा सबस्टेशन ३३/११ के.भी."},
+    {name:"Ravindra Yadav",       station:"लबनी सबस्टेशन ३३/११ के.भी."},
+    {name:"Awadesh Sah Sonar",    station:"लबनी सबस्टेशन ३३/११ के.भी."},
+    {name:"Bansabahadur Lodh",    station:"लबनी सबस्टेशन ३३/११ के.भी."},
+    {name:"Ram Prasad Bashyal",   station:"जितपुर सबस्टेशन ३३/११ के.भी."},
+    {name:"Bajrangi Sah",         station:"जितपुर सबस्टेशन ३३/११ के.भी."},
+    {name:"Kamal Banjade",        station:"जितपुर सबस्टेशन ३३/११ के.भी."},
+    {name:"Ravindra KC",          station:"घञ्चौरा सबस्टेशन ३३/११ के.भी."},
+    {name:"Uma Thapa Chhetri",    station:"घञ्चौरा सबस्टेशन ३३/११ के.भी."},
+    {name:"Mamata Pariyar",       station:"घञ्चौरा सबस्टेशन ३३/११ के.भी."}
   ],
   receivers:[
     {id:1,name:"Substation Alert",   type:"greenapi", contact:"", cmbkey:"", enabled:true}
@@ -2283,6 +2377,7 @@ async function appUnlock(){
     (async () => {
       try{ await sbMigrateLegacyRows(); }catch(e){ console.warn('migrate failed:', e.message); }
       try{ await sbPullData(true); }catch(e){ console.warn('pull failed:', e.message); }
+      try{ await sbPullDutyCharts(true); }catch(e){ console.warn('duty chart pull failed:', e.message); }
       markInitialPullDone(); // safe to auto-push settings from here on
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
       try{ sbAutoDailyBackup(); }catch(e){ console.warn('daily backup failed:', e.message); }
@@ -2555,10 +2650,13 @@ function showPage(name){
   document.body.classList.toggle('tfx-page-open', name==='transformer');
   // Same dedicated-page treatment for the Log (messages + downtime report) page.
   document.body.classList.toggle('log-page-open', name==='log');
+  document.body.classList.toggle('duty-page-open', name==='duty');
   if(name==='main')     document.querySelector('.nav-tab[onclick*="main"]').classList.add('active');
   else if(name==='log') { $('navLog').classList.add('active'); renderLogPage(); }
   else if(name==='transformer') { $('navTransformer').classList.add('active'); tfxRenderAll(); }
+  else if(name==='duty') { $('navDuty').classList.add('active'); dutyRenderAll(); dutyStartPolling(); }
   else if(name==='settings') document.querySelector('.nav-tab[onclick*="openSettings"]').classList.add('active');
+  if(name!=='duty') dutyStopPolling();
   if(name==='settings'){ refreshAllTables(); setTimeout(testSupabase, 300); updateSbConnUI(); updateRcvMuteUI(); }
 }
 function toggleSnav(){
@@ -2585,6 +2683,439 @@ function showSection(id){
   if(window.innerWidth<=640 && sec){
     setTimeout(()=>{ try{ sec.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){} }, 60);
   }
+}
+
+/* ============================================================
+   DUTY CHART — fully editable shift-duty roster page
+   Structure: DUTY_CHARTS = [ { id, title, sections:[ { id, name,
+   columns:[colLabel,...], staff:[ {name, phone, shifts:[val,...]}, ... ]
+   } ] } ]
+   Persisted to localStorage under 'sms2_duty_charts' and synced to the
+   SAME Supabase app_settings table the rest of the app already uses
+   (key: 'data_duty_charts'), so every device sees the same charts.
+   ============================================================ */
+let DUTY_ID_SEQ = 1;
+function dutyNextId(){ return 'd' + (DUTY_ID_SEQ++) + '_' + Date.now().toString(36); }
+
+function dutyDefaultCharts(){
+  // Seeded from the office's existing shift-duty spreadsheet. The final
+  // signature line (तयार गर्ने / प्राविधिक प्रमुख / केन्द्र प्रमुख) is
+  // intentionally NOT included here — this page is the editable roster
+  // only, not the printed sign-off sheet.
+  const cols3 = ['१-१० गतेको सिफ्ट','११-२० गतेको सिफ्ट','२१-३० गतेको सिफ्ट'];
+  const rot = (a,b,c)=>[a,b,c]; // small helper just for readability below
+  return [
+    {
+      id: dutyNextId(), title: 'सब-स्टेसन Shift Duty Chart',
+      sections: [
+        { id: dutyNextId(), name: 'घंचौरा सब-स्टेसन (Ghanchaura Sub-Station)', columns: cols3.slice(), staff: [
+          {name:'उमा थापा',        phone:'', shifts: rot('०६-१४ (बिहान)','२२-०६ (रात्री)','१४-२२ (दिउँसो)')},
+          {name:'रबिन्द्र के.सी.',  phone:'', shifts: rot('१४-२२ (दिउँसो)','०६-१४ (बिहान)','२२-०६ (रात्री)')},
+          {name:'ममता परियार',     phone:'', shifts: rot('२२-०६ (रात्री)','१४-२२ (दिउँसो)','०६-१४ (बिहान)')}
+        ]},
+        { id: dutyNextId(), name: 'जीतपुर सब-स्टेसन (Jitpur Sub-Station)', columns: cols3.slice(), staff: [
+          {name:'बजरंगी साह',        phone:'', shifts: rot('०६-१४ (बिहान)','२२-०६ (रात्री)','१४-२२ (दिउँसो)')},
+          {name:'कमल प्र. बजगाई',    phone:'', shifts: rot('१४-२२ (दिउँसो)','०६-१४ (बिहान)','२२-०६ (रात्री)')},
+          {name:'राम प्र. बस्याल',   phone:'', shifts: rot('२२-०६ (रात्री)','१४-२२ (दिउँसो)','०६-१४ (बिहान)')}
+        ]},
+        { id: dutyNextId(), name: 'लवनी सब-स्टेसन (Labani Sub-Station)', columns: cols3.slice(), staff: [
+          {name:'रविन्द्र यादव',     phone:'', shifts: rot('०६-१४ (बिहान)','२२-०६ (रात्री)','१४-२२ (दिउँसो)')},
+          {name:'वंस बहादुर लोध',    phone:'', shifts: rot('१४-२२ (दिउँसो)','०६-१४ (बिहान)','२२-०६ (रात्री)')},
+          {name:'अवधेश सिंह',        phone:'', shifts: rot('२२-०६ (रात्री)','१४-२२ (दिउँसो)','०६-१४ (बिहान)')}
+        ]},
+        { id: dutyNextId(), name: 'तौलिहवा सब-स्टेसन (Taulihawa Sub-Station)', columns: cols3.slice(), staff: [
+          {name:'केशव राज सापकोटा', phone:'', shifts: rot('०६-१४ (बिहान)','२२-०६ (रात्री)','१४-२२ (दिउँसो)')},
+          {name:'दिनेश मौर्य',       phone:'', shifts: rot('१४-२२ (दिउँसो)','०६-१४ (बिहान)','२२-०६ (रात्री)')},
+          {name:'राम औतार कुर्मी',   phone:'', shifts: rot('२२-०६ (रात्री)','१४-२२ (दिउँसो)','०६-१४ (बिहान)')}
+        ]}
+      ]
+    },
+    {
+      id: dutyNextId(), title: 'नो लाइट (No Light) Shift Duty Chart',
+      sections: [
+        { id: dutyNextId(), name: 'घंचौरा नो लाइट (Ghanchaura No Light)', columns: cols3.slice(), staff: [
+          {name:'कर्मचारी १', phone:'', shifts: rot('०६-१४ (बिहान)','२२-०६ (रात्री)','१४-२२ (दिउँसो)')},
+          {name:'कर्मचारी २', phone:'', shifts: rot('१४-२२ (दिउँसो)','०६-१४ (बिहान)','२२-०६ (रात्री)')},
+          {name:'कर्मचारी ३', phone:'', shifts: rot('२२-०६ (रात्री)','१४-२२ (दिउँसो)','०६-१४ (बिहान)')}
+        ]},
+        { id: dutyNextId(), name: 'जीतपुर नो लाइट (Jitpur No Light)', columns: cols3.slice(), staff: [
+          {name:'कर्मचारी १', phone:'', shifts: rot('०६-१४ (बिहान)','२२-०६ (रात्री)','१४-२२ (दिउँसो)')},
+          {name:'कर्मचारी २', phone:'', shifts: rot('१४-२२ (दिउँसो)','०६-१४ (बिहान)','२२-०६ (रात्री)')},
+          {name:'कर्मचारी ३', phone:'', shifts: rot('२२-०६ (रात्री)','१४-२२ (दिउँसो)','०६-१४ (बिहान)')}
+        ]},
+        { id: dutyNextId(), name: 'लवनी नो लाइट (Labani No Light)', columns: cols3.slice(), staff: [
+          {name:'कर्मचारी १', phone:'', shifts: rot('०६-१४ (बिहान)','२२-०६ (रात्री)','१४-२२ (दिउँसो)')},
+          {name:'कर्मचारी २', phone:'', shifts: rot('१४-२२ (दिउँसो)','०६-१४ (बिहान)','२२-०६ (रात्री)')},
+          {name:'कर्मचारी ३', phone:'', shifts: rot('२२-०६ (रात्री)','१४-२२ (दिउँसो)','०६-१४ (बिहान)')}
+        ]},
+        { id: dutyNextId(), name: 'तौलिहवा नो लाइट (Taulihawa No Light)', columns: cols3.slice(), staff: [
+          {name:'कर्मचारी १', phone:'', shifts: rot('०६-१४ (बिहान)','२२-०६ (रात्री)','१४-२२ (दिउँसो)')},
+          {name:'कर्मचारी २', phone:'', shifts: rot('१४-२२ (दिउँसो)','०६-१४ (बिहान)','२२-०६ (रात्री)')},
+          {name:'कर्मचारी ३', phone:'', shifts: rot('२२-०६ (रात्री)','१४-२२ (दिउँसो)','०६-१४ (बिहान)')}
+        ]}
+      ]
+    },
+    {
+      id: dutyNextId(), title: 'Other Staff Duty Chart (09 AM - 05 PM)',
+      sections: [
+        { id: dutyNextId(), name: 'घंचौरा Other Staff', columns: cols3.slice(), staff: [
+          {name:'कर्मचारी १', phone:'', shifts: rot('०९-१७ (दिनको)','०९-१७ (दिनको)','०९-१७ (दिनको)')}
+        ]},
+        { id: dutyNextId(), name: 'जीतपुर Other Staff', columns: cols3.slice(), staff: [
+          {name:'कर्मचारी १', phone:'', shifts: rot('०९-१७ (दिनको)','०९-१७ (दिनको)','०९-१७ (दिनको)')}
+        ]},
+        { id: dutyNextId(), name: 'लवनी Other Staff', columns: cols3.slice(), staff: [
+          {name:'कर्मचारी १', phone:'', shifts: rot('०९-१७ (दिनको)','०९-१७ (दिनको)','०९-१७ (दिनको)')}
+        ]},
+        { id: dutyNextId(), name: 'तौलिहवा Other Staff', columns: cols3.slice(), staff: [
+          {name:'कर्मचारी १', phone:'', shifts: rot('०९-१७ (दिनको)','०९-१७ (दिनको)','०९-१७ (दिनको)')}
+        ]}
+      ]
+    }
+  ];
+}
+
+let DUTY_CHARTS = dutyLoadCharts();
+
+function dutyLoadCharts(){
+  try{
+    const raw = localStorage.getItem('sms2_duty_charts');
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(Array.isArray(parsed) && parsed.length) return parsed;
+    }
+  }catch(e){ console.warn('duty chart load failed:', e.message); }
+  return dutyDefaultCharts();
+}
+
+function dutySaveCharts(){
+  try{ localStorage.setItem('sms2_duty_charts', JSON.stringify(DUTY_CHARTS)); }catch(e){ console.warn('duty chart save failed:', e.message); }
+  // Same deferred-until-first-pull guard as saveData(), for the same
+  // reason: don't push a brand-new install's seed data over real cloud
+  // data before this device has had a chance to pull it.
+  if(typeof initialPullDone!=='undefined' && initialPullDone){
+    sbPushDutyCharts();
+  } else if(typeof _pendingSyncKeys!=='undefined'){
+    _pendingDutyPush = true;
+  }
+}
+let _pendingDutyPush = false;
+
+async function sbPushDutyCharts(silent=true){
+  if(typeof sbReady!=='function' || !sbReady()) return;
+  try{
+    const url = getSbUrl()+'/rest/v1/app_settings';
+    const res = await fetch(url+'?on_conflict=key', {
+      method:  'POST',
+      headers: {...sbHeaders(), 'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:    JSON.stringify([{ key:'data_duty_charts', value: JSON.stringify(DUTY_CHARTS), updated_at: new Date().toISOString() }])
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    if(!silent) toast('✓ Duty chart synced to cloud', 2000);
+  }catch(e){
+    console.warn('Duty chart push failed:', e.message);
+    if(!silent) toast('⚠ Duty chart sync failed: '+e.message, 3000);
+  }
+}
+window.sbPushDutyCharts = sbPushDutyCharts;
+
+async function sbPullDutyCharts(silent=true){
+  if(typeof sbReady!=='function' || !sbReady()) return;
+  try{
+    const rows = await sbFetch('app_settings?key=eq.data_duty_charts&select=key,value');
+    if(rows && rows[0] && rows[0].value){
+      const parsed = JSON.parse(rows[0].value);
+      if(Array.isArray(parsed) && parsed.length){
+        DUTY_CHARTS = parsed;
+        try{ localStorage.setItem('sms2_duty_charts', JSON.stringify(DUTY_CHARTS)); }catch(e){}
+        if(document.getElementById('page-duty') && document.getElementById('page-duty').classList.contains('active')) dutyRenderAll();
+      }
+    }
+    if(!silent) toast('✓ Duty chart pulled from cloud', 2000);
+  }catch(e){
+    console.warn('Duty chart pull failed:', e.message);
+    if(!silent) toast('⚠ Duty chart pull failed: '+e.message, 3000);
+  }
+}
+window.sbPullDutyCharts = sbPullDutyCharts;
+
+// ── Current-shift detection ──────────────────────────────────
+// Converts Devanagari digits (०-९) in a string to plain ASCII digits, so
+// column/shift labels typed in Nepali numerals can be parsed as numbers.
+function dutyDevanagariToEn(str){
+  const map = {'०':'0','१':'1','२':'2','३':'3','४':'4','५':'5','६':'6','७':'7','८':'8','९':'9'};
+  return String(str||'').replace(/[०-९]/g, ch=>map[ch]||ch);
+}
+
+// Parses a column label like "१-१० गतेको सिफ्ट" into a day-of-month range
+// {from:1,to:10}. Returns null if the label doesn't contain a recognizable
+// "N-M" pattern (e.g. a custom-renamed column) — highlighting is skipped
+// gracefully for those rather than guessing.
+function dutyParseDayRange(label){
+  const en = dutyDevanagariToEn(label);
+  const m = en.match(/(\d{1,2})\s*-\s*(\d{1,2})/);
+  if(!m) return null;
+  return { from: parseInt(m[1],10), to: parseInt(m[2],10) };
+}
+
+// Parses a shift-value cell like "०६-१४ (बिहान)" into a 24-hour range
+// {from:6,to:14}. Returns null if unparseable (custom text, blank, etc).
+function dutyParseTimeRange(val){
+  const en = dutyDevanagariToEn(val);
+  const m = en.match(/(\d{1,2})\s*-\s*(\d{1,2})/);
+  if(!m) return null;
+  return { from: parseInt(m[1],10), to: parseInt(m[2],10) };
+}
+
+// Is `day` (1-31, today's BS date-of-month) inside the column's day range?
+// Handles the normal case (1-10, 11-20) and treats an end of 30/31 as
+// "through end of month" so a 21-30 column still matches on a 31-day month.
+function dutyDayInRange(day, range){
+  if(!range) return false;
+  if(range.to>=30) return day>=range.from;
+  return day>=range.from && day<=range.to;
+}
+
+// Is `hour` (0-23, current clock hour) inside the shift's time range?
+// Handles overnight wraps, e.g. 22-06 means 22:00 → 05:59 the next day.
+function dutyHourInRange(hour, range){
+  if(!range) return false;
+  if(range.from===range.to) return false; // degenerate/unparseable as a span
+  if(range.from < range.to) return hour>=range.from && hour<range.to;
+  return hour>=range.from || hour<range.to; // wraps past midnight
+}
+
+// Returns { colIndex, hour, day } describing "right now" for shift-matching
+// purposes — colIndex is which shift-column matches today's BS date, or -1
+// if none of a section's column labels parse as day-ranges (e.g. all
+// custom-renamed). Computed once per render pass, reused across sections.
+function dutyNowContext(){
+  let day = null;
+  try{
+    if(typeof tfxCurrentBsMitiObj==='function') day = tfxCurrentBsMitiObj().d;
+  }catch(e){ /* transformer module not ready yet — fall back below */ }
+  if(!day){
+    // Fallback: use the AD calendar date-of-month. Not calendar-accurate for
+    // BS purposes, but keeps highlighting functional even if the BS anchor
+    // in Letter Settings has never been set.
+    day = new Date().getDate();
+  }
+  const hour = new Date().getHours();
+  return { day, hour };
+}
+
+// ── Render ──────────────────────────────────────────────────
+function dutyRenderAll(){
+  const wrap = $('dutyGroupsWrap');
+  if(!wrap) return;
+  if(!DUTY_CHARTS.length){
+    wrap.innerHTML = `<div class="duty-empty">कुनै Duty Chart छैन। "+ नयाँ Duty Chart थप्नुहोस्" थिचेर सुरु गर्नुहोस्।</div>`;
+    return;
+  }
+  const now = dutyNowContext();
+  wrap.innerHTML = DUTY_CHARTS.map(g=>dutyGroupHtml(g, now)).join('');
+}
+
+function dutyGroupHtml(g, now){
+  return `
+    <div class="duty-group" data-gid="${esc(g.id)}">
+      <div class="duty-group-head">
+        <input class="duty-group-title" value="${esc(g.title)}" onchange="dutyRenameGroup('${esc(g.id)}',this.value)" title="Chart title — click to edit">
+        <button class="duty-btn" onclick="dutyAddSection('${esc(g.id)}')">+ नयाँ Station/Section</button>
+        <button class="duty-btn duty-btn-danger" onclick="dutyRemoveGroup('${esc(g.id)}')">🗑️ यो Chart मेट्नुहोस्</button>
+      </div>
+      ${g.sections.map(s=>dutySectionHtml(g.id,s,now)).join('') || '<div class="duty-empty">कुनै section छैन — "+ नयाँ Station/Section" थिचेर थप्नुहोस्।</div>'}
+    </div>`;
+}
+
+function dutySectionHtml(gid, s, now){
+  now = now || dutyNowContext();
+  // Which column (if any) matches today's date-of-month.
+  const colRanges = s.columns.map(c=>dutyParseDayRange(c));
+  const currentColIdx = colRanges.findIndex(r=>dutyDayInRange(now.day, r));
+  return `
+    <div class="duty-section" data-sid="${esc(s.id)}">
+      <div class="duty-section-head">
+        <input class="duty-section-title" value="${esc(s.name)}" onchange="dutyRenameSection('${esc(gid)}','${esc(s.id)}',this.value)" title="Section/station name — click to edit">
+        <button class="duty-btn" onclick="dutyAddColumn('${esc(gid)}','${esc(s.id)}')">+ Column</button>
+        <button class="duty-btn duty-btn-danger" onclick="dutyRemoveSection('${esc(gid)}','${esc(s.id)}')">🗑️ Section मेट्नुहोस्</button>
+      </div>
+      <div style="overflow-x:auto">
+      <table class="duty-tbl">
+        <thead><tr>
+          <th style="min-width:140px">कर्मचारीको नाम</th>
+          <th style="min-width:110px">फोन नम्बर</th>
+          ${s.columns.map((c,ci)=>`<th class="${ci===currentColIdx?'duty-col-now':''}" style="min-width:130px"><input value="${esc(c)}" onchange="dutyRenameColumn('${esc(gid)}','${esc(s.id)}',${ci},this.value)">${ci===currentColIdx?'<span class="duty-now-tag">आज</span>':''}</th>`).join('')}
+          <th style="width:34px"></th>
+        </tr></thead>
+        <tbody>
+          ${s.staff.map((st,ri)=>{
+            const shifts = st.shifts||[];
+            // Is THIS staff row on duty right now? Only possible if we know
+            // today's column, and that cell's time range covers this hour.
+            const isNowRow = currentColIdx>=0 && dutyHourInRange(now.hour, dutyParseTimeRange(shifts[currentColIdx]));
+            return `
+            <tr class="${isNowRow?'duty-row-now':''}">
+              <td><input value="${esc(st.name)}" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'name',this.value)" placeholder="नाम">${isNowRow?'<span class="duty-now-tag">ड्युटीमा</span>':''}</td>
+              <td><input value="${esc(st.phone||'')}" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'phone',this.value)" placeholder="फोन" inputmode="tel"></td>
+              ${shifts.map((v,ci)=>{
+                const cellIsNow = isNowRow && ci===currentColIdx;
+                return `<td class="${ci===currentColIdx?'duty-col-now':''}${cellIsNow?' duty-cell-now':''}"><input value="${esc(v||'')}" onchange="dutyEditShift('${esc(gid)}','${esc(s.id)}',${ri},${ci},this.value)"></td>`;
+              }).join('')}
+              <td class="duty-rm"><button class="duty-btn duty-btn-danger" style="padding:3px 7px" onclick="dutyRemoveStaff('${esc(gid)}','${esc(s.id)}',${ri})" title="यो कर्मचारी हटाउनुहोस्">✕</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      </div>
+      <div class="duty-row-actions">
+        <button class="duty-btn" onclick="dutyAddStaff('${esc(gid)}','${esc(s.id)}')">+ कर्मचारी थप्नुहोस्</button>
+      </div>
+    </div>`;
+}
+
+// ── Find helpers ────────────────────────────────────────────
+function dutyFindGroup(gid){ return DUTY_CHARTS.find(g=>g.id===gid); }
+function dutyFindSection(gid,sid){ const g=dutyFindGroup(gid); return g ? g.sections.find(s=>s.id===sid) : null; }
+
+// ── Group-level edits ───────────────────────────────────────
+function dutyAddGroup(){
+  const title = (prompt('नयाँ Duty Chart को शीर्षक लेख्नुहोस्:', 'नयाँ Duty Chart')||'').trim();
+  if(!title) return;
+  DUTY_CHARTS.push({ id: dutyNextId(), title, sections: [] });
+  dutySaveCharts(); dutyRenderAll();
+  toast('✓ नयाँ Duty Chart थपियो');
+}
+window.dutyAddGroup = dutyAddGroup;
+
+function dutyRenameGroup(gid, val){
+  const g=dutyFindGroup(gid); if(!g) return;
+  g.title = (val||'').trim() || g.title;
+  dutySaveCharts();
+}
+window.dutyRenameGroup = dutyRenameGroup;
+
+function dutyRemoveGroup(gid){
+  const g=dutyFindGroup(gid); if(!g) return;
+  if(!confirm(`"${g.title}" पूरै Duty Chart मेट्नुहुन्छ? यो पूर्ववत हुँदैन।`)) return;
+  DUTY_CHARTS = DUTY_CHARTS.filter(x=>x.id!==gid);
+  dutySaveCharts(); dutyRenderAll();
+  toast('🗑️ Duty Chart मेटियो');
+}
+window.dutyRemoveGroup = dutyRemoveGroup;
+
+// ── Section-level edits ─────────────────────────────────────
+function dutyAddSection(gid){
+  const g=dutyFindGroup(gid); if(!g) return;
+  const name = (prompt('नयाँ Station/Section को नाम लेख्नुहोस्:', 'नयाँ Station')||'').trim();
+  if(!name) return;
+  // New sections default to the same 3 shift columns as the rest of the
+  // app's charts, but this is just a starting point — fully editable.
+  const cols = (g.sections[0] && g.sections[0].columns.length) ? g.sections[0].columns.slice() : ['१-१० गतेको सिफ्ट','११-२० गतेको सिफ्ट','२१-३० गतेको सिफ्ट'];
+  g.sections.push({ id: dutyNextId(), name, columns: cols, staff: [] });
+  dutySaveCharts(); dutyRenderAll();
+}
+window.dutyAddSection = dutyAddSection;
+
+function dutyRenameSection(gid, sid, val){
+  const s=dutyFindSection(gid,sid); if(!s) return;
+  s.name = (val||'').trim() || s.name;
+  dutySaveCharts();
+}
+window.dutyRenameSection = dutyRenameSection;
+
+function dutyRemoveSection(gid, sid){
+  const g=dutyFindGroup(gid); if(!g) return;
+  const s=dutyFindSection(gid,sid); if(!s) return;
+  if(!confirm(`"${s.name}" section मेट्नुहुन्छ?`)) return;
+  g.sections = g.sections.filter(x=>x.id!==sid);
+  dutySaveCharts(); dutyRenderAll();
+}
+window.dutyRemoveSection = dutyRemoveSection;
+
+// ── Column-level edits ──────────────────────────────────────
+function dutyAddColumn(gid, sid){
+  const s=dutyFindSection(gid,sid); if(!s) return;
+  const label = (prompt('नयाँ column को शीर्षक लेख्नुहोस्:', 'नयाँ सिफ्ट')||'').trim();
+  if(!label) return;
+  s.columns.push(label);
+  s.staff.forEach(st=>{ if(!Array.isArray(st.shifts)) st.shifts=[]; st.shifts.push(''); });
+  dutySaveCharts(); dutyRenderAll();
+}
+window.dutyAddColumn = dutyAddColumn;
+
+function dutyRenameColumn(gid, sid, ci, val){
+  const s=dutyFindSection(gid,sid); if(!s) return;
+  s.columns[ci] = (val||'').trim() || s.columns[ci];
+  dutySaveCharts();
+}
+window.dutyRenameColumn = dutyRenameColumn;
+
+// ── Staff-row-level edits ───────────────────────────────────
+function dutyAddStaff(gid, sid){
+  const s=dutyFindSection(gid,sid); if(!s) return;
+  s.staff.push({ name:'', phone:'', shifts: s.columns.map(()=>'') });
+  dutySaveCharts(); dutyRenderAll();
+  // Focus the new row's name field for immediate typing.
+  setTimeout(()=>{
+    const rows = document.querySelectorAll(`.duty-section[data-sid="${sid}"] tbody tr`);
+    const last = rows[rows.length-1];
+    if(last){ const inp=last.querySelector('input'); if(inp) inp.focus(); }
+  }, 30);
+}
+window.dutyAddStaff = dutyAddStaff;
+
+function dutyEditStaff(gid, sid, ri, field, val){
+  const s=dutyFindSection(gid,sid); if(!s || !s.staff[ri]) return;
+  s.staff[ri][field] = val;
+  dutySaveCharts();
+}
+window.dutyEditStaff = dutyEditStaff;
+
+function dutyEditShift(gid, sid, ri, ci, val){
+  const s=dutyFindSection(gid,sid); if(!s || !s.staff[ri]) return;
+  if(!Array.isArray(s.staff[ri].shifts)) s.staff[ri].shifts=[];
+  s.staff[ri].shifts[ci] = val;
+  dutySaveCharts();
+}
+window.dutyEditShift = dutyEditShift;
+
+function dutyRemoveStaff(gid, sid, ri){
+  const s=dutyFindSection(gid,sid); if(!s) return;
+  s.staff.splice(ri,1);
+  dutySaveCharts(); dutyRenderAll();
+}
+window.dutyRemoveStaff = dutyRemoveStaff;
+
+// ── Light polling, only while the Duty page is open ─────────
+// Skips the refresh entirely while an input on this page is focused, so a
+// background pull can never overwrite a keystroke the operator is mid-typing.
+let _dutyPollInterval = null;
+let _dutyTickInterval = null;
+function dutyStartPolling(){
+  if(!_dutyPollInterval){
+    _dutyPollInterval = setInterval(()=>{
+      const active = document.activeElement;
+      const editing = active && active.closest && active.closest('#page-duty') && (active.tagName==='INPUT'||active.tagName==='TEXTAREA');
+      if(editing) return;
+      sbPullDutyCharts(true);
+    }, 20000);
+  }
+  if(!_dutyTickInterval){
+    // Re-render every minute purely to refresh the "current shift" highlight
+    // as the clock crosses a shift boundary — skipped while mid-edit, same
+    // guard as the cloud-pull interval above.
+    _dutyTickInterval = setInterval(()=>{
+      const active = document.activeElement;
+      const editing = active && active.closest && active.closest('#page-duty') && (active.tagName==='INPUT'||active.tagName==='TEXTAREA');
+      if(editing) return;
+      dutyRenderAll();
+    }, 60000);
+  }
+}
+function dutyStopPolling(){
+  if(_dutyPollInterval){ clearInterval(_dutyPollInterval); _dutyPollInterval=null; }
+  if(_dutyTickInterval){ clearInterval(_dutyTickInterval); _dutyTickInterval=null; }
 }
 
 /* ============================================================
@@ -6372,15 +6903,24 @@ function renderFeederStatusBlock(st, feeders, panel){
 // is typed there is ALSO pushed into the underlying list and saved, so it
 // shows up as a normal option next time (same "edit feature" as Settings).
 // Resolves to the chosen reason string, or null if the operator cancels.
+// Fixed set for panel Trip only — deliberately NOT editable and NOT drawn
+// from DATA.tripreasons, since the panel's quick Trip flow should only ever
+// offer these 4 standard fault categories (Shutdown still uses the full,
+// user-editable DATA.reasons list with add-new, unchanged).
+const FS_TRIP_REASONS_FIXED = ['Earth fault', 'Overcurrent', 'Earth fault & Overcurrent', 'Unknown Fault'];
+
 function fsAskReason(kind, feederName){
   return new Promise((resolve)=>{
-    const listKey = kind==='trip' ? 'tripreasons' : 'reasons';
-    const list = DATA[listKey] || [];
-    const title = kind==='trip' ? 'Trip कारण' : 'Shutdown कारण';
+    const isTrip = kind==='trip';
+    const listKey = 'reasons'; // only used for Shutdown's editable list below
+    const list = isTrip ? FS_TRIP_REASONS_FIXED : (DATA[listKey] || []);
+    const title = isTrip ? 'Trip कारण' : 'Shutdown कारण';
     const existingId = 'fsReasonModalRoot';
     const old = document.getElementById(existingId);
     if(old) old.remove();
     const optsHtml = list.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');
+    // Trip has no "+ नयाँ" option — it's a fixed 4-choice list only.
+    const newOptHtml = isTrip ? '' : `<option value="__new__">+ नयाँ कारण थप्नुहोस्…</option>`;
     const html = `
       <div id="${existingId}" style="display:flex;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:center;justify-content:center">
         <div style="background:#fff;border-radius:14px;width:min(420px,92vw);box-shadow:0 8px 40px rgba(0,0,0,.22);padding:16px">
@@ -6388,7 +6928,7 @@ function fsAskReason(kind, feederName){
           <div style="font-size:12px;color:var(--dim2);margin-bottom:10px">${esc(feederName)}</div>
           <select id="fsReasonSelect" style="width:100%;padding:8px;font-size:13px;border-radius:8px;border:1px solid var(--line);margin-bottom:8px">
             ${optsHtml}
-            <option value="__new__">+ नयाँ कारण थप्नुहोस्…</option>
+            ${newOptHtml}
           </select>
           <input type="text" id="fsReasonNewInput" placeholder="नयाँ कारण लेख्नुहोस्" style="display:none;width:100%;padding:8px;font-size:13px;border-radius:8px;border:1px solid var(--line);margin-bottom:8px;box-sizing:border-box">
           <div style="display:flex;gap:7px;justify-content:flex-end;margin-top:6px">
@@ -6409,7 +6949,7 @@ function fsAskReason(kind, feederName){
     document.getElementById('fsReasonCancel').onclick=()=>cleanup(null);
     document.getElementById('fsReasonOk').onclick=()=>{
       let reason;
-      if(sel.value==='__new__'){
+      if(!isTrip && sel.value==='__new__'){
         reason=(newInput.value||'').trim();
         if(!reason){ toast('कारण लेख्नुहोस्'); return; }
         if(!list.includes(reason)){ list.push(reason); saveData(listKey); }
@@ -8523,6 +9063,10 @@ function markInitialPullDone(){
     sbPushData(true);
     _pendingSyncKeys.clear();
   }
+  if(typeof _pendingDutyPush!=='undefined' && _pendingDutyPush){
+    _pendingDutyPush = false;
+    sbPushDutyCharts(true);
+  }
 }
 window.markInitialPullDone = markInitialPullDone;
 function recordLog(type, recipients, status){
@@ -9210,6 +9754,7 @@ try{
     (async () => {
       try{ await sbMigrateLegacyRows(); }catch(e){ console.warn('migrate failed:', e.message); }
       try{ await sbPullData(true); }catch(e){ console.warn('pull failed:', e.message); }
+      try{ await sbPullDutyCharts(true); }catch(e){ console.warn('duty chart pull failed:', e.message); }
       markInitialPullDone(); // safe to auto-push settings from here on
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
       try{ startSync(); }catch(e){ console.warn('startSync failed:', e.message); }
