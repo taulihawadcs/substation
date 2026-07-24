@@ -1351,9 +1351,9 @@ body.duty-page-open #page-duty{
 <div class="page" id="page-duty">
   <div class="duty-wrap">
     <div class="duty-toolbar">
-      <h2>🗓 Duty Chart</h2>
+      <h2>🗓 Duty Chart <span id="dutyLockBadge" style="display:none;font-size:11px;font-weight:700;background:#fdecea;color:#c0392b;border-radius:6px;padding:2px 8px;vertical-align:middle;margin-left:6px">🔒 Locked</span></h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="duty-btn duty-btn-primary" onclick="dutyAddGroup()">+ नयाँ Duty Chart थप्नुहोस्</button>
+        <button class="duty-btn duty-btn-primary" id="dutyAddGroupBtn" onclick="dutyAddGroup()">+ नयाँ Duty Chart थप्नुहोस्</button>
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:-6px 0 14px;font-size:11.5px;color:var(--dim,#5a6072)">
@@ -1384,6 +1384,7 @@ body.duty-page-open #page-duty{
       <div class="snav-item" onclick="showSection('sec-greenapi')">Green API (WA Group)</div>
       <div class="snav-item" onclick="showSection('sec-supabase')">☁ Supabase (Sync)</div>
       <div class="snav-item" onclick="showSection('sec-devices');renderDeviceRegistry()">🔐 Device Access</div>
+      <div class="snav-item" onclick="showSection('sec-dutylock');dutyUpdateLockUI()">🗓 Duty Chart Lock</div>
       <div class="snav-item" onclick="showSection('sec-changepw')">🔑 Change Password</div>
     </div>
 
@@ -1774,6 +1775,24 @@ gemini-1.5-flash</textarea>
             <p style="font-size:12px;margin-bottom:10px">This device: <b id="myDeviceCode" style="font-family:monospace"></b></p>
             <button class="btn btn-ghost btn-sm" style="margin-bottom:10px" onclick="renderDeviceRegistry()">⟳ Refresh Requests</button>
             <div id="deviceRegistryList"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DUTY CHART LOCK -->
+      <div class="s-section" id="sec-dutylock">
+        <div class="card">
+          <div class="card-head"><span class="card-title">🗓 Duty Chart Lock</span></div>
+          <div class="card-body">
+            <p style="font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.6">
+              <b>Unlocked (पूर्वनिर्धारित):</b> जोसुकैले Duty Chart मा नयाँ Chart/Section/Column/कर्मचारी थप्न, नाम बदल्न र मेट्न सक्छन् — अहिलेकै जस्तै।<br>
+              <b>Locked:</b> नयाँ थप्ने सबै "+" बटन लुक्छन्; भइरहेको जुनसुकै सम्पादन वा मेटाउने काम गर्दा Settings पासवर्ड सोध्नेछ (एक पटक सोधेपछि, यही session मा फेरि सोध्दैन)। परिवर्तन सबै डिभाइस/प्रयोगकर्तामा सिंक हुन्छ।
+            </p>
+            <label style="display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:700;color:var(--txt);cursor:pointer">
+              <input type="checkbox" id="dutyLockToggle" onchange="toggleDutyLock(this.checked)" style="width:18px;height:18px;cursor:pointer">
+              🔒 Lock Duty Chart editing (सम्पादन लक गर्नुहोस्)
+            </label>
+            <p id="dutyLockStatusHint" style="font-size:12px;color:var(--dim2);margin-top:10px"></p>
           </div>
         </div>
       </div>
@@ -2378,6 +2397,7 @@ async function appUnlock(){
       try{ await sbMigrateLegacyRows(); }catch(e){ console.warn('migrate failed:', e.message); }
       try{ await sbPullData(true); }catch(e){ console.warn('pull failed:', e.message); }
       try{ await sbPullDutyCharts(true); }catch(e){ console.warn('duty chart pull failed:', e.message); }
+      try{ await sbPullDutyLock(true); }catch(e){ console.warn('duty lock pull failed:', e.message); }
       markInitialPullDone(); // safe to auto-push settings from here on
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
       try{ sbAutoDailyBackup(); }catch(e){ console.warn('daily backup failed:', e.message); }
@@ -2657,7 +2677,7 @@ function showPage(name){
   else if(name==='duty') { $('navDuty').classList.add('active'); dutyRenderAll(); dutyStartPolling(); }
   else if(name==='settings') document.querySelector('.nav-tab[onclick*="openSettings"]').classList.add('active');
   if(name!=='duty') dutyStopPolling();
-  if(name==='settings'){ refreshAllTables(); setTimeout(testSupabase, 300); updateSbConnUI(); updateRcvMuteUI(); }
+  if(name==='settings'){ refreshAllTables(); setTimeout(testSupabase, 300); updateSbConnUI(); updateRcvMuteUI(); dutyUpdateLockUI(); }
 }
 function toggleSnav(){
   const nav=document.querySelector('.settings-nav');
@@ -2696,6 +2716,17 @@ function showSection(id){
    ============================================================ */
 let DUTY_ID_SEQ = 1;
 function dutyNextId(){ return 'd' + (DUTY_ID_SEQ++) + '_' + Date.now().toString(36); }
+
+// ── Duty Chart edit-lock ─────────────────────────────────────
+// Default (unlocked): every user can add/edit/delete freely, exactly as
+// before. When locked (toggled from Settings → 🗓 Duty Chart Lock, which is
+// itself behind the Settings password): the "+" buttons that add a new
+// Chart/Section/Column/Staff row are hidden entirely, and any edit or
+// deletion asks for the Settings password before it's applied — but only
+// once per session (same behaviour as opening ⚙ Settings itself; see
+// `settingsUnlocked`). Persisted locally and synced via Supabase so every
+// device/user sees the same lock state.
+let dutyLocked = ld('sms2_duty_locked', false);
 
 function dutyDefaultCharts(){
   // Seeded from the office's existing shift-duty spreadsheet. The final
@@ -2839,6 +2870,48 @@ async function sbPullDutyCharts(silent=true){
 }
 window.sbPullDutyCharts = sbPullDutyCharts;
 
+// ── Duty Chart lock — persist + sync the on/off flag itself ─────────
+function dutySaveLocked(){
+  try{ localStorage.setItem('sms2_duty_locked', JSON.stringify(dutyLocked)); }catch(e){}
+  sbPushDutyLock();
+}
+
+async function sbPushDutyLock(){
+  if(!sbReady()) return;
+  try{
+    const url = getSbUrl()+'/rest/v1/app_settings';
+    const res = await fetch(url+'?on_conflict=key', {
+      method:  'POST',
+      headers: {...sbHeaders(), 'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:    JSON.stringify([{ key:'data_duty_lock', value: JSON.stringify(dutyLocked), updated_at: new Date().toISOString() }])
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+  }catch(e){
+    console.warn('Duty lock push failed:', e.message);
+  }
+}
+window.sbPushDutyLock = sbPushDutyLock;
+
+async function sbPullDutyLock(silent=true){
+  if(!sbReady()) return;
+  try{
+    const rows = await sbFetch('app_settings?key=eq.data_duty_lock&select=key,value');
+    if(rows && rows.length){
+      const parsed = JSON.parse(rows[0].value);
+      if(typeof parsed === 'boolean' && parsed !== dutyLocked){
+        dutyLocked = parsed;
+        try{ localStorage.setItem('sms2_duty_locked', JSON.stringify(dutyLocked)); }catch(e){}
+        if($('page-duty') && $('page-duty').classList.contains('active')) dutyRenderAll();
+        dutyUpdateLockUI();
+      }
+    }
+    if(!silent) toast('✓ Duty Chart lock state synced', 1800);
+  }catch(e){
+    console.warn('Duty lock pull failed:', e.message);
+  }
+}
+window.sbPullDutyLock = sbPullDutyLock;
+
 // ── Current-shift detection ──────────────────────────────────
 // Converts Devanagari digits (०-९) in a string to plain ASCII digits, so
 // column/shift labels typed in Nepali numerals can be parsed as numbers.
@@ -2908,8 +2981,16 @@ function dutyNowContext(){
 function dutyRenderAll(){
   const wrap = $('dutyGroupsWrap');
   if(!wrap) return;
+  // Reflect lock state on the toolbar every render — page open, after any
+  // edit, and after a cross-device lock-state pull.
+  const addGroupBtn = $('dutyAddGroupBtn');
+  if(addGroupBtn) addGroupBtn.style.display = dutyLocked ? 'none' : '';
+  const lockBadge = $('dutyLockBadge');
+  if(lockBadge) lockBadge.style.display = dutyLocked ? '' : 'none';
   if(!DUTY_CHARTS.length){
-    wrap.innerHTML = `<div class="duty-empty">कुनै Duty Chart छैन। "+ नयाँ Duty Chart थप्नुहोस्" थिचेर सुरु गर्नुहोस्।</div>`;
+    wrap.innerHTML = dutyLocked
+      ? `<div class="duty-empty">कुनै Duty Chart छैन।</div>`
+      : `<div class="duty-empty">कुनै Duty Chart छैन। "+ नयाँ Duty Chart थप्नुहोस्" थिचेर सुरु गर्नुहोस्।</div>`;
     return;
   }
   const now = dutyNowContext();
@@ -2917,14 +2998,19 @@ function dutyRenderAll(){
 }
 
 function dutyGroupHtml(g, now){
+  const dis = dutyLocked ? 'disabled' : '';
+  const addSectionBtn = dutyLocked ? '' : `<button class="duty-btn" onclick="dutyAddSection('${esc(g.id)}')">+ नयाँ Station/Section</button>`;
+  const emptyMsg = dutyLocked
+    ? '<div class="duty-empty">कुनै section छैन।</div>'
+    : '<div class="duty-empty">कुनै section छैन — "+ नयाँ Station/Section" थिचेर थप्नुहोस्।</div>';
   return `
     <div class="duty-group" data-gid="${esc(g.id)}">
       <div class="duty-group-head">
-        <input class="duty-group-title" value="${esc(g.title)}" onchange="dutyRenameGroup('${esc(g.id)}',this.value)" title="Chart title — click to edit">
-        <button class="duty-btn" onclick="dutyAddSection('${esc(g.id)}')">+ नयाँ Station/Section</button>
-        <button class="duty-btn duty-btn-danger" onclick="dutyRemoveGroup('${esc(g.id)}')">🗑️ यो Chart मेट्नुहोस्</button>
+        <input class="duty-group-title" value="${esc(g.title)}" onchange="dutyRenameGroup('${esc(g.id)}',this.value)" title="Chart title — click to edit" ${dis}>
+        ${addSectionBtn}
+        <button class="duty-btn duty-btn-danger" onclick="dutyRemoveGroup('${esc(g.id)}')" ${dis}>🗑️ यो Chart मेट्नुहोस्</button>
       </div>
-      ${g.sections.map(s=>dutySectionHtml(g.id,s,now)).join('') || '<div class="duty-empty">कुनै section छैन — "+ नयाँ Station/Section" थिचेर थप्नुहोस्।</div>'}
+      ${g.sections.map(s=>dutySectionHtml(g.id,s,now)).join('') || emptyMsg}
     </div>`;
 }
 
@@ -2933,19 +3019,22 @@ function dutySectionHtml(gid, s, now){
   // Which column (if any) matches today's date-of-month.
   const colRanges = s.columns.map(c=>dutyParseDayRange(c));
   const currentColIdx = colRanges.findIndex(r=>dutyDayInRange(now.day, r));
+  const dis = dutyLocked ? 'disabled' : '';
+  const addColumnBtn = dutyLocked ? '' : `<button class="duty-btn" onclick="dutyAddColumn('${esc(gid)}','${esc(s.id)}')">+ Column</button>`;
+  const addStaffBtn  = dutyLocked ? '' : `<button class="duty-btn" onclick="dutyAddStaff('${esc(gid)}','${esc(s.id)}')">+ कर्मचारी थप्नुहोस्</button>`;
   return `
     <div class="duty-section" data-sid="${esc(s.id)}">
       <div class="duty-section-head">
-        <input class="duty-section-title" value="${esc(s.name)}" onchange="dutyRenameSection('${esc(gid)}','${esc(s.id)}',this.value)" title="Section/station name — click to edit">
-        <button class="duty-btn" onclick="dutyAddColumn('${esc(gid)}','${esc(s.id)}')">+ Column</button>
-        <button class="duty-btn duty-btn-danger" onclick="dutyRemoveSection('${esc(gid)}','${esc(s.id)}')">🗑️ Section मेट्नुहोस्</button>
+        <input class="duty-section-title" value="${esc(s.name)}" onchange="dutyRenameSection('${esc(gid)}','${esc(s.id)}',this.value)" title="Section/station name — click to edit" ${dis}>
+        ${addColumnBtn}
+        <button class="duty-btn duty-btn-danger" onclick="dutyRemoveSection('${esc(gid)}','${esc(s.id)}')" ${dis}>🗑️ Section मेट्नुहोस्</button>
       </div>
       <div style="overflow-x:auto">
       <table class="duty-tbl">
         <thead><tr>
           <th style="min-width:140px">कर्मचारीको नाम</th>
           <th style="min-width:110px">फोन नम्बर</th>
-          ${s.columns.map((c,ci)=>`<th class="${ci===currentColIdx?'duty-col-now':''}" style="min-width:130px"><input value="${esc(c)}" onchange="dutyRenameColumn('${esc(gid)}','${esc(s.id)}',${ci},this.value)">${ci===currentColIdx?'<span class="duty-now-tag">आज</span>':''}</th>`).join('')}
+          ${s.columns.map((c,ci)=>`<th class="${ci===currentColIdx?'duty-col-now':''}" style="min-width:130px"><input value="${esc(c)}" onchange="dutyRenameColumn('${esc(gid)}','${esc(s.id)}',${ci},this.value)" ${dis}>${ci===currentColIdx?'<span class="duty-now-tag">आज</span>':''}</th>`).join('')}
           <th style="width:34px"></th>
         </tr></thead>
         <tbody>
@@ -2956,23 +3045,47 @@ function dutySectionHtml(gid, s, now){
             const isNowRow = currentColIdx>=0 && dutyHourInRange(now.hour, dutyParseTimeRange(shifts[currentColIdx]));
             return `
             <tr class="${isNowRow?'duty-row-now':''}">
-              <td><input value="${esc(st.name)}" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'name',this.value)" placeholder="नाम">${isNowRow?'<span class="duty-now-tag">ड्युटीमा</span>':''}</td>
-              <td><input value="${esc(st.phone||'')}" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'phone',this.value)" placeholder="फोन" inputmode="tel"></td>
+              <td><input value="${esc(st.name)}" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'name',this.value)" placeholder="नाम" ${dis}>${isNowRow?'<span class="duty-now-tag">ड्युटीमा</span>':''}</td>
+              <td><input value="${esc(st.phone||'')}" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'phone',this.value)" placeholder="फोन" inputmode="tel" ${dis}></td>
               ${shifts.map((v,ci)=>{
                 const cellIsNow = isNowRow && ci===currentColIdx;
-                return `<td class="${ci===currentColIdx?'duty-col-now':''}${cellIsNow?' duty-cell-now':''}"><input value="${esc(v||'')}" onchange="dutyEditShift('${esc(gid)}','${esc(s.id)}',${ri},${ci},this.value)"></td>`;
+                return `<td class="${ci===currentColIdx?'duty-col-now':''}${cellIsNow?' duty-cell-now':''}"><input value="${esc(v||'')}" onchange="dutyEditShift('${esc(gid)}','${esc(s.id)}',${ri},${ci},this.value)" ${dis}></td>`;
               }).join('')}
-              <td class="duty-rm"><button class="duty-btn duty-btn-danger" style="padding:3px 7px" onclick="dutyRemoveStaff('${esc(gid)}','${esc(s.id)}',${ri})" title="यो कर्मचारी हटाउनुहोस्">✕</button></td>
+              <td class="duty-rm"><button class="duty-btn duty-btn-danger" style="padding:3px 7px" onclick="dutyRemoveStaff('${esc(gid)}','${esc(s.id)}',${ri})" title="यो कर्मचारी हटाउनुहोस्" ${dis}>✕</button></td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>
       </div>
       <div class="duty-row-actions">
-        <button class="duty-btn" onclick="dutyAddStaff('${esc(gid)}','${esc(s.id)}')">+ कर्मचारी थप्नुहोस्</button>
+        ${addStaffBtn}
       </div>
     </div>`;
 }
+
+// ── Lock toggle (Settings → 🗓 Duty Chart Lock) ──────────────
+function toggleDutyLock(checked){
+  dutyLocked = !!checked;
+  dutySaveLocked();
+  dutyUpdateLockUI();
+  // Refresh the Duty page immediately if it's open behind Settings (or the
+  // next time it's opened), so every input/button reflects the new state.
+  if($('page-duty')) dutyRenderAll();
+  toast(dutyLocked
+    ? '🔒 Duty Chart editing locked — adding, editing, and deleting are all disabled for everyone.'
+    : '🔓 Duty Chart editing unlocked — all users can edit freely again.');
+}
+window.toggleDutyLock = toggleDutyLock;
+
+function dutyUpdateLockUI(){
+  const cb = $('dutyLockToggle');
+  if(cb) cb.checked = dutyLocked;
+  const hint = $('dutyLockStatusHint');
+  if(hint) hint.textContent = dutyLocked
+    ? 'हाल: 🔒 Locked — कसैले पनि थप्न/सम्पादन/मेटाउन सक्दैनन् (सबै फिल्ड र बटन ग्रे भई निष्क्रिय छन्)। यहीँबाट Unlock गरेपछि मात्र सम्पादन सम्भव हुन्छ।'
+    : 'हाल: 🔓 Unlocked — सबैले स्वतन्त्र रूपमा थप्न/सम्पादन/मेटाउन सक्छन्।';
+}
+window.dutyUpdateLockUI = dutyUpdateLockUI;
 
 // ── Find helpers ────────────────────────────────────────────
 function dutyFindGroup(gid){ return DUTY_CHARTS.find(g=>g.id===gid); }
@@ -2980,6 +3093,11 @@ function dutyFindSection(gid,sid){ const g=dutyFindGroup(gid); return g ? g.sect
 
 // ── Group-level edits ───────────────────────────────────────
 function dutyAddGroup(){
+  // Every guard below is a defensive backstop — the buttons/inputs that
+  // call these functions are hidden (add) or `disabled` (edit/delete) in
+  // the HTML itself whenever dutyLocked is true, so none of these should
+  // normally be reachable while locked.
+  if(dutyLocked){ toast('🔒 Duty Chart is locked — unlock it in Settings to add new charts.'); return; }
   const title = (prompt('नयाँ Duty Chart को शीर्षक लेख्नुहोस्:', 'नयाँ Duty Chart')||'').trim();
   if(!title) return;
   DUTY_CHARTS.push({ id: dutyNextId(), title, sections: [] });
@@ -2989,6 +3107,7 @@ function dutyAddGroup(){
 window.dutyAddGroup = dutyAddGroup;
 
 function dutyRenameGroup(gid, val){
+  if(dutyLocked){ dutyRenderAll(); return; }
   const g=dutyFindGroup(gid); if(!g) return;
   g.title = (val||'').trim() || g.title;
   dutySaveCharts();
@@ -2996,6 +3115,7 @@ function dutyRenameGroup(gid, val){
 window.dutyRenameGroup = dutyRenameGroup;
 
 function dutyRemoveGroup(gid){
+  if(dutyLocked) return;
   const g=dutyFindGroup(gid); if(!g) return;
   if(!confirm(`"${g.title}" पूरै Duty Chart मेट्नुहुन्छ? यो पूर्ववत हुँदैन।`)) return;
   DUTY_CHARTS = DUTY_CHARTS.filter(x=>x.id!==gid);
@@ -3006,6 +3126,7 @@ window.dutyRemoveGroup = dutyRemoveGroup;
 
 // ── Section-level edits ─────────────────────────────────────
 function dutyAddSection(gid){
+  if(dutyLocked){ toast('🔒 Duty Chart is locked — unlock it in Settings to add new sections.'); return; }
   const g=dutyFindGroup(gid); if(!g) return;
   const name = (prompt('नयाँ Station/Section को नाम लेख्नुहोस्:', 'नयाँ Station')||'').trim();
   if(!name) return;
@@ -3018,6 +3139,7 @@ function dutyAddSection(gid){
 window.dutyAddSection = dutyAddSection;
 
 function dutyRenameSection(gid, sid, val){
+  if(dutyLocked){ dutyRenderAll(); return; }
   const s=dutyFindSection(gid,sid); if(!s) return;
   s.name = (val||'').trim() || s.name;
   dutySaveCharts();
@@ -3025,6 +3147,7 @@ function dutyRenameSection(gid, sid, val){
 window.dutyRenameSection = dutyRenameSection;
 
 function dutyRemoveSection(gid, sid){
+  if(dutyLocked) return;
   const g=dutyFindGroup(gid); if(!g) return;
   const s=dutyFindSection(gid,sid); if(!s) return;
   if(!confirm(`"${s.name}" section मेट्नुहुन्छ?`)) return;
@@ -3035,6 +3158,7 @@ window.dutyRemoveSection = dutyRemoveSection;
 
 // ── Column-level edits ──────────────────────────────────────
 function dutyAddColumn(gid, sid){
+  if(dutyLocked){ toast('🔒 Duty Chart is locked — unlock it in Settings to add new columns.'); return; }
   const s=dutyFindSection(gid,sid); if(!s) return;
   const label = (prompt('नयाँ column को शीर्षक लेख्नुहोस्:', 'नयाँ सिफ्ट')||'').trim();
   if(!label) return;
@@ -3045,6 +3169,7 @@ function dutyAddColumn(gid, sid){
 window.dutyAddColumn = dutyAddColumn;
 
 function dutyRenameColumn(gid, sid, ci, val){
+  if(dutyLocked){ dutyRenderAll(); return; }
   const s=dutyFindSection(gid,sid); if(!s) return;
   s.columns[ci] = (val||'').trim() || s.columns[ci];
   dutySaveCharts();
@@ -3053,6 +3178,7 @@ window.dutyRenameColumn = dutyRenameColumn;
 
 // ── Staff-row-level edits ───────────────────────────────────
 function dutyAddStaff(gid, sid){
+  if(dutyLocked){ toast('🔒 Duty Chart is locked — unlock it in Settings to add staff.'); return; }
   const s=dutyFindSection(gid,sid); if(!s) return;
   s.staff.push({ name:'', phone:'', shifts: s.columns.map(()=>'') });
   dutySaveCharts(); dutyRenderAll();
@@ -3066,6 +3192,7 @@ function dutyAddStaff(gid, sid){
 window.dutyAddStaff = dutyAddStaff;
 
 function dutyEditStaff(gid, sid, ri, field, val){
+  if(dutyLocked){ dutyRenderAll(); return; }
   const s=dutyFindSection(gid,sid); if(!s || !s.staff[ri]) return;
   s.staff[ri][field] = val;
   dutySaveCharts();
@@ -3073,6 +3200,7 @@ function dutyEditStaff(gid, sid, ri, field, val){
 window.dutyEditStaff = dutyEditStaff;
 
 function dutyEditShift(gid, sid, ri, ci, val){
+  if(dutyLocked){ dutyRenderAll(); return; }
   const s=dutyFindSection(gid,sid); if(!s || !s.staff[ri]) return;
   if(!Array.isArray(s.staff[ri].shifts)) s.staff[ri].shifts=[];
   s.staff[ri].shifts[ci] = val;
@@ -3081,6 +3209,7 @@ function dutyEditShift(gid, sid, ri, ci, val){
 window.dutyEditShift = dutyEditShift;
 
 function dutyRemoveStaff(gid, sid, ri){
+  if(dutyLocked) return;
   const s=dutyFindSection(gid,sid); if(!s) return;
   s.staff.splice(ri,1);
   dutySaveCharts(); dutyRenderAll();
@@ -3099,6 +3228,7 @@ function dutyStartPolling(){
       const editing = active && active.closest && active.closest('#page-duty') && (active.tagName==='INPUT'||active.tagName==='TEXTAREA');
       if(editing) return;
       sbPullDutyCharts(true);
+      sbPullDutyLock(true);
     }, 20000);
   }
   if(!_dutyTickInterval){
@@ -7026,6 +7156,7 @@ async function onFeederStatusAction(feederName,sel){
       toast('🔕 Receivers muted — logged but not sent. Unmute in Settings → Receivers.', 3500);
       const names = DATA.receivers.filter(r=>r.enabled).map(r=>r.name).join(', ') || 'None';
       recordLogDirect({type:typeLabel, recipients:names, status:'MUTED — not sent', station, feeder:feederName, time:t, msg, reason});
+      sbInsertLog(LOG[0]);
       return;
     }
     const enabled = DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
@@ -7048,6 +7179,7 @@ async function onFeederStatusAction(feederName,sel){
       if(await sendSilent(r,msg,stEl)) ok++;
     }
     recordLogDirect({type:typeLabel, recipients:enabled.map(r=>r.name).join(', '), status:ok+'/'+enabled.length+' sent', station, feeder:feederName, time:t, msg, reason});
+    sbInsertLog(LOG[0]);
     toast(`${typeLabel} notice sent: ${ok}/${enabled.length}`);
   }
 }
@@ -9755,6 +9887,7 @@ try{
       try{ await sbMigrateLegacyRows(); }catch(e){ console.warn('migrate failed:', e.message); }
       try{ await sbPullData(true); }catch(e){ console.warn('pull failed:', e.message); }
       try{ await sbPullDutyCharts(true); }catch(e){ console.warn('duty chart pull failed:', e.message); }
+      try{ await sbPullDutyLock(true); }catch(e){ console.warn('duty lock pull failed:', e.message); }
       markInitialPullDone(); // safe to auto-push settings from here on
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
       try{ startSync(); }catch(e){ console.warn('startSync failed:', e.message); }
