@@ -655,6 +655,10 @@ select.big option,
 .tts-btn.tts-playing{background:#fef3c7;color:#92400e;border-color:#fbbf24;animation:tts-pulse 1.4s ease-in-out infinite}
 @keyframes tts-pulse{0%,100%{opacity:1}50%{opacity:.62}}
 
+/* Sync loading screen (see #syncLoadingScreen) */
+@keyframes syncPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.14);opacity:.72}}
+@keyframes syncBounce{0%,80%,100%{transform:translateY(0);opacity:.45}40%{transform:translateY(-9px);opacity:1}}
+
 /* ============================================================
    विग्रेको ट्रान्सफर्मर फारम PAGE (monitor-mode add-on)
    Scoped under #page-transformer so it doesn't clash with rest of app.
@@ -720,7 +724,8 @@ body.duty-page-open #page-duty{
 #page-duty table.duty-tbl th{background:#f4f6fb;padding:6px 8px;font-weight:700;color:var(--dim,#5a6072)}
 #page-duty table.duty-tbl th input{width:100%;border:none;background:transparent;font-weight:700;color:var(--dim,#5a6072);font-size:12px;padding:2px 4px;box-sizing:border-box}
 #page-duty table.duty-tbl td input{width:100%;border:none;background:transparent;padding:7px 8px;font-size:12.5px;font-family:inherit;color:var(--txt);box-sizing:border-box}
-#page-duty table.duty-tbl td input:focus,#page-duty table.duty-tbl th input:focus{background:#eef3ff;outline:none}
+#page-duty table.duty-tbl td textarea{width:100%;border:none;background:transparent;padding:7px 8px;font-size:12.5px;font-family:inherit;color:var(--txt);box-sizing:border-box;resize:vertical;min-height:34px;line-height:1.5;overflow:hidden}
+#page-duty table.duty-tbl td input:focus,#page-duty table.duty-tbl th input:focus,#page-duty table.duty-tbl td textarea:focus{background:#eef3ff;outline:none}
 #page-duty table.duty-tbl td.duty-rm{width:34px;text-align:center;padding:0}
 #page-duty .duty-row-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 #page-duty .duty-btn{border:1px solid var(--line,#dbe2ea);background:#fff;border-radius:7px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;color:var(--txt);font-family:'Archivo',sans-serif}
@@ -730,6 +735,15 @@ body.duty-page-open #page-duty{
 #page-duty .duty-btn.duty-btn-primary{background:var(--blue,#2456c8);border-color:var(--blue,#2456c8);color:#fff}
 #page-duty .duty-btn.duty-btn-primary:hover{opacity:.92}
 #page-duty .duty-empty{text-align:center;color:var(--dim2,#9aa1b5);padding:40px 20px;font-size:13px}
+/* Locked state — fields become non-editable but stay fully legible (no
+   graying); only the ✕ staff-delete button is hidden (handled in JS), same
+   as the Chart/Section delete buttons and all "+" add buttons. */
+#page-duty .duty-btn:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
+#page-duty table.duty-tbl td input:disabled,#page-duty table.duty-tbl td textarea:disabled,
+#page-duty table.duty-tbl th input:disabled,
+#page-duty .duty-group-title:disabled,#page-duty .duty-section-title:disabled{
+  color:var(--txt);-webkit-text-fill-color:var(--txt);opacity:1;cursor:not-allowed;background:#f7f8fa
+}
 /* Current-shift highlighting */
 #page-duty table.duty-tbl th.duty-col-now{background:#fff3cd;position:relative}
 #page-duty table.duty-tbl td.duty-col-now{background:#fffdf5}
@@ -742,7 +756,7 @@ body.duty-page-open #page-duty{
 #page-duty table.duty-tbl tr.duty-row-now td:first-child{font-weight:700}
 @media(max-width:640px){
   #page-duty table.duty-tbl{font-size:11.5px}
-  #page-duty table.duty-tbl td input,#page-duty table.duty-tbl th input{padding:6px 5px;font-size:11.5px}
+  #page-duty table.duty-tbl td input,#page-duty table.duty-tbl th input,#page-duty table.duty-tbl td textarea{padding:6px 5px;font-size:11.5px}
 }
 
 #page-transformer{
@@ -940,7 +954,7 @@ body.duty-page-open #page-duty{
     <button class="nav-tab active" onclick="showPage('main')">📋 Entry</button>
     <button class="nav-tab" id="navLog" onclick="showPage('log')">📊 Log</button>
     <button class="nav-tab" id="navTransformer" onclick="showPage('transformer')">⚡ विग्रेको ट्रान्सफर्मर</button>
-    <button class="nav-tab" id="navDuty" onclick="showPage('duty')">🗓 Duty Chart</button>
+    <button class="nav-tab" id="navDuty" onclick="showPage('duty')">🗓 Duty</button>
     <button class="nav-tab" onclick="openModeSwitch()">🔀 Mode</button>
     <button class="nav-tab" onclick="openSettings()">⚙ Settings</button>
     <button class="nav-tab" onclick="toggleHelpGuide()" title="प्रयोग निर्देशन">❓ सहयोग</button>
@@ -1351,7 +1365,7 @@ body.duty-page-open #page-duty{
 <div class="page" id="page-duty">
   <div class="duty-wrap">
     <div class="duty-toolbar">
-      <h2>🗓 Duty Chart <span id="dutyLockBadge" style="display:none;font-size:11px;font-weight:700;background:#fdecea;color:#c0392b;border-radius:6px;padding:2px 8px;vertical-align:middle;margin-left:6px">🔒 Locked</span></h2>
+      <h2>🗓 Duty <span id="dutyLockBadge" style="display:none;font-size:11px;font-weight:700;background:#fdecea;color:#c0392b;border-radius:6px;padding:2px 8px;vertical-align:middle;margin-left:6px">🔒 Locked</span></h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="duty-btn duty-btn-primary" id="dutyAddGroupBtn" onclick="dutyAddGroup()">+ नयाँ Duty Chart थप्नुहोस्</button>
       </div>
@@ -1785,8 +1799,8 @@ gemini-1.5-flash</textarea>
           <div class="card-head"><span class="card-title">🗓 Duty Chart Lock</span></div>
           <div class="card-body">
             <p style="font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.6">
-              <b>Unlocked (पूर्वनिर्धारित):</b> जोसुकैले Duty Chart मा नयाँ Chart/Section/Column/कर्मचारी थप्न, नाम बदल्न र मेट्न सक्छन् — अहिलेकै जस्तै।<br>
-              <b>Locked:</b> नयाँ थप्ने सबै "+" बटन लुक्छन्; भइरहेको जुनसुकै सम्पादन वा मेटाउने काम गर्दा Settings पासवर्ड सोध्नेछ (एक पटक सोधेपछि, यही session मा फेरि सोध्दैन)। परिवर्तन सबै डिभाइस/प्रयोगकर्तामा सिंक हुन्छ।
+              <b>Unlocked (पूर्वनिर्धारित):</b> जोसुकैले Duty मा नयाँ Chart/Section/Column/कर्मचारी थप्न, नाम बदल्न, र Chart/Section/कर्मचारी मेट्न सक्छन् — अहिलेकै जस्तै।<br>
+              <b>Locked:</b> नयाँ थप्ने सबै "+" बटन र सबै 🗑️/✕ मेटाउने बटनहरू (Chart, Section, कर्मचारी) पूर्ण रूपमा लुक्छन्; बाँकी फिल्ड (नाम/शीर्षक/शिफ्ट) देखिन्छन् तर सम्पादन गर्न मिल्दैन — कसैले पनि केही बदल्न वा मेटाउन सक्दैनन्, जबसम्म यहीँबाट फेरि Unlock गरिँदैन। परिवर्तन सबै डिभाइस/प्रयोगकर्तामा सिंक हुन्छ।
             </p>
             <label style="display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:700;color:var(--txt);cursor:pointer">
               <input type="checkbox" id="dutyLockToggle" onchange="toggleDutyLock(this.checked)" style="width:18px;height:18px;cursor:pointer">
@@ -1911,6 +1925,31 @@ gemini-1.5-flash</textarea>
     <div id="appLockChecking" style="font-size:11px;color:var(--dim2);margin-top:10px;min-height:16px;font-family:'JetBrains Mono',monospace"></div>
   </div>
   <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:20px;letter-spacing:.06em"><span class="js-dcs-center">तौलिहवा वितरण केन्द्र</span> · NEA <span class="js-dcs-shortname">Taulihawa</span></div>
+</div>
+
+<!-- ========== SYNC LOADING SCREEN ========================================
+     Shown the instant the lock screen is passed (fresh unlock, or an
+     already-trusted Monitor session restoring itself), and kept up until
+     the very first Supabase pull of this session finishes. It sits on top
+     of and fully blocks the app (fixed, full-screen, catches all clicks),
+     so nothing the person types or taps while it's showing can turn into a
+     local edit — which is what stops any stale/leftover local data (or an
+     edit made mid-sync) from ever being pushed up and clobbering whatever
+     real data other devices already put in Supabase. Once the pull is
+     done and markInitialPullDone() has run, this fades out and the app
+     becomes interactive — only edits made from that point on get synced.
+     Controlled by showSyncLoading()/hideSyncLoading(). ========================================= -->
+<div id="syncLoadingScreen" style="display:none;position:fixed;inset:0;z-index:10000;background:linear-gradient(135deg,#1a1f27 0%,#1a3a6e 100%);align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:20px;box-sizing:border-box">
+  <div style="font-size:44px;margin-bottom:14px;animation:syncPulse 1.5s ease-in-out infinite">⚡</div>
+  <div style="font-size:19px;font-weight:800;color:#fff;letter-spacing:-.01em;margin-bottom:2px"><span class="js-dcs-name">Taulihawa DCS</span></div>
+  <div style="font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:20px">Nepal Electricity Authority</div>
+  <div style="display:flex;gap:7px;margin-bottom:16px">
+    <span style="width:9px;height:9px;border-radius:50%;background:#5b9bff;animation:syncBounce 1s ease-in-out infinite"></span>
+    <span style="width:9px;height:9px;border-radius:50%;background:#5b9bff;animation:syncBounce 1s ease-in-out .15s infinite"></span>
+    <span style="width:9px;height:9px;border-radius:50%;background:#5b9bff;animation:syncBounce 1s ease-in-out .3s infinite"></span>
+  </div>
+  <div id="syncLoadingMsg" style="font-size:13px;font-weight:700;color:#fff">ताजा डेटा ल्याइँदैछ… (Syncing latest data…)</div>
+  <div id="syncLoadingSub" style="font-size:11.5px;color:rgba(255,255,255,.5);margin-top:8px;max-width:290px;line-height:1.6">पुरानो/स्थानीय डेटा ताजा डेटासँग नमिसियोस् भनेर, पूरा sync नभएसम्म कृपया पर्खनुहोस्।</div>
 </div>
 
 <!-- ========== PUSH NOTIFICATION OPT-IN (shown at most once, ever) ========== -->
@@ -2357,6 +2396,40 @@ async function fetchPasswordHashes(){
   }
 }
 
+/* ── Sync loading screen — blocks interaction until the first pull ──
+   completes, so nothing typed/tapped during that window can become a
+   local edit that later gets pushed over real cloud data. */
+let _syncLoadingTimers = [];
+function showSyncLoading(){
+  const el=$('syncLoadingScreen');
+  if(!el) return;
+  el.style.transition='';
+  el.style.opacity='1';
+  el.style.display='flex';
+  const msg=$('syncLoadingMsg'), sub=$('syncLoadingSub');
+  if(msg) msg.textContent='ताजा डेटा ल्याइँदैछ… (Syncing latest data…)';
+  if(sub) sub.textContent='पुरानो/स्थानीय डेटा ताजा डेटासँग नमिसियोस् भनेर, पूरा sync नभएसम्म कृपया पर्खनुहोस्।';
+  // Progressive reassurance on a slow connection — sbFetch itself times
+  // out at 12s per call, so this is purely informational, never a forced
+  // early exit (that would reopen the exact race this screen prevents).
+  _syncLoadingTimers.forEach(t=>clearTimeout(t));
+  _syncLoadingTimers = [
+    setTimeout(()=>{ if(msg) msg.textContent='अलि समय लाग्दैछ… (Taking a bit longer…)'; }, 6000),
+    setTimeout(()=>{ if(sub) sub.textContent='नेटवर्क जाँच गर्नुहोस् — जडान फेला परेपछि स्वतः जारी हुनेछ।'; }, 12000)
+  ];
+}
+function hideSyncLoading(){
+  _syncLoadingTimers.forEach(t=>clearTimeout(t));
+  _syncLoadingTimers = [];
+  const el=$('syncLoadingScreen');
+  if(!el || el.style.display==='none') return;
+  el.style.transition='opacity .4s';
+  el.style.opacity='0';
+  setTimeout(()=>{ if(el.style.opacity==='0') el.style.display='none'; }, 420);
+}
+window.showSyncLoading = showSyncLoading;
+window.hideSyncLoading = hideSyncLoading;
+
 /* ── Entry unlock ── */
 async function appUnlock(){
   const input=$('appLockInput'), err=$('appLockChecking'), errRed=$('appLockError');
@@ -2386,6 +2459,7 @@ async function appUnlock(){
     const lock=$('appLock');
     lock.style.transition='opacity .4s'; lock.style.opacity='0';
     setTimeout(()=>lock.style.display='none',420);
+    showSyncLoading(); // block interaction until the first cloud pull finishes
     err.textContent='';
     restoreLastStation();
     setTimeout(setTopbarH,450);
@@ -2399,6 +2473,7 @@ async function appUnlock(){
       try{ await sbPullDutyCharts(true); }catch(e){ console.warn('duty chart pull failed:', e.message); }
       try{ await sbPullDutyLock(true); }catch(e){ console.warn('duty lock pull failed:', e.message); }
       markInitialPullDone(); // safe to auto-push settings from here on
+      hideSyncLoading(); // reveal the app — only edits from this point on sync
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
       try{ sbAutoDailyBackup(); }catch(e){ console.warn('daily backup failed:', e.message); }
       try{ startSync(); }catch(e){ console.warn('startSync failed:', e.message); }
@@ -3000,6 +3075,7 @@ function dutyRenderAll(){
 function dutyGroupHtml(g, now){
   const dis = dutyLocked ? 'disabled' : '';
   const addSectionBtn = dutyLocked ? '' : `<button class="duty-btn" onclick="dutyAddSection('${esc(g.id)}')">+ नयाँ Station/Section</button>`;
+  const removeGroupBtn = dutyLocked ? '' : `<button class="duty-btn duty-btn-danger" onclick="dutyRemoveGroup('${esc(g.id)}')">🗑️ यो Chart मेट्नुहोस्</button>`;
   const emptyMsg = dutyLocked
     ? '<div class="duty-empty">कुनै section छैन।</div>'
     : '<div class="duty-empty">कुनै section छैन — "+ नयाँ Station/Section" थिचेर थप्नुहोस्।</div>';
@@ -3008,7 +3084,7 @@ function dutyGroupHtml(g, now){
       <div class="duty-group-head">
         <input class="duty-group-title" value="${esc(g.title)}" onchange="dutyRenameGroup('${esc(g.id)}',this.value)" title="Chart title — click to edit" ${dis}>
         ${addSectionBtn}
-        <button class="duty-btn duty-btn-danger" onclick="dutyRemoveGroup('${esc(g.id)}')" ${dis}>🗑️ यो Chart मेट्नुहोस्</button>
+        ${removeGroupBtn}
       </div>
       ${g.sections.map(s=>dutySectionHtml(g.id,s,now)).join('') || emptyMsg}
     </div>`;
@@ -3022,18 +3098,19 @@ function dutySectionHtml(gid, s, now){
   const dis = dutyLocked ? 'disabled' : '';
   const addColumnBtn = dutyLocked ? '' : `<button class="duty-btn" onclick="dutyAddColumn('${esc(gid)}','${esc(s.id)}')">+ Column</button>`;
   const addStaffBtn  = dutyLocked ? '' : `<button class="duty-btn" onclick="dutyAddStaff('${esc(gid)}','${esc(s.id)}')">+ कर्मचारी थप्नुहोस्</button>`;
+  const removeSectionBtn = dutyLocked ? '' : `<button class="duty-btn duty-btn-danger" onclick="dutyRemoveSection('${esc(gid)}','${esc(s.id)}')">🗑️ Section मेट्नुहोस्</button>`;
   return `
     <div class="duty-section" data-sid="${esc(s.id)}">
       <div class="duty-section-head">
         <input class="duty-section-title" value="${esc(s.name)}" onchange="dutyRenameSection('${esc(gid)}','${esc(s.id)}',this.value)" title="Section/station name — click to edit" ${dis}>
         ${addColumnBtn}
-        <button class="duty-btn duty-btn-danger" onclick="dutyRemoveSection('${esc(gid)}','${esc(s.id)}')" ${dis}>🗑️ Section मेट्नुहोस्</button>
+        ${removeSectionBtn}
       </div>
       <div style="overflow-x:auto">
       <table class="duty-tbl">
         <thead><tr>
-          <th style="min-width:140px">कर्मचारीको नाम</th>
-          <th style="min-width:110px">फोन नम्बर</th>
+          <th style="min-width:160px">कर्मचारीको नाम<br><span style="font-weight:400;font-size:10px;opacity:.75">(एउटै ड्युटीमा धेरै भए, छुट्टाछुट्टै लाइनमा)</span></th>
+          <th style="min-width:120px">फोन नम्बर</th>
           ${s.columns.map((c,ci)=>`<th class="${ci===currentColIdx?'duty-col-now':''}" style="min-width:130px"><input value="${esc(c)}" onchange="dutyRenameColumn('${esc(gid)}','${esc(s.id)}',${ci},this.value)" ${dis}>${ci===currentColIdx?'<span class="duty-now-tag">आज</span>':''}</th>`).join('')}
           <th style="width:34px"></th>
         </tr></thead>
@@ -3045,13 +3122,13 @@ function dutySectionHtml(gid, s, now){
             const isNowRow = currentColIdx>=0 && dutyHourInRange(now.hour, dutyParseTimeRange(shifts[currentColIdx]));
             return `
             <tr class="${isNowRow?'duty-row-now':''}">
-              <td><input value="${esc(st.name)}" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'name',this.value)" placeholder="नाम" ${dis}>${isNowRow?'<span class="duty-now-tag">ड्युटीमा</span>':''}</td>
-              <td><input value="${esc(st.phone||'')}" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'phone',this.value)" placeholder="फोन" inputmode="tel" ${dis}></td>
+              <td><textarea rows="1" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'name',this.value)" placeholder="नाम (धेरै भए, एक-एक लाइनमा)" ${dis}>${esc(st.name)}</textarea>${isNowRow?'<span class="duty-now-tag">ड्युटीमा</span>':''}</td>
+              <td><textarea rows="1" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'phone',this.value)" placeholder="फोन (एक-एक लाइनमा)" inputmode="tel" ${dis}>${esc(st.phone||'')}</textarea></td>
               ${shifts.map((v,ci)=>{
                 const cellIsNow = isNowRow && ci===currentColIdx;
                 return `<td class="${ci===currentColIdx?'duty-col-now':''}${cellIsNow?' duty-cell-now':''}"><input value="${esc(v||'')}" onchange="dutyEditShift('${esc(gid)}','${esc(s.id)}',${ri},${ci},this.value)" ${dis}></td>`;
               }).join('')}
-              <td class="duty-rm"><button class="duty-btn duty-btn-danger" style="padding:3px 7px" onclick="dutyRemoveStaff('${esc(gid)}','${esc(s.id)}',${ri})" title="यो कर्मचारी हटाउनुहोस्" ${dis}>✕</button></td>
+              <td class="duty-rm">${dutyLocked ? '' : `<button class="duty-btn duty-btn-danger" style="padding:3px 7px" onclick="dutyRemoveStaff('${esc(gid)}','${esc(s.id)}',${ri})" title="यो कर्मचारी हटाउनुहोस्">✕</button>`}</td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -3115,7 +3192,7 @@ function dutyRenameGroup(gid, val){
 window.dutyRenameGroup = dutyRenameGroup;
 
 function dutyRemoveGroup(gid){
-  if(dutyLocked) return;
+  if(dutyLocked) return; // defensive backstop — the button is hidden while locked
   const g=dutyFindGroup(gid); if(!g) return;
   if(!confirm(`"${g.title}" पूरै Duty Chart मेट्नुहुन्छ? यो पूर्ववत हुँदैन।`)) return;
   DUTY_CHARTS = DUTY_CHARTS.filter(x=>x.id!==gid);
@@ -3147,7 +3224,7 @@ function dutyRenameSection(gid, sid, val){
 window.dutyRenameSection = dutyRenameSection;
 
 function dutyRemoveSection(gid, sid){
-  if(dutyLocked) return;
+  if(dutyLocked) return; // defensive backstop — the button is hidden while locked
   const g=dutyFindGroup(gid); if(!g) return;
   const s=dutyFindSection(gid,sid); if(!s) return;
   if(!confirm(`"${s.name}" section मेट्नुहुन्छ?`)) return;
@@ -3186,7 +3263,7 @@ function dutyAddStaff(gid, sid){
   setTimeout(()=>{
     const rows = document.querySelectorAll(`.duty-section[data-sid="${sid}"] tbody tr`);
     const last = rows[rows.length-1];
-    if(last){ const inp=last.querySelector('input'); if(inp) inp.focus(); }
+    if(last){ const inp=last.querySelector('textarea'); if(inp) inp.focus(); }
   }, 30);
 }
 window.dutyAddStaff = dutyAddStaff;
@@ -9880,6 +9957,7 @@ try{
     applyMonitorMode();
     const lock=document.getElementById('appLock');
     if(lock){ lock.style.display='none'; }
+    showSyncLoading(); // block interaction until the first cloud pull finishes
     restoreLastStation();
     setTimeout(setTopbarH,450);
     setTimeout(()=>{ maybeOfferPush().catch(e=>console.warn('push offer failed:', e.message)); }, 900);
@@ -9889,6 +9967,7 @@ try{
       try{ await sbPullDutyCharts(true); }catch(e){ console.warn('duty chart pull failed:', e.message); }
       try{ await sbPullDutyLock(true); }catch(e){ console.warn('duty lock pull failed:', e.message); }
       markInitialPullDone(); // safe to auto-push settings from here on
+      hideSyncLoading(); // reveal the app — only edits from this point on sync
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
       try{ startSync(); }catch(e){ console.warn('startSync failed:', e.message); }
     })();
