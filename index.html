@@ -655,10 +655,6 @@ select.big option,
 .tts-btn.tts-playing{background:#fef3c7;color:#92400e;border-color:#fbbf24;animation:tts-pulse 1.4s ease-in-out infinite}
 @keyframes tts-pulse{0%,100%{opacity:1}50%{opacity:.62}}
 
-/* Sync loading screen (see #syncLoadingScreen) */
-@keyframes syncPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.14);opacity:.72}}
-@keyframes syncBounce{0%,80%,100%{transform:translateY(0);opacity:.45}40%{transform:translateY(-9px);opacity:1}}
-
 /* ============================================================
    विग्रेको ट्रान्सफर्मर फारम PAGE (monitor-mode add-on)
    Scoped under #page-transformer so it doesn't clash with rest of app.
@@ -724,8 +720,14 @@ body.duty-page-open #page-duty{
 #page-duty table.duty-tbl th{background:#f4f6fb;padding:6px 8px;font-weight:700;color:var(--dim,#5a6072)}
 #page-duty table.duty-tbl th input{width:100%;border:none;background:transparent;font-weight:700;color:var(--dim,#5a6072);font-size:12px;padding:2px 4px;box-sizing:border-box}
 #page-duty table.duty-tbl td input{width:100%;border:none;background:transparent;padding:7px 8px;font-size:12.5px;font-family:inherit;color:var(--txt);box-sizing:border-box}
-#page-duty table.duty-tbl td textarea{width:100%;border:none;background:transparent;padding:7px 8px;font-size:12.5px;font-family:inherit;color:var(--txt);box-sizing:border-box;resize:vertical;min-height:34px;line-height:1.5;overflow:hidden}
-#page-duty table.duty-tbl td input:focus,#page-duty table.duty-tbl th input:focus,#page-duty table.duty-tbl td textarea:focus{background:#eef3ff;outline:none}
+#page-duty table.duty-tbl td input:focus,#page-duty table.duty-tbl th input:focus{background:#eef3ff;outline:none}
+/* Auto-adjust row height: table cells use an auto-growing textarea (see
+   dutyAutoGrow()) instead of a single-line input, so a row that has long
+   text (a long name, or a shift note that wraps) grows to fit everything
+   instead of clipping/scrolling horizontally. */
+#page-duty table.duty-tbl th textarea.duty-auto{width:100%;display:block;border:none;background:transparent;font-weight:700;color:var(--dim,#5a6072);font-size:12px;padding:2px 4px;box-sizing:border-box;resize:none;overflow:hidden;white-space:pre-wrap;word-break:break-word;font-family:inherit;line-height:1.35;min-height:22px}
+#page-duty table.duty-tbl td textarea.duty-auto{width:100%;display:block;border:none;background:transparent;padding:7px 8px;font-size:12.5px;font-family:inherit;color:var(--txt);box-sizing:border-box;resize:none;overflow:hidden;white-space:pre-wrap;word-break:break-word;line-height:1.4;min-height:34px}
+#page-duty table.duty-tbl td textarea.duty-auto:focus,#page-duty table.duty-tbl th textarea.duty-auto:focus{background:#eef3ff;outline:none}
 #page-duty table.duty-tbl td.duty-rm{width:34px;text-align:center;padding:0}
 #page-duty .duty-row-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 #page-duty .duty-btn{border:1px solid var(--line,#dbe2ea);background:#fff;border-radius:7px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;color:var(--txt);font-family:'Archivo',sans-serif}
@@ -735,28 +737,20 @@ body.duty-page-open #page-duty{
 #page-duty .duty-btn.duty-btn-primary{background:var(--blue,#2456c8);border-color:var(--blue,#2456c8);color:#fff}
 #page-duty .duty-btn.duty-btn-primary:hover{opacity:.92}
 #page-duty .duty-empty{text-align:center;color:var(--dim2,#9aa1b5);padding:40px 20px;font-size:13px}
-/* Locked state — fields become non-editable but stay fully legible (no
-   graying); only the ✕ staff-delete button is hidden (handled in JS), same
-   as the Chart/Section delete buttons and all "+" add buttons. */
-#page-duty .duty-btn:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
-#page-duty table.duty-tbl td input:disabled,#page-duty table.duty-tbl td textarea:disabled,
-#page-duty table.duty-tbl th input:disabled,
-#page-duty .duty-group-title:disabled,#page-duty .duty-section-title:disabled{
-  color:var(--txt);-webkit-text-fill-color:var(--txt);opacity:1;cursor:not-allowed;background:#f7f8fa
-}
 /* Current-shift highlighting */
 #page-duty table.duty-tbl th.duty-col-now{background:#fff3cd;position:relative}
 #page-duty table.duty-tbl td.duty-col-now{background:#fffdf5}
 #page-duty table.duty-tbl tr.duty-row-now{background:#eafaf0}
 #page-duty table.duty-tbl tr.duty-row-now td{background:#eafaf0}
 #page-duty table.duty-tbl td.duty-cell-now{background:#c8f2d9 !important;box-shadow:inset 0 0 0 2px #1e9e5a}
-#page-duty table.duty-tbl td.duty-cell-now input{font-weight:800;color:#0d6b3a}
+#page-duty table.duty-tbl td.duty-cell-now input,#page-duty table.duty-tbl td.duty-cell-now textarea.duty-auto{font-weight:800;color:#0d6b3a}
 #page-duty .duty-now-tag{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.03em;background:#1e9e5a;color:#fff;border-radius:5px;padding:1px 5px;margin-left:5px;vertical-align:middle;white-space:nowrap}
 #page-duty table.duty-tbl th .duty-now-tag{background:#b9831a}
 #page-duty table.duty-tbl tr.duty-row-now td:first-child{font-weight:700}
 @media(max-width:640px){
   #page-duty table.duty-tbl{font-size:11.5px}
-  #page-duty table.duty-tbl td input,#page-duty table.duty-tbl th input,#page-duty table.duty-tbl td textarea{padding:6px 5px;font-size:11.5px}
+  #page-duty table.duty-tbl td input,#page-duty table.duty-tbl th input{padding:6px 5px;font-size:11.5px}
+  #page-duty table.duty-tbl td textarea.duty-auto,#page-duty table.duty-tbl th textarea.duty-auto{padding:6px 5px;font-size:11.5px}
 }
 
 #page-transformer{
@@ -954,7 +948,7 @@ body.duty-page-open #page-duty{
     <button class="nav-tab active" onclick="showPage('main')">📋 Entry</button>
     <button class="nav-tab" id="navLog" onclick="showPage('log')">📊 Log</button>
     <button class="nav-tab" id="navTransformer" onclick="showPage('transformer')">⚡ विग्रेको ट्रान्सफर्मर</button>
-    <button class="nav-tab" id="navDuty" onclick="showPage('duty')">🗓 Duty</button>
+    <button class="nav-tab" id="navDuty" onclick="showPage('duty')">🗓 Duty Chart</button>
     <button class="nav-tab" onclick="openModeSwitch()">🔀 Mode</button>
     <button class="nav-tab" onclick="openSettings()">⚙ Settings</button>
     <button class="nav-tab" onclick="toggleHelpGuide()" title="प्रयोग निर्देशन">❓ सहयोग</button>
@@ -1365,9 +1359,10 @@ body.duty-page-open #page-duty{
 <div class="page" id="page-duty">
   <div class="duty-wrap">
     <div class="duty-toolbar">
-      <h2>🗓 Duty <span id="dutyLockBadge" style="display:none;font-size:11px;font-weight:700;background:#fdecea;color:#c0392b;border-radius:6px;padding:2px 8px;vertical-align:middle;margin-left:6px">🔒 Locked</span></h2>
+      <h2>🗓 Duty Chart</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="duty-btn duty-btn-primary" id="dutyAddGroupBtn" onclick="dutyAddGroup()">+ नयाँ Duty Chart थप्नुहोस्</button>
+        <button class="duty-btn" onclick="dutyExportDayWiseExcel()" title="महिनाको हरेक गते/दिनको ड्युटी देखिने गरी हरेक Section को Excel निकाल्नुहोस्">📥 Excel Export (दिन-अनुसार)</button>
+        <button class="duty-btn duty-btn-primary" onclick="dutyAddGroup()">+ नयाँ Duty Chart थप्नुहोस्</button>
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:-6px 0 14px;font-size:11.5px;color:var(--dim,#5a6072)">
@@ -1398,7 +1393,6 @@ body.duty-page-open #page-duty{
       <div class="snav-item" onclick="showSection('sec-greenapi')">Green API (WA Group)</div>
       <div class="snav-item" onclick="showSection('sec-supabase')">☁ Supabase (Sync)</div>
       <div class="snav-item" onclick="showSection('sec-devices');renderDeviceRegistry()">🔐 Device Access</div>
-      <div class="snav-item" onclick="showSection('sec-dutylock');dutyUpdateLockUI()">🗓 Duty Chart Lock</div>
       <div class="snav-item" onclick="showSection('sec-changepw')">🔑 Change Password</div>
     </div>
 
@@ -1793,24 +1787,6 @@ gemini-1.5-flash</textarea>
         </div>
       </div>
 
-      <!-- DUTY CHART LOCK -->
-      <div class="s-section" id="sec-dutylock">
-        <div class="card">
-          <div class="card-head"><span class="card-title">🗓 Duty Chart Lock</span></div>
-          <div class="card-body">
-            <p style="font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.6">
-              <b>Unlocked (पूर्वनिर्धारित):</b> जोसुकैले Duty मा नयाँ Chart/Section/Column/कर्मचारी थप्न, नाम बदल्न, र Chart/Section/कर्मचारी मेट्न सक्छन् — अहिलेकै जस्तै।<br>
-              <b>Locked:</b> नयाँ थप्ने सबै "+" बटन र सबै 🗑️/✕ मेटाउने बटनहरू (Chart, Section, कर्मचारी) पूर्ण रूपमा लुक्छन्; बाँकी फिल्ड (नाम/शीर्षक/शिफ्ट) देखिन्छन् तर सम्पादन गर्न मिल्दैन — कसैले पनि केही बदल्न वा मेटाउन सक्दैनन्, जबसम्म यहीँबाट फेरि Unlock गरिँदैन। परिवर्तन सबै डिभाइस/प्रयोगकर्तामा सिंक हुन्छ।
-            </p>
-            <label style="display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:700;color:var(--txt);cursor:pointer">
-              <input type="checkbox" id="dutyLockToggle" onchange="toggleDutyLock(this.checked)" style="width:18px;height:18px;cursor:pointer">
-              🔒 Lock Duty Chart editing (सम्पादन लक गर्नुहोस्)
-            </label>
-            <p id="dutyLockStatusHint" style="font-size:12px;color:var(--dim2);margin-top:10px"></p>
-          </div>
-        </div>
-      </div>
-
       <div class="s-section" id="sec-changepw">
         <div class="card">
           <div class="card-head"><span class="card-title">🔑 Change Password</span></div>
@@ -1883,7 +1859,7 @@ gemini-1.5-flash</textarea>
 
 <!-- ========== FULL-SCREEN APP LOCK ========== -->
 <div id="appLock" style="display:flex;position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#1a1f27 0%,#1a3a6e 100%);align-items:center;justify-content:center;flex-direction:column">
-  <div style="background:#fff;border-radius:18px;padding:36px 32px 28px;width:min(360px,92vw);box-shadow:0 16px 60px rgba(0,0,0,.4);text-align:center">
+  <div id="appLockCard" style="background:#fff;border-radius:18px;padding:36px 32px 28px;width:min(360px,92vw);box-shadow:0 16px 60px rgba(0,0,0,.4);text-align:center">
     <div style="font-size:42px;margin-bottom:10px">⚡</div>
     <div style="font-size:20px;font-weight:800;color:var(--txt);margin-bottom:2px;letter-spacing:-.01em"><span class="js-dcs-name">Taulihawa DCS</span></div>
     <div style="font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);margin-bottom:18px">Nepal Electricity Authority</div>
@@ -1924,33 +1900,18 @@ gemini-1.5-flash</textarea>
     </button>
     <div id="appLockChecking" style="font-size:11px;color:var(--dim2);margin-top:10px;min-height:16px;font-family:'JetBrains Mono',monospace"></div>
   </div>
+  <!-- Shown instead of the card above while the post-unlock Supabase pull is
+       in flight (both the password path and the monitor auto-relogin path) —
+       so nothing is editable, and no edit can even be queued, until this
+       device has actually pulled the current cloud data at least once. -->
+  <div id="appLockLoadingCard" style="display:none;background:#fff;border-radius:18px;padding:36px 32px;width:min(360px,92vw);box-shadow:0 16px 60px rgba(0,0,0,.4);text-align:center">
+    <div class="applock-spinner" style="width:34px;height:34px;border:3px solid #dbe2ea;border-top-color:var(--blue,#2456c8);border-radius:50%;margin:0 auto 16px;animation:applockSpin .8s linear infinite"></div>
+    <div style="font-size:14px;font-weight:700;color:var(--txt)">Cloud डाटा लोड हुँदैछ…</div>
+    <div style="font-size:11.5px;color:var(--dim2);margin-top:4px">Loading data, please wait…</div>
+  </div>
   <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:20px;letter-spacing:.06em"><span class="js-dcs-center">तौलिहवा वितरण केन्द्र</span> · NEA <span class="js-dcs-shortname">Taulihawa</span></div>
 </div>
-
-<!-- ========== SYNC LOADING SCREEN ========================================
-     Shown the instant the lock screen is passed (fresh unlock, or an
-     already-trusted Monitor session restoring itself), and kept up until
-     the very first Supabase pull of this session finishes. It sits on top
-     of and fully blocks the app (fixed, full-screen, catches all clicks),
-     so nothing the person types or taps while it's showing can turn into a
-     local edit — which is what stops any stale/leftover local data (or an
-     edit made mid-sync) from ever being pushed up and clobbering whatever
-     real data other devices already put in Supabase. Once the pull is
-     done and markInitialPullDone() has run, this fades out and the app
-     becomes interactive — only edits made from that point on get synced.
-     Controlled by showSyncLoading()/hideSyncLoading(). ========================================= -->
-<div id="syncLoadingScreen" style="display:none;position:fixed;inset:0;z-index:10000;background:linear-gradient(135deg,#1a1f27 0%,#1a3a6e 100%);align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:20px;box-sizing:border-box">
-  <div style="font-size:44px;margin-bottom:14px;animation:syncPulse 1.5s ease-in-out infinite">⚡</div>
-  <div style="font-size:19px;font-weight:800;color:#fff;letter-spacing:-.01em;margin-bottom:2px"><span class="js-dcs-name">Taulihawa DCS</span></div>
-  <div style="font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:20px">Nepal Electricity Authority</div>
-  <div style="display:flex;gap:7px;margin-bottom:16px">
-    <span style="width:9px;height:9px;border-radius:50%;background:#5b9bff;animation:syncBounce 1s ease-in-out infinite"></span>
-    <span style="width:9px;height:9px;border-radius:50%;background:#5b9bff;animation:syncBounce 1s ease-in-out .15s infinite"></span>
-    <span style="width:9px;height:9px;border-radius:50%;background:#5b9bff;animation:syncBounce 1s ease-in-out .3s infinite"></span>
-  </div>
-  <div id="syncLoadingMsg" style="font-size:13px;font-weight:700;color:#fff">ताजा डेटा ल्याइँदैछ… (Syncing latest data…)</div>
-  <div id="syncLoadingSub" style="font-size:11.5px;color:rgba(255,255,255,.5);margin-top:8px;max-width:290px;line-height:1.6">पुरानो/स्थानीय डेटा ताजा डेटासँग नमिसियोस् भनेर, पूरा sync नभएसम्म कृपया पर्खनुहोस्।</div>
-</div>
+<style>@keyframes applockSpin{to{transform:rotate(360deg)}}</style>
 
 <!-- ========== PUSH NOTIFICATION OPT-IN (shown at most once, ever) ========== -->
 <div id="pushPromptOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9500;align-items:center;justify-content:center;padding:16px">
@@ -2396,39 +2357,24 @@ async function fetchPasswordHashes(){
   }
 }
 
-/* ── Sync loading screen — blocks interaction until the first pull ──
-   completes, so nothing typed/tapped during that window can become a
-   local edit that later gets pushed over real cloud data. */
-let _syncLoadingTimers = [];
-function showSyncLoading(){
-  const el=$('syncLoadingScreen');
-  if(!el) return;
-  el.style.transition='';
-  el.style.opacity='1';
-  el.style.display='flex';
-  const msg=$('syncLoadingMsg'), sub=$('syncLoadingSub');
-  if(msg) msg.textContent='ताजा डेटा ल्याइँदैछ… (Syncing latest data…)';
-  if(sub) sub.textContent='पुरानो/स्थानीय डेटा ताजा डेटासँग नमिसियोस् भनेर, पूरा sync नभएसम्म कृपया पर्खनुहोस्।';
-  // Progressive reassurance on a slow connection — sbFetch itself times
-  // out at 12s per call, so this is purely informational, never a forced
-  // early exit (that would reopen the exact race this screen prevents).
-  _syncLoadingTimers.forEach(t=>clearTimeout(t));
-  _syncLoadingTimers = [
-    setTimeout(()=>{ if(msg) msg.textContent='अलि समय लाग्दैछ… (Taking a bit longer…)'; }, 6000),
-    setTimeout(()=>{ if(sub) sub.textContent='नेटवर्क जाँच गर्नुहोस् — जडान फेला परेपछि स्वतः जारी हुनेछ।'; }, 12000)
-  ];
+/* ── Lock-screen loading gate ────────────────────────────────
+   Swaps the password card for a spinner card, keeping #appLock fully
+   visible (still z-index 9999, full-screen) so nothing behind it is
+   reachable. Used by both the password path (appUnlock) and the monitor
+   auto-relogin path below, for the stretch between "credentials accepted"
+   and "Supabase pull actually finished" — no edit is possible, queued or
+   otherwise, until the real cloud data has loaded. */
+function appLockShowLoading(){
+  const card=$('appLockCard'), loading=$('appLockLoadingCard');
+  if(card) card.style.display='none';
+  if(loading) loading.style.display='block';
 }
-function hideSyncLoading(){
-  _syncLoadingTimers.forEach(t=>clearTimeout(t));
-  _syncLoadingTimers = [];
-  const el=$('syncLoadingScreen');
-  if(!el || el.style.display==='none') return;
-  el.style.transition='opacity .4s';
-  el.style.opacity='0';
-  setTimeout(()=>{ if(el.style.opacity==='0') el.style.display='none'; }, 420);
+function appLockHideAndReveal(){
+  const lock=$('appLock');
+  if(!lock) return;
+  lock.style.transition='opacity .4s'; lock.style.opacity='0';
+  setTimeout(()=>{ lock.style.display='none'; }, 420);
 }
-window.showSyncLoading = showSyncLoading;
-window.hideSyncLoading = hideSyncLoading;
 
 /* ── Entry unlock ── */
 async function appUnlock(){
@@ -2456,25 +2402,28 @@ async function appUnlock(){
     monitorMode = asMonitor;
     if(asMonitor) grantMonitorSession();
     applyMonitorMode();   // show/hide UI based on role
-    const lock=$('appLock');
-    lock.style.transition='opacity .4s'; lock.style.opacity='0';
-    setTimeout(()=>lock.style.display='none',420);
-    showSyncLoading(); // block interaction until the first cloud pull finishes
-    err.textContent='';
-    restoreLastStation();
-    setTimeout(setTopbarH,450);
-    setTimeout(()=>{ maybeOfferPush().catch(e=>console.warn('push offer failed:', e.message)); }, 900);
-    // Cloud sync must never block or crash the UI. If any of these throw
-    // (e.g. stale/incompatible data pushed by an older app version), the app
-    // still opens with local data; the error is logged, not fatal.
+    // Swap to the spinner card and keep #appLock up — do NOT hide it yet.
+    // Nothing behind it is reachable (full-screen, z-index 9999), so as long
+    // as it stays visible, no edit — queued or otherwise — is possible until
+    // this device has actually pulled the current Supabase data.
+    err.textContent=''; errRed.textContent='';
+    appLockShowLoading();
+    // Cloud sync must never crash the UI — every step below is still wrapped
+    // in its own try/catch, and sbFetch itself times out after 12s per call,
+    // so a stalled network fails forward into local data within a bounded
+    // time instead of hanging the lock screen forever.
     (async () => {
       try{ await sbMigrateLegacyRows(); }catch(e){ console.warn('migrate failed:', e.message); }
       try{ await sbPullData(true); }catch(e){ console.warn('pull failed:', e.message); }
       try{ await sbPullDutyCharts(true); }catch(e){ console.warn('duty chart pull failed:', e.message); }
-      try{ await sbPullDutyLock(true); }catch(e){ console.warn('duty lock pull failed:', e.message); }
+      try{ await sbPullTfxMiti(true); }catch(e){ console.warn('tfx miti pull failed:', e.message); }
       markInitialPullDone(); // safe to auto-push settings from here on
-      hideSyncLoading(); // reveal the app — only edits from this point on sync
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
+      // Pull sequence is done — NOW reveal the app and allow editing.
+      appLockHideAndReveal();
+      restoreLastStation();
+      setTimeout(setTopbarH,450);
+      setTimeout(()=>{ maybeOfferPush().catch(e=>console.warn('push offer failed:', e.message)); }, 900);
       try{ sbAutoDailyBackup(); }catch(e){ console.warn('daily backup failed:', e.message); }
       try{ startSync(); }catch(e){ console.warn('startSync failed:', e.message); }
       try{ if(!monitorMode) sbSelfTestFeederWrite(); }catch(e){ console.warn('selftest failed:', e.message); }
@@ -2752,7 +2701,7 @@ function showPage(name){
   else if(name==='duty') { $('navDuty').classList.add('active'); dutyRenderAll(); dutyStartPolling(); }
   else if(name==='settings') document.querySelector('.nav-tab[onclick*="openSettings"]').classList.add('active');
   if(name!=='duty') dutyStopPolling();
-  if(name==='settings'){ refreshAllTables(); setTimeout(testSupabase, 300); updateSbConnUI(); updateRcvMuteUI(); dutyUpdateLockUI(); }
+  if(name==='settings'){ refreshAllTables(); setTimeout(testSupabase, 300); updateSbConnUI(); updateRcvMuteUI(); }
 }
 function toggleSnav(){
   const nav=document.querySelector('.settings-nav');
@@ -2791,17 +2740,6 @@ function showSection(id){
    ============================================================ */
 let DUTY_ID_SEQ = 1;
 function dutyNextId(){ return 'd' + (DUTY_ID_SEQ++) + '_' + Date.now().toString(36); }
-
-// ── Duty Chart edit-lock ─────────────────────────────────────
-// Default (unlocked): every user can add/edit/delete freely, exactly as
-// before. When locked (toggled from Settings → 🗓 Duty Chart Lock, which is
-// itself behind the Settings password): the "+" buttons that add a new
-// Chart/Section/Column/Staff row are hidden entirely, and any edit or
-// deletion asks for the Settings password before it's applied — but only
-// once per session (same behaviour as opening ⚙ Settings itself; see
-// `settingsUnlocked`). Persisted locally and synced via Supabase so every
-// device/user sees the same lock state.
-let dutyLocked = ld('sms2_duty_locked', false);
 
 function dutyDefaultCharts(){
   // Seeded from the office's existing shift-duty spreadsheet. The final
@@ -2945,48 +2883,6 @@ async function sbPullDutyCharts(silent=true){
 }
 window.sbPullDutyCharts = sbPullDutyCharts;
 
-// ── Duty Chart lock — persist + sync the on/off flag itself ─────────
-function dutySaveLocked(){
-  try{ localStorage.setItem('sms2_duty_locked', JSON.stringify(dutyLocked)); }catch(e){}
-  sbPushDutyLock();
-}
-
-async function sbPushDutyLock(){
-  if(!sbReady()) return;
-  try{
-    const url = getSbUrl()+'/rest/v1/app_settings';
-    const res = await fetch(url+'?on_conflict=key', {
-      method:  'POST',
-      headers: {...sbHeaders(), 'Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:    JSON.stringify([{ key:'data_duty_lock', value: JSON.stringify(dutyLocked), updated_at: new Date().toISOString() }])
-    });
-    if(!res.ok) throw new Error('HTTP '+res.status);
-  }catch(e){
-    console.warn('Duty lock push failed:', e.message);
-  }
-}
-window.sbPushDutyLock = sbPushDutyLock;
-
-async function sbPullDutyLock(silent=true){
-  if(!sbReady()) return;
-  try{
-    const rows = await sbFetch('app_settings?key=eq.data_duty_lock&select=key,value');
-    if(rows && rows.length){
-      const parsed = JSON.parse(rows[0].value);
-      if(typeof parsed === 'boolean' && parsed !== dutyLocked){
-        dutyLocked = parsed;
-        try{ localStorage.setItem('sms2_duty_locked', JSON.stringify(dutyLocked)); }catch(e){}
-        if($('page-duty') && $('page-duty').classList.contains('active')) dutyRenderAll();
-        dutyUpdateLockUI();
-      }
-    }
-    if(!silent) toast('✓ Duty Chart lock state synced', 1800);
-  }catch(e){
-    console.warn('Duty lock pull failed:', e.message);
-  }
-}
-window.sbPullDutyLock = sbPullDutyLock;
-
 // ── Current-shift detection ──────────────────────────────────
 // Converts Devanagari digits (०-९) in a string to plain ASCII digits, so
 // column/shift labels typed in Nepali numerals can be parsed as numbers.
@@ -3052,41 +2948,42 @@ function dutyNowContext(){
   return { day, hour };
 }
 
+// Auto-adjust row height: grows a duty-chart textarea to fit its content
+// (no scrollbar, no clipped text). Bound to oninput on every duty-auto
+// textarea; also run once over the whole page after every render below,
+// since oninput only fires on typing — loaded/rendered text needs sizing too.
+function dutyAutoGrow(el){
+  if(!el) return;
+  el.style.height='auto';
+  el.style.height=el.scrollHeight+'px';
+}
+function dutyAutoGrowAll(){
+  const wrap=$('dutyGroupsWrap'); if(!wrap) return;
+  wrap.querySelectorAll('textarea.duty-auto').forEach(dutyAutoGrow);
+}
+
 // ── Render ──────────────────────────────────────────────────
 function dutyRenderAll(){
   const wrap = $('dutyGroupsWrap');
   if(!wrap) return;
-  // Reflect lock state on the toolbar every render — page open, after any
-  // edit, and after a cross-device lock-state pull.
-  const addGroupBtn = $('dutyAddGroupBtn');
-  if(addGroupBtn) addGroupBtn.style.display = dutyLocked ? 'none' : '';
-  const lockBadge = $('dutyLockBadge');
-  if(lockBadge) lockBadge.style.display = dutyLocked ? '' : 'none';
   if(!DUTY_CHARTS.length){
-    wrap.innerHTML = dutyLocked
-      ? `<div class="duty-empty">कुनै Duty Chart छैन।</div>`
-      : `<div class="duty-empty">कुनै Duty Chart छैन। "+ नयाँ Duty Chart थप्नुहोस्" थिचेर सुरु गर्नुहोस्।</div>`;
+    wrap.innerHTML = `<div class="duty-empty">कुनै Duty Chart छैन। "+ नयाँ Duty Chart थप्नुहोस्" थिचेर सुरु गर्नुहोस्।</div>`;
     return;
   }
   const now = dutyNowContext();
   wrap.innerHTML = DUTY_CHARTS.map(g=>dutyGroupHtml(g, now)).join('');
+  dutyAutoGrowAll();
 }
 
 function dutyGroupHtml(g, now){
-  const dis = dutyLocked ? 'disabled' : '';
-  const addSectionBtn = dutyLocked ? '' : `<button class="duty-btn" onclick="dutyAddSection('${esc(g.id)}')">+ नयाँ Station/Section</button>`;
-  const removeGroupBtn = dutyLocked ? '' : `<button class="duty-btn duty-btn-danger" onclick="dutyRemoveGroup('${esc(g.id)}')">🗑️ यो Chart मेट्नुहोस्</button>`;
-  const emptyMsg = dutyLocked
-    ? '<div class="duty-empty">कुनै section छैन।</div>'
-    : '<div class="duty-empty">कुनै section छैन — "+ नयाँ Station/Section" थिचेर थप्नुहोस्।</div>';
   return `
     <div class="duty-group" data-gid="${esc(g.id)}">
       <div class="duty-group-head">
-        <input class="duty-group-title" value="${esc(g.title)}" onchange="dutyRenameGroup('${esc(g.id)}',this.value)" title="Chart title — click to edit" ${dis}>
-        ${addSectionBtn}
-        ${removeGroupBtn}
+        <input class="duty-group-title" value="${esc(g.title)}" onchange="dutyRenameGroup('${esc(g.id)}',this.value)" title="Chart title — click to edit">
+        <button class="duty-btn" onclick="dutyAddSection('${esc(g.id)}')">+ नयाँ Station/Section</button>
+        <button class="duty-btn duty-btn-danger" onclick="dutyRemoveGroup('${esc(g.id)}')">🗑️ यो Chart मेट्नुहोस्</button>
       </div>
-      ${g.sections.map(s=>dutySectionHtml(g.id,s,now)).join('') || emptyMsg}
+      ${g.sections.map(s=>dutySectionHtml(g.id,s,now)).join('') || '<div class="duty-empty">कुनै section छैन — "+ नयाँ Station/Section" थिचेर थप्नुहोस्।</div>'}
     </div>`;
 }
 
@@ -3095,23 +2992,19 @@ function dutySectionHtml(gid, s, now){
   // Which column (if any) matches today's date-of-month.
   const colRanges = s.columns.map(c=>dutyParseDayRange(c));
   const currentColIdx = colRanges.findIndex(r=>dutyDayInRange(now.day, r));
-  const dis = dutyLocked ? 'disabled' : '';
-  const addColumnBtn = dutyLocked ? '' : `<button class="duty-btn" onclick="dutyAddColumn('${esc(gid)}','${esc(s.id)}')">+ Column</button>`;
-  const addStaffBtn  = dutyLocked ? '' : `<button class="duty-btn" onclick="dutyAddStaff('${esc(gid)}','${esc(s.id)}')">+ कर्मचारी थप्नुहोस्</button>`;
-  const removeSectionBtn = dutyLocked ? '' : `<button class="duty-btn duty-btn-danger" onclick="dutyRemoveSection('${esc(gid)}','${esc(s.id)}')">🗑️ Section मेट्नुहोस्</button>`;
   return `
     <div class="duty-section" data-sid="${esc(s.id)}">
       <div class="duty-section-head">
-        <input class="duty-section-title" value="${esc(s.name)}" onchange="dutyRenameSection('${esc(gid)}','${esc(s.id)}',this.value)" title="Section/station name — click to edit" ${dis}>
-        ${addColumnBtn}
-        ${removeSectionBtn}
+        <input class="duty-section-title" value="${esc(s.name)}" onchange="dutyRenameSection('${esc(gid)}','${esc(s.id)}',this.value)" title="Section/station name — click to edit">
+        <button class="duty-btn" onclick="dutyAddColumn('${esc(gid)}','${esc(s.id)}')">+ Column</button>
+        <button class="duty-btn duty-btn-danger" onclick="dutyRemoveSection('${esc(gid)}','${esc(s.id)}')">🗑️ Section मेट्नुहोस्</button>
       </div>
       <div style="overflow-x:auto">
       <table class="duty-tbl">
         <thead><tr>
-          <th style="min-width:160px">कर्मचारीको नाम<br><span style="font-weight:400;font-size:10px;opacity:.75">(एउटै ड्युटीमा धेरै भए, छुट्टाछुट्टै लाइनमा)</span></th>
-          <th style="min-width:120px">फोन नम्बर</th>
-          ${s.columns.map((c,ci)=>`<th class="${ci===currentColIdx?'duty-col-now':''}" style="min-width:130px"><input value="${esc(c)}" onchange="dutyRenameColumn('${esc(gid)}','${esc(s.id)}',${ci},this.value)" ${dis}>${ci===currentColIdx?'<span class="duty-now-tag">आज</span>':''}</th>`).join('')}
+          <th style="min-width:140px">कर्मचारीको नाम</th>
+          <th style="min-width:110px">फोन नम्बर</th>
+          ${s.columns.map((c,ci)=>`<th class="${ci===currentColIdx?'duty-col-now':''}" style="min-width:130px"><textarea class="duty-auto" rows="1" oninput="dutyAutoGrow(this)" onchange="dutyRenameColumn('${esc(gid)}','${esc(s.id)}',${ci},this.value)">${esc(c)}</textarea>${ci===currentColIdx?'<span class="duty-now-tag">आज</span>':''}</th>`).join('')}
           <th style="width:34px"></th>
         </tr></thead>
         <tbody>
@@ -3122,47 +3015,23 @@ function dutySectionHtml(gid, s, now){
             const isNowRow = currentColIdx>=0 && dutyHourInRange(now.hour, dutyParseTimeRange(shifts[currentColIdx]));
             return `
             <tr class="${isNowRow?'duty-row-now':''}">
-              <td><textarea rows="1" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'name',this.value)" placeholder="नाम (धेरै भए, एक-एक लाइनमा)" ${dis}>${esc(st.name)}</textarea>${isNowRow?'<span class="duty-now-tag">ड्युटीमा</span>':''}</td>
-              <td><textarea rows="1" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'phone',this.value)" placeholder="फोन (एक-एक लाइनमा)" inputmode="tel" ${dis}>${esc(st.phone||'')}</textarea></td>
+              <td><textarea class="duty-auto" rows="1" oninput="dutyAutoGrow(this)" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'name',this.value)" placeholder="नाम">${esc(st.name)}</textarea>${isNowRow?'<span class="duty-now-tag">ड्युटीमा</span>':''}</td>
+              <td><textarea class="duty-auto" rows="1" oninput="dutyAutoGrow(this)" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'phone',this.value)" placeholder="फोन" inputmode="tel">${esc(st.phone||'')}</textarea></td>
               ${shifts.map((v,ci)=>{
                 const cellIsNow = isNowRow && ci===currentColIdx;
-                return `<td class="${ci===currentColIdx?'duty-col-now':''}${cellIsNow?' duty-cell-now':''}"><input value="${esc(v||'')}" onchange="dutyEditShift('${esc(gid)}','${esc(s.id)}',${ri},${ci},this.value)" ${dis}></td>`;
+                return `<td class="${ci===currentColIdx?'duty-col-now':''}${cellIsNow?' duty-cell-now':''}"><textarea class="duty-auto" rows="1" oninput="dutyAutoGrow(this)" onchange="dutyEditShift('${esc(gid)}','${esc(s.id)}',${ri},${ci},this.value)">${esc(v||'')}</textarea></td>`;
               }).join('')}
-              <td class="duty-rm">${dutyLocked ? '' : `<button class="duty-btn duty-btn-danger" style="padding:3px 7px" onclick="dutyRemoveStaff('${esc(gid)}','${esc(s.id)}',${ri})" title="यो कर्मचारी हटाउनुहोस्">✕</button>`}</td>
+              <td class="duty-rm"><button class="duty-btn duty-btn-danger" style="padding:3px 7px" onclick="dutyRemoveStaff('${esc(gid)}','${esc(s.id)}',${ri})" title="यो कर्मचारी हटाउनुहोस्">✕</button></td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>
       </div>
       <div class="duty-row-actions">
-        ${addStaffBtn}
+        <button class="duty-btn" onclick="dutyAddStaff('${esc(gid)}','${esc(s.id)}')">+ कर्मचारी थप्नुहोस्</button>
       </div>
     </div>`;
 }
-
-// ── Lock toggle (Settings → 🗓 Duty Chart Lock) ──────────────
-function toggleDutyLock(checked){
-  dutyLocked = !!checked;
-  dutySaveLocked();
-  dutyUpdateLockUI();
-  // Refresh the Duty page immediately if it's open behind Settings (or the
-  // next time it's opened), so every input/button reflects the new state.
-  if($('page-duty')) dutyRenderAll();
-  toast(dutyLocked
-    ? '🔒 Duty Chart editing locked — adding, editing, and deleting are all disabled for everyone.'
-    : '🔓 Duty Chart editing unlocked — all users can edit freely again.');
-}
-window.toggleDutyLock = toggleDutyLock;
-
-function dutyUpdateLockUI(){
-  const cb = $('dutyLockToggle');
-  if(cb) cb.checked = dutyLocked;
-  const hint = $('dutyLockStatusHint');
-  if(hint) hint.textContent = dutyLocked
-    ? 'हाल: 🔒 Locked — कसैले पनि थप्न/सम्पादन/मेटाउन सक्दैनन् (सबै फिल्ड र बटन ग्रे भई निष्क्रिय छन्)। यहीँबाट Unlock गरेपछि मात्र सम्पादन सम्भव हुन्छ।'
-    : 'हाल: 🔓 Unlocked — सबैले स्वतन्त्र रूपमा थप्न/सम्पादन/मेटाउन सक्छन्।';
-}
-window.dutyUpdateLockUI = dutyUpdateLockUI;
 
 // ── Find helpers ────────────────────────────────────────────
 function dutyFindGroup(gid){ return DUTY_CHARTS.find(g=>g.id===gid); }
@@ -3170,11 +3039,6 @@ function dutyFindSection(gid,sid){ const g=dutyFindGroup(gid); return g ? g.sect
 
 // ── Group-level edits ───────────────────────────────────────
 function dutyAddGroup(){
-  // Every guard below is a defensive backstop — the buttons/inputs that
-  // call these functions are hidden (add) or `disabled` (edit/delete) in
-  // the HTML itself whenever dutyLocked is true, so none of these should
-  // normally be reachable while locked.
-  if(dutyLocked){ toast('🔒 Duty Chart is locked — unlock it in Settings to add new charts.'); return; }
   const title = (prompt('नयाँ Duty Chart को शीर्षक लेख्नुहोस्:', 'नयाँ Duty Chart')||'').trim();
   if(!title) return;
   DUTY_CHARTS.push({ id: dutyNextId(), title, sections: [] });
@@ -3184,7 +3048,6 @@ function dutyAddGroup(){
 window.dutyAddGroup = dutyAddGroup;
 
 function dutyRenameGroup(gid, val){
-  if(dutyLocked){ dutyRenderAll(); return; }
   const g=dutyFindGroup(gid); if(!g) return;
   g.title = (val||'').trim() || g.title;
   dutySaveCharts();
@@ -3192,7 +3055,6 @@ function dutyRenameGroup(gid, val){
 window.dutyRenameGroup = dutyRenameGroup;
 
 function dutyRemoveGroup(gid){
-  if(dutyLocked) return; // defensive backstop — the button is hidden while locked
   const g=dutyFindGroup(gid); if(!g) return;
   if(!confirm(`"${g.title}" पूरै Duty Chart मेट्नुहुन्छ? यो पूर्ववत हुँदैन।`)) return;
   DUTY_CHARTS = DUTY_CHARTS.filter(x=>x.id!==gid);
@@ -3203,7 +3065,6 @@ window.dutyRemoveGroup = dutyRemoveGroup;
 
 // ── Section-level edits ─────────────────────────────────────
 function dutyAddSection(gid){
-  if(dutyLocked){ toast('🔒 Duty Chart is locked — unlock it in Settings to add new sections.'); return; }
   const g=dutyFindGroup(gid); if(!g) return;
   const name = (prompt('नयाँ Station/Section को नाम लेख्नुहोस्:', 'नयाँ Station')||'').trim();
   if(!name) return;
@@ -3216,7 +3077,6 @@ function dutyAddSection(gid){
 window.dutyAddSection = dutyAddSection;
 
 function dutyRenameSection(gid, sid, val){
-  if(dutyLocked){ dutyRenderAll(); return; }
   const s=dutyFindSection(gid,sid); if(!s) return;
   s.name = (val||'').trim() || s.name;
   dutySaveCharts();
@@ -3224,7 +3084,6 @@ function dutyRenameSection(gid, sid, val){
 window.dutyRenameSection = dutyRenameSection;
 
 function dutyRemoveSection(gid, sid){
-  if(dutyLocked) return; // defensive backstop — the button is hidden while locked
   const g=dutyFindGroup(gid); if(!g) return;
   const s=dutyFindSection(gid,sid); if(!s) return;
   if(!confirm(`"${s.name}" section मेट्नुहुन्छ?`)) return;
@@ -3235,7 +3094,6 @@ window.dutyRemoveSection = dutyRemoveSection;
 
 // ── Column-level edits ──────────────────────────────────────
 function dutyAddColumn(gid, sid){
-  if(dutyLocked){ toast('🔒 Duty Chart is locked — unlock it in Settings to add new columns.'); return; }
   const s=dutyFindSection(gid,sid); if(!s) return;
   const label = (prompt('नयाँ column को शीर्षक लेख्नुहोस्:', 'नयाँ सिफ्ट')||'').trim();
   if(!label) return;
@@ -3246,7 +3104,6 @@ function dutyAddColumn(gid, sid){
 window.dutyAddColumn = dutyAddColumn;
 
 function dutyRenameColumn(gid, sid, ci, val){
-  if(dutyLocked){ dutyRenderAll(); return; }
   const s=dutyFindSection(gid,sid); if(!s) return;
   s.columns[ci] = (val||'').trim() || s.columns[ci];
   dutySaveCharts();
@@ -3255,7 +3112,6 @@ window.dutyRenameColumn = dutyRenameColumn;
 
 // ── Staff-row-level edits ───────────────────────────────────
 function dutyAddStaff(gid, sid){
-  if(dutyLocked){ toast('🔒 Duty Chart is locked — unlock it in Settings to add staff.'); return; }
   const s=dutyFindSection(gid,sid); if(!s) return;
   s.staff.push({ name:'', phone:'', shifts: s.columns.map(()=>'') });
   dutySaveCharts(); dutyRenderAll();
@@ -3263,13 +3119,12 @@ function dutyAddStaff(gid, sid){
   setTimeout(()=>{
     const rows = document.querySelectorAll(`.duty-section[data-sid="${sid}"] tbody tr`);
     const last = rows[rows.length-1];
-    if(last){ const inp=last.querySelector('textarea'); if(inp) inp.focus(); }
+    if(last){ const inp=last.querySelector('input'); if(inp) inp.focus(); }
   }, 30);
 }
 window.dutyAddStaff = dutyAddStaff;
 
 function dutyEditStaff(gid, sid, ri, field, val){
-  if(dutyLocked){ dutyRenderAll(); return; }
   const s=dutyFindSection(gid,sid); if(!s || !s.staff[ri]) return;
   s.staff[ri][field] = val;
   dutySaveCharts();
@@ -3277,7 +3132,6 @@ function dutyEditStaff(gid, sid, ri, field, val){
 window.dutyEditStaff = dutyEditStaff;
 
 function dutyEditShift(gid, sid, ri, ci, val){
-  if(dutyLocked){ dutyRenderAll(); return; }
   const s=dutyFindSection(gid,sid); if(!s || !s.staff[ri]) return;
   if(!Array.isArray(s.staff[ri].shifts)) s.staff[ri].shifts=[];
   s.staff[ri].shifts[ci] = val;
@@ -3286,7 +3140,6 @@ function dutyEditShift(gid, sid, ri, ci, val){
 window.dutyEditShift = dutyEditShift;
 
 function dutyRemoveStaff(gid, sid, ri){
-  if(dutyLocked) return;
   const s=dutyFindSection(gid,sid); if(!s) return;
   s.staff.splice(ri,1);
   dutySaveCharts(); dutyRenderAll();
@@ -3305,7 +3158,6 @@ function dutyStartPolling(){
       const editing = active && active.closest && active.closest('#page-duty') && (active.tagName==='INPUT'||active.tagName==='TEXTAREA');
       if(editing) return;
       sbPullDutyCharts(true);
-      sbPullDutyLock(true);
     }, 20000);
   }
   if(!_dutyTickInterval){
@@ -3324,6 +3176,115 @@ function dutyStopPolling(){
   if(_dutyPollInterval){ clearInterval(_dutyPollInterval); _dutyPollInterval=null; }
   if(_dutyTickInterval){ clearInterval(_dutyTickInterval); _dutyTickInterval=null; }
 }
+
+// ── Export to Excel — every day of the month, duty of each section ──
+// Duty Chart columns are stored as date-range labels (e.g. "१-१० गतेको
+// सिफ्ट"), not one column per day. This expands those ranges into one
+// column per calendar day (1..daysInMonth) so the export reads like a
+// day-by-day duty roster instead of the compact 3-column edit view.
+
+// Days in the current BS month, from the same calendar table the Letter
+// Settings module uses. Falls back to 30 if the transformer module isn't
+// loaded yet or the current BS year isn't in the table.
+function dutyDaysInCurrentBsMonth(){
+  try{
+    if(typeof tfxCurrentBsMitiObj==='function' && typeof TFX_BS_CALENDAR!=='undefined'){
+      const o = tfxCurrentBsMitiObj();
+      if(TFX_BS_CALENDAR[o.y]) return TFX_BS_CALENDAR[o.y][o.m-1];
+    }
+  }catch(e){ /* transformer module not ready — use the fallback below */ }
+  return 30;
+}
+
+// Expands one section's columns into day-1..day-N values per staff. If the
+// section's columns don't parse as date ranges at all (custom-renamed
+// columns), falls back to exporting the columns literally so nothing is lost.
+function dutySectionDayWiseRows(s, daysInMonth){
+  const colRanges = (s.columns||[]).map(c=>dutyParseDayRange(c));
+  const anyParsed = colRanges.some(r=>r);
+  if(!anyParsed){
+    return { headers: (s.columns||[]).slice(),
+      rows: (s.staff||[]).map(st=>[st.name||'', st.phone||'', ...(st.shifts||[])]) };
+  }
+  const headers = [];
+  for(let d=1; d<=daysInMonth; d++) headers.push(String(d));
+  const rows = (s.staff||[]).map(st=>{
+    const shifts = st.shifts||[];
+    const dayVals = [];
+    for(let d=1; d<=daysInMonth; d++){
+      const ci = colRanges.findIndex(r=>dutyDayInRange(d,r));
+      dayVals.push(ci>=0 ? (shifts[ci]||'') : '');
+    }
+    return [st.name||'', st.phone||'', ...dayVals];
+  });
+  return { headers, rows };
+}
+
+// Sanitizes a chart title into a valid, unique Excel sheet name (<=31 chars,
+// no \ / ? * [ ] characters).
+function dutySheetName(title, idx, used){
+  let base = String(title||('Chart '+(idx+1))).replace(/[\\/?*\[\]:]/g,' ').trim();
+  if(!base) base = 'Chart '+(idx+1);
+  if(base.length>31) base = base.slice(0,31);
+  let name = base, n = 2;
+  while(used[name]){
+    const suffix = ' ('+n+')';
+    name = base.slice(0, 31-suffix.length) + suffix;
+    n++;
+  }
+  used[name] = true;
+  return name;
+}
+
+function dutyBuildDayWiseWorkbook(){
+  const wb = XLSX.utils.book_new();
+  const daysInMonth = dutyDaysInCurrentBsMonth();
+  const usedNames = {};
+  DUTY_CHARTS.forEach((g,gi)=>{
+    const aoa = [];
+    const titleRows = [];
+    const headerRows = [];
+    const merges = [];
+    titleRows.push(aoa.length);
+    aoa.push([`${g.title} — दिन-अनुसार ड्युटी (महिनाको ${daysInMonth} दिन)`]);
+    aoa.push(['Generated', new Date().toLocaleString('en-GB')]);
+    aoa.push([]);
+    (g.sections||[]).forEach(s=>{
+      const { headers, rows } = dutySectionDayWiseRows(s, daysInMonth);
+      const secRow = aoa.length;
+      titleRows.push(secRow);
+      aoa.push([s.name||'']);
+      merges.push({s:{r:secRow,c:0}, e:{r:secRow,c:1+Math.max(headers.length,1)}});
+      const headRow = aoa.length;
+      headerRows.push(headRow);
+      aoa.push(['कर्मचारीको नाम','फोन नम्बर', ...headers]);
+      rows.forEach(r=>aoa.push(r));
+      aoa.push([]); // spacer between sections
+    });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!merges'] = merges;
+    ws['!cols'] = [{wch:24},{wch:14}].concat(Array.from({length:daysInMonth},()=>({wch:15})));
+    dtStyleSheet(ws, { titleRows, headerRows });
+    XLSX.utils.book_append_sheet(wb, ws, dutySheetName(g.title, gi, usedNames));
+  });
+  return wb;
+}
+
+async function dutyExportDayWiseExcel(){
+  if(!DUTY_CHARTS.length){ toast('कुनै Duty Chart छैन — पहिले Duty Chart बनाउनुहोस्।',3000); return; }
+  toast('Excel तयार गर्दै…', 1500);
+  try{
+    await loadXlsxLib();
+    const wb = dutyBuildDayWiseWorkbook();
+    const stamp = new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb, `NEA_Duty_Chart_DayWise_${stamp}.xlsx`);
+    toast('✓ दिन-अनुसार Duty Chart Excel डाउनलोड भयो', 2500);
+  }catch(e){
+    console.warn('duty day-wise export failed:', e.message);
+    toast('⚠ Excel export असफल: '+e.message, 4000);
+  }
+}
+window.dutyExportDayWiseExcel = dutyExportDayWiseExcel;
 
 /* ============================================================
    DROPDOWNS
@@ -6169,13 +6130,14 @@ function dtBuildWorkbook(date, period){
     ['NEA '+(currentDcs().shortName||'Taulihawa')+' — '+rng.name+' Feeder Downtime Report'],
     ['Report Period', rng.label, '', 'Generated', new Date().toLocaleString('en-GB')],
     ['Format', 'main events (duration) / feeder-wise events (duration) — e.g. "2 / 20" means the outage occurred 2 times, affecting 20 feeder-events in total'],
-    ['Substation','System Gone (No.)','System Gone (Duration)','11 KV Incomer Failed (No.)','11 KV Incomer Failed (Duration)','Trip (No.)','Trip (Duration)','Shutdown (No.)','Shutdown (Duration)','Total Events','Total Downtime']
+    ['Substation','System Gone (No.)','System Gone (Duration)','11 KV Incomer Failed (No.)','11 KV Incomer Failed (Duration)','33 KV Incomer Failed (No.)','33 KV Incomer Failed (Duration)','Trip (No.)','Trip (Duration)','Shutdown (No.)','Shutdown (Duration)','Total Events','Total Downtime']
   ];
   Object.keys(a.stations).sort().forEach(st=>{
     const S=a.stations[st];
     sumRows.push([st,
       fmtPairC(S.mainCounts['system-gone'],S.counts['system-gone']),       fmtPairD(S.mainDur['system-gone'],S.dur['system-gone']),
       fmtPairC(S.mainCounts['incomer-failed'],S.counts['incomer-failed']), fmtPairD(S.mainDur['incomer-failed'],S.dur['incomer-failed']),
+      fmtPairC(S.mainCounts['kv33'],S.counts['kv33']),                     fmtPairD(S.mainDur['kv33'],S.dur['kv33']),
       fmtPairC(S.mainCounts['trip'],S.counts['trip']),                     fmtPairD(S.mainDur['trip'],S.dur['trip']),
       fmtPairC(S.mainCounts['shutdown'],S.counts['shutdown']),             fmtPairD(S.mainDur['shutdown'],S.dur['shutdown']),
       fmtPairC(S.mainTotalCount,S.totalCount), fmtPairD(S.mainTotalDur,S.totalDur)]);
@@ -6183,18 +6145,19 @@ function dtBuildWorkbook(date, period){
   sumRows.push(['GRAND TOTAL',
     fmtPairC(a.mainCounts['system-gone'],a.counts['system-gone']),       fmtPairD(a.mainDur['system-gone'],a.dur['system-gone']),
     fmtPairC(a.mainCounts['incomer-failed'],a.counts['incomer-failed']), fmtPairD(a.mainDur['incomer-failed'],a.dur['incomer-failed']),
+    fmtPairC(a.mainCounts['kv33'],a.counts['kv33']),                     fmtPairD(a.mainDur['kv33'],a.dur['kv33']),
     fmtPairC(a.mainCounts['trip'],a.counts['trip']),                     fmtPairD(a.mainDur['trip'],a.dur['trip']),
     fmtPairC(a.mainCounts['shutdown'],a.counts['shutdown']),             fmtPairD(a.mainDur['shutdown'],a.dur['shutdown']),
     fmtPairC(a.mainTotalCount,a.totalCount), fmtPairD(a.mainTotalDur,a.totalDur)]);
   const ws1=XLSX.utils.aoa_to_sheet(sumRows);
-  ws1['!cols']=[{wch:34},{wch:15},{wch:20},{wch:17},{wch:22},{wch:9},{wch:14},{wch:14},{wch:18},{wch:12},{wch:15}];
-  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:10}},{s:{r:2,c:1},e:{r:2,c:10}}];
+  ws1['!cols']=[{wch:34},{wch:15},{wch:20},{wch:17},{wch:22},{wch:17},{wch:22},{wch:9},{wch:14},{wch:14},{wch:18},{wch:12},{wch:15}];
+  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:12}},{s:{r:2,c:1},e:{r:2,c:12}}];
   ws1['!rows']=[{hpt:22},null,null,{hpt:30}];
   dtStyleSheet(ws1,{titleRows:[0], headerRows:[3], boldRows:[sumRows.length-1]});
   XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
 
   // ── Sheet 2: Feeder Detail (per feeder of each substation) ──
-  const fdRows=[['Substation','Feeder','System Gone (No.)','System Gone (Dur.)','11 KV Incomer Failed (No.)','11 KV Incomer Failed (Dur.)','Trip (No.)','Trip (Dur.)','Shutdown (No.)','Shutdown (Dur.)','Total Events','Total Downtime']];
+  const fdRows=[['Substation','Feeder','System Gone (No.)','System Gone (Dur.)','11 KV Incomer Failed (No.)','11 KV Incomer Failed (Dur.)','33 KV Incomer Failed (No.)','33 KV Incomer Failed (Dur.)','Trip (No.)','Trip (Dur.)','Shutdown (No.)','Shutdown (Dur.)','Total Events','Total Downtime']];
   Object.keys(a.stations).sort().forEach(st=>{
     const S=a.stations[st];
     Object.keys(S.feeders).sort().forEach(f=>{
@@ -6202,13 +6165,14 @@ function dtBuildWorkbook(date, period){
       fdRows.push([st, f,
         F.counts['system-gone'],   fmtDur(F.dur['system-gone']),
         F.counts['incomer-failed'],fmtDur(F.dur['incomer-failed']),
+        F.counts['kv33'],          fmtDur(F.dur['kv33']),
         F.counts['trip'],          fmtDur(F.dur['trip']),
         F.counts['shutdown'],      fmtDur(F.dur['shutdown']),
         F.totalCount, fmtDur(F.totalDur)]);
     });
   });
   const ws2=XLSX.utils.aoa_to_sheet(fdRows);
-  ws2['!cols']=[{wch:30},{wch:26},{wch:15},{wch:17},{wch:17},{wch:19},{wch:9},{wch:12},{wch:13},{wch:14},{wch:12},{wch:15}];
+  ws2['!cols']=[{wch:30},{wch:26},{wch:15},{wch:17},{wch:17},{wch:19},{wch:17},{wch:19},{wch:9},{wch:12},{wch:13},{wch:14},{wch:12},{wch:15}];
   ws2['!rows']=[{hpt:30}];
   dtStyleSheet(ws2,{headerRows:[0]});
   XLSX.utils.book_append_sheet(wb, ws2, 'Feeder Detail');
@@ -6228,12 +6192,13 @@ function dtBuildWorkbook(date, period){
 
   // ── Sheet 4 (weekly/monthly only): Daily Breakdown — one row per 24-hr window ──
   if(rng.days.length>1){
-    const bdRows=[['Window (starts at '+dtSendTimeStr()+')','System Gone (No.)','System Gone (Dur.)','11 KV Incomer Failed (No.)','11 KV Incomer Failed (Dur.)','Trip (No.)','Trip (Dur.)','Shutdown (No.)','Shutdown (Dur.)','Total Events','Total Downtime']];
+    const bdRows=[['Window (starts at '+dtSendTimeStr()+')','System Gone (No.)','System Gone (Dur.)','11 KV Incomer Failed (No.)','11 KV Incomer Failed (Dur.)','33 KV Incomer Failed (No.)','33 KV Incomer Failed (Dur.)','Trip (No.)','Trip (Dur.)','Shutdown (No.)','Shutdown (Dur.)','Total Events','Total Downtime']];
     rng.days.forEach(dstr=>{
       const da=dtAggregate(dstr);
       bdRows.push([dstr,
         fmtPairC(da.mainCounts['system-gone'],da.counts['system-gone']),       fmtPairD(da.mainDur['system-gone'],da.dur['system-gone']),
         fmtPairC(da.mainCounts['incomer-failed'],da.counts['incomer-failed']), fmtPairD(da.mainDur['incomer-failed'],da.dur['incomer-failed']),
+        fmtPairC(da.mainCounts['kv33'],da.counts['kv33']),                     fmtPairD(da.mainDur['kv33'],da.dur['kv33']),
         fmtPairC(da.mainCounts['trip'],da.counts['trip']),                     fmtPairD(da.mainDur['trip'],da.dur['trip']),
         fmtPairC(da.mainCounts['shutdown'],da.counts['shutdown']),             fmtPairD(da.mainDur['shutdown'],da.dur['shutdown']),
         fmtPairC(da.mainTotalCount,da.totalCount), fmtPairD(da.mainTotalDur,da.totalDur)]);
@@ -6241,11 +6206,12 @@ function dtBuildWorkbook(date, period){
     bdRows.push(['TOTAL ('+rng.days.length+' days)',
       fmtPairC(a.mainCounts['system-gone'],a.counts['system-gone']),       fmtPairD(a.mainDur['system-gone'],a.dur['system-gone']),
       fmtPairC(a.mainCounts['incomer-failed'],a.counts['incomer-failed']), fmtPairD(a.mainDur['incomer-failed'],a.dur['incomer-failed']),
+      fmtPairC(a.mainCounts['kv33'],a.counts['kv33']),                     fmtPairD(a.mainDur['kv33'],a.dur['kv33']),
       fmtPairC(a.mainCounts['trip'],a.counts['trip']),                     fmtPairD(a.mainDur['trip'],a.dur['trip']),
       fmtPairC(a.mainCounts['shutdown'],a.counts['shutdown']),             fmtPairD(a.mainDur['shutdown'],a.dur['shutdown']),
       fmtPairC(a.mainTotalCount,a.totalCount), fmtPairD(a.mainTotalDur,a.totalDur)]);
     const ws4=XLSX.utils.aoa_to_sheet(bdRows);
-    ws4['!cols']=[{wch:24},{wch:15},{wch:17},{wch:17},{wch:19},{wch:9},{wch:12},{wch:13},{wch:14},{wch:12},{wch:15}];
+    ws4['!cols']=[{wch:24},{wch:15},{wch:17},{wch:17},{wch:19},{wch:17},{wch:19},{wch:9},{wch:12},{wch:13},{wch:14},{wch:12},{wch:15}];
     ws4['!rows']=[{hpt:30}];
     dtStyleSheet(ws4,{headerRows:[0], boldRows:[bdRows.length-1]});
     XLSX.utils.book_append_sheet(wb, ws4, 'Daily Breakdown');
@@ -6291,6 +6257,7 @@ function dtBuildTextSummary(date, period){
   msg+=`Total: ${fmtPairFull(a.mainTotalCount,a.mainTotalDur,a.totalCount,a.totalDur)}\n`;
   msg+=`⛔ System Gone: ${fmtPairFull(a.mainCounts['system-gone'],a.mainDur['system-gone'],a.counts['system-gone'],a.dur['system-gone'])}\n`;
   msg+=`🛑 11 KV Incomer Failed: ${fmtPairFull(a.mainCounts['incomer-failed'],a.mainDur['incomer-failed'],a.counts['incomer-failed'],a.dur['incomer-failed'])}\n`;
+  msg+=`🛑 33 KV Incomer Failed: ${fmtPairFull(a.mainCounts['kv33'],a.mainDur['kv33'],a.counts['kv33'],a.dur['kv33'])}\n`;
   msg+=`⚡ Trip: ${fmtPairFull(a.mainCounts['trip'],a.mainDur['trip'],a.counts['trip'],a.dur['trip'])}\n`;
   msg+=`🔌 Shutdown: ${fmtPairFull(a.mainCounts['shutdown'],a.mainDur['shutdown'],a.counts['shutdown'],a.dur['shutdown'])}\n`;
   const sts=Object.keys(a.stations).sort();
@@ -6845,7 +6812,8 @@ async function fsEnsureFeederClearFor(name, newType){
     sbPushOneFeedStatus(name, {status:'charged', time:chargeTime, ts:Date.now()});
     // Send the same Charged notice a normal charge would send, so receivers
     // still get told the old outage ended — nothing silently skipped.
-    dispatchChargedMsg(name, `${name} Charged at ${chargeTime}`);
+    const guardStation = DATA.feeders.find(f=>f.name===name)?.station || $('station').value || '';
+    dispatchChargedMsg(name, `${name} of ${guardStation} charged at ${chargeTime}.`);
     toast(`✓ ${name} — पहिलेको ${oldLabel} चार्ज भयो। अब ${newLabel} थप्न सकिन्छ।`, 3000);
     return true;
   } finally {
@@ -7222,7 +7190,7 @@ async function onFeederStatusAction(feederName,sel){
 
     const msg = action==='trip'
       ? `${feederName} of ${station} is auto tripped at ${t} due to ${reason}`
-      : `${feederName} of ${station} is under shutdown since ${t} due to ${reason}`;
+      : `${feederName} of ${station} is under shutdown since ${t}. Reason: ${reason}.`;
 
     feederStatusMap[feederName]={status:action,time:t};
     renderFeederStatus();
@@ -7233,7 +7201,6 @@ async function onFeederStatusAction(feederName,sel){
       toast('🔕 Receivers muted — logged but not sent. Unmute in Settings → Receivers.', 3500);
       const names = DATA.receivers.filter(r=>r.enabled).map(r=>r.name).join(', ') || 'None';
       recordLogDirect({type:typeLabel, recipients:names, status:'MUTED — not sent', station, feeder:feederName, time:t, msg, reason});
-      sbInsertLog(LOG[0]);
       return;
     }
     const enabled = DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
@@ -7256,7 +7223,6 @@ async function onFeederStatusAction(feederName,sel){
       if(await sendSilent(r,msg,stEl)) ok++;
     }
     recordLogDirect({type:typeLabel, recipients:enabled.map(r=>r.name).join(', '), status:ok+'/'+enabled.length+' sent', station, feeder:feederName, time:t, msg, reason});
-    sbInsertLog(LOG[0]);
     toast(`${typeLabel} notice sent: ${ok}/${enabled.length}`);
   }
 }
@@ -7307,7 +7273,8 @@ async function markFeederCharged(feederName){
     } finally { dtCloseTimeOverride=null; }
     renderFeederStatus();
     sbPushOneFeedStatus(feederName,{status:'charged',time:t,ts:Date.now()});
-    const msg=`${feederName} Charged at ${t}`;
+    const chargeStation = DATA.feeders.find(f=>f.name===feederName)?.station || $('station').value || '';
+    const msg=`${feederName} of ${chargeStation} charged at ${t}.`;
     dispatchChargedMsg(feederName,msg);
   } finally {
     feederOpLock[feederName]=false;
@@ -9276,6 +9243,10 @@ function markInitialPullDone(){
     _pendingDutyPush = false;
     sbPushDutyCharts(true);
   }
+  if(typeof _pendingTfxMitiPush!=='undefined' && _pendingTfxMitiPush){
+    _pendingTfxMitiPush = false;
+    try{ sbPushTfxMiti(true); }catch(e){ console.warn('tfx miti push failed:', e.message); }
+  }
 }
 window.markInitialPullDone = markInitialPullDone;
 function recordLog(type, recipients, status){
@@ -9912,6 +9883,12 @@ function startSync(){
 try{ renderLog(); }catch(e){ console.warn('renderLog init failed:', e.message); }
 try{ renderFeederStatus(); }catch(e){ console.warn('renderFeederStatus init failed:', e.message); }
 try{ dtInit(); }catch(e){ console.warn('dtInit failed:', e.message); }
+try{
+  // Keep आजको मिति (BS) in पत्र सेटिङ current on every device — same
+  // lightweight background-poll style as dtSyncNow above.
+  setInterval(()=>{ try{ sbPullTfxMiti(true); }catch(e){} }, 60000);
+  setTimeout(()=>{ try{ sbPullTfxMiti(true); }catch(e){} }, 6000);
+}catch(e){ console.warn('tfx miti poll init failed:', e.message); }
 try{ refreshDcsUI(); }catch(e){ console.warn('refreshDcsUI init failed:', e.message); }
 try{ showAppLock(); }catch(e){ console.warn('showAppLock failed:', e.message); }
 try{ updateSbConnUI(); }catch(e){ console.warn('updateSbConnUI failed:', e.message); }
@@ -9955,20 +9932,22 @@ try{
   if(hasValidMonitorSession()){
     appUnlocked=true; monitorMode=true; loginRole='monitor';
     applyMonitorMode();
-    const lock=document.getElementById('appLock');
-    if(lock){ lock.style.display='none'; }
-    showSyncLoading(); // block interaction until the first cloud pull finishes
-    restoreLastStation();
-    setTimeout(setTopbarH,450);
-    setTimeout(()=>{ maybeOfferPush().catch(e=>console.warn('push offer failed:', e.message)); }, 900);
+    // Same loading gate as appUnlock(): keep #appLock up (spinner card
+    // instead of the password card, since this path skips the password
+    // screen entirely) until the pull has actually finished.
+    appLockShowLoading();
     (async () => {
       try{ await sbMigrateLegacyRows(); }catch(e){ console.warn('migrate failed:', e.message); }
       try{ await sbPullData(true); }catch(e){ console.warn('pull failed:', e.message); }
       try{ await sbPullDutyCharts(true); }catch(e){ console.warn('duty chart pull failed:', e.message); }
-      try{ await sbPullDutyLock(true); }catch(e){ console.warn('duty lock pull failed:', e.message); }
+      try{ await sbPullTfxMiti(true); }catch(e){ console.warn('tfx miti pull failed:', e.message); }
       markInitialPullDone(); // safe to auto-push settings from here on
-      hideSyncLoading(); // reveal the app — only edits from this point on sync
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
+      // Pull sequence is done — NOW reveal the app and allow editing.
+      appLockHideAndReveal();
+      restoreLastStation();
+      setTimeout(setTopbarH,450);
+      setTimeout(()=>{ maybeOfferPush().catch(e=>console.warn('push offer failed:', e.message)); }, 900);
       try{ startSync(); }catch(e){ console.warn('startSync failed:', e.message); }
     })();
   }
@@ -10134,7 +10113,68 @@ function tfxSetTodayBsDate(y,m,d){
   const t = new Date(); t.setHours(0,0,0,0);
   TFX_LETTER_SETTINGS.adAnchorMs = t.getTime();
   tfxSaveLetterSettings();
+  // Same deferred-until-first-pull guard as saveData()/dutySaveCharts(): the
+  // app unlocks before its first Supabase pull finishes, so an edit made in
+  // that window could push this device's stale local date over a fresher
+  // one another device already set in the cloud. Queue it instead — flushed
+  // by markInitialPullDone() once the pull actually completes.
+  if(typeof initialPullDone!=='undefined' && initialPullDone){
+    try{ sbPushTfxMiti(); }catch(e){ console.warn('tfx miti push failed:', e.message); }
+  } else if(typeof _pendingSyncKeys!=='undefined'){
+    _pendingTfxMitiPush = true;
+  }
 }
+let _pendingTfxMitiPush = false;
+
+// ── आजको मिति (BS) cloud sync ──────────────────────────────────
+// Only the BS-date anchor (bsAnchorY/M/D + adAnchorMs) is synced across
+// devices — logo / fiscal year / body overrides stay device-local exactly
+// as before. Uses the same app_settings key/value table + merge-duplicates
+// pattern as sbPushDutyCharts/sbPullDutyCharts above, under its own key so
+// it never collides with any other synced data.
+async function sbPushTfxMiti(silent=true){
+  if(typeof sbReady!=='function' || !sbReady()) return;
+  try{
+    const s = TFX_LETTER_SETTINGS;
+    const url = getSbUrl()+'/rest/v1/app_settings';
+    const res = await fetch(url+'?on_conflict=key', {
+      method:  'POST',
+      headers: {...sbHeaders(), 'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:    JSON.stringify([{ key:'tfx_letter_miti', value: JSON.stringify({
+        bsAnchorY:s.bsAnchorY, bsAnchorM:s.bsAnchorM, bsAnchorD:s.bsAnchorD, adAnchorMs:s.adAnchorMs
+      }), updated_at: new Date().toISOString() }])
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    if(!silent) tfxToast('✓ आजको मिति सबै डिभाइसमा सिंक भयो');
+  }catch(e){
+    console.warn('tfx miti push failed:', e.message);
+    if(!silent) tfxToast('⚠ मिति सिंक असफल: '+e.message);
+  }
+}
+window.sbPushTfxMiti = sbPushTfxMiti;
+
+async function sbPullTfxMiti(silent=true){
+  if(typeof sbReady!=='function' || !sbReady()) return;
+  try{
+    const rows = await sbFetch('app_settings?key=eq.tfx_letter_miti&select=key,value');
+    if(rows && rows[0] && rows[0].value){
+      const p = JSON.parse(rows[0].value);
+      const s = TFX_LETTER_SETTINGS;
+      if(p && typeof p.adAnchorMs==='number' &&
+         (p.adAnchorMs!==s.adAnchorMs || p.bsAnchorY!==s.bsAnchorY || p.bsAnchorM!==s.bsAnchorM || p.bsAnchorD!==s.bsAnchorD)){
+        s.bsAnchorY=p.bsAnchorY; s.bsAnchorM=p.bsAnchorM; s.bsAnchorD=p.bsAnchorD; s.adAnchorMs=p.adAnchorMs;
+        tfxSave(TFX_SETTINGS_KEY, s);   // local save only — no re-push, avoids an echo loop
+        const mitiInput = $('tfxSet_miti');
+        if(mitiInput) mitiInput.value = tfxCurrentBsMitiText();
+      }
+    }
+    if(!silent) tfxToast('✓ मिति cloud बाट ल्याइयो');
+  }catch(e){
+    console.warn('tfx miti pull failed:', e.message);
+    if(!silent) tfxToast('⚠ मिति pull असफल: '+e.message);
+  }
+}
+window.sbPullTfxMiti = sbPullTfxMiti;
 
 // -------------------------- Blank record templates ------------------
 function tfxBlankInspection(){
@@ -11518,6 +11558,9 @@ function tfxOpenLetterSettings(){
   `);
   const logoFileEl = $('tfxSet_logoFile');
   if(logoFileEl) logoFileEl.addEventListener('change', tfxHandleLogoFile);
+  // Refresh from cloud in case another device corrected the date since this
+  // device's last periodic pull — updates the input in place once resolved.
+  try{ sbPullTfxMiti(true); }catch(e){}
 }
 window.tfxOpenLetterSettings = tfxOpenLetterSettings;
 
