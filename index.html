@@ -1360,9 +1360,10 @@ body.duty-page-open #page-duty{
   <div class="duty-wrap">
     <div class="duty-toolbar">
       <h2>🗓 Duty Chart</h2>
+      <div id="dutyLockBadge" style="display:none;font-size:12px;font-weight:700;color:var(--red);background:#fdecec;border:1px solid #f3b9b9;border-radius:8px;padding:6px 12px">🔒 लक भएको छ — Settings बाट अनलक गर्नुहोस्</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="duty-btn" onclick="dutyExportDayWiseExcel()" title="महिनाको हरेक गते/दिनको ड्युटी देखिने गरी हरेक Section को Excel निकाल्नुहोस्">📥 Excel Export (दिन-अनुसार)</button>
-        <button class="duty-btn duty-btn-primary" onclick="dutyAddGroup()">+ नयाँ Duty Chart थप्नुहोस्</button>
+        <button id="dutyExportBtn" class="duty-btn" onclick="dutyExportDayWiseExcel()" title="महिनाको हरेक गते/दिनको ड्युटी देखिने गरी हरेक Section को Excel निकाल्नुहोस्">📥 Excel Export (दिन-अनुसार)</button>
+        <button id="dutyAddGroupBtn" class="duty-btn duty-btn-primary" onclick="dutyAddGroup()">+ नयाँ Duty Chart थप्नुहोस्</button>
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:-6px 0 14px;font-size:11.5px;color:var(--dim,#5a6072)">
@@ -1394,6 +1395,7 @@ body.duty-page-open #page-duty{
       <div class="snav-item" onclick="showSection('sec-supabase')">☁ Supabase (Sync)</div>
       <div class="snav-item" onclick="showSection('sec-devices');renderDeviceRegistry()">🔐 Device Access</div>
       <div class="snav-item" onclick="showSection('sec-changepw')">🔑 Change Password</div>
+      <div class="snav-item" onclick="showSection('sec-dutylock');dutyRenderLockSettingsRow()">🔒 Duty Chart Lock</div>
     </div>
 
     <div class="settings-content">
@@ -1824,6 +1826,22 @@ gemini-1.5-flash</textarea>
           </div>
         </div>
       </div><!-- /sec-changepw -->
+
+      <!-- DUTY CHART LOCK -->
+      <div class="s-section" id="sec-dutylock">
+        <div class="card">
+          <div class="card-head"><span class="card-title">🔒 Duty Chart Lock</span></div>
+          <div class="card-body">
+            <p class="hint" style="margin-bottom:16px;line-height:1.6">
+              लक गरेपछि Duty Chart मा कुनै पनि edit गर्न सकिँदैन — Chart/Section थप्ने वा मेट्ने, Column थप्ने, कर्मचारीको नाम/फोन/सिफ्ट बदल्ने, र Excel Export लगायत सबै बटन र फिल्डहरू लुक्छन् वा readonly हुन्छन्। यो <strong>सबै device मा एकैसाथ</strong> लागू हुन्छ।<br><br>
+              <strong>Lock गर्न password चाहिँदैन</strong> — तर <strong>Unlock गर्न यही Settings password पुनः चाहिन्छ</strong>, ताकि गल्तिले वा अरू कसैले खोल्न नसकोस्।
+            </p>
+            <div id="dutyLockStatus" style="font-size:13px;font-weight:700;margin-bottom:14px"></div>
+            <div id="dutyLockAction"></div>
+          </div>
+        </div>
+      </div><!-- /sec-dutylock -->
+
 
     </div><!-- /settings-content -->
   </div><!-- /settings-grid -->
@@ -2324,6 +2342,7 @@ let settingsUnlocked   = false;
 let cachedEntryHash    = null;
 let cachedSettingsHash = null;
 let settingsPwExists   = false;
+let DUTY_LOCKED        = false;   // Duty Chart read-only lock — Settings → Duty Chart Lock
 
 // ── Monitor "stay signed in" ──────────────────────────────────────────
 // Monitor (view-only) staff shouldn't have to retype the password every
@@ -2346,14 +2365,34 @@ function hasValidMonitorSession(){
 
 async function fetchPasswordHashes(){
   try{
-    const rows=await sbFetch('app_config?key=in.("app_password","settings_password")&select=key,value');
+    const rows=await sbFetch('app_config?key=in.("app_password","settings_password","duty_locked")&select=key,value');
     rows.forEach(r=>{
       if(r.key==='app_password')      cachedEntryHash    = r.value;
       if(r.key==='settings_password') cachedSettingsHash = r.value;
+      if(r.key==='duty_locked')       DUTY_LOCKED        = (r.value==='1');
     });
     settingsPwExists = !!cachedSettingsHash;
   }catch(e){
     cachedEntryHash = cachedEntryHash || ENTRY_HASH_FALLBACK;
+  }
+}
+
+// Pushes the Duty Chart lock state to app_config — same table/pattern as
+// the passwords above, so it's cloud-synced and shared across every device
+// (not a per-device local setting).
+async function sbPushDutyLock(locked){
+  try{
+    const url=getSbUrl()+'/rest/v1/app_config?on_conflict=key';
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{...sbHeaders(),'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({key:'duty_locked', value: locked?'1':'0', updated_at:new Date().toISOString()})
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    return true;
+  }catch(e){
+    console.warn('duty lock push failed:', e.message);
+    return false;
   }
 }
 
@@ -2417,6 +2456,7 @@ async function appUnlock(){
       try{ await sbPullData(true); }catch(e){ console.warn('pull failed:', e.message); }
       try{ await sbPullDutyCharts(true); }catch(e){ console.warn('duty chart pull failed:', e.message); }
       try{ await sbPullTfxMiti(true); }catch(e){ console.warn('tfx miti pull failed:', e.message); }
+      try{ await fetchPasswordHashes(); }catch(e){ console.warn('duty lock refresh failed:', e.message); }
       markInitialPullDone(); // safe to auto-push settings from here on
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
       // Pull sequence is done — NOW reveal the app and allow editing.
@@ -2591,8 +2631,16 @@ async function confirmModeSwitch(){
 }
 
 /* ── Settings unlock (author only) ── */
+// pwOverlay is reused for two purposes: opening Settings (the original use),
+// and — tagged via pwModalPurpose — re-verifying the Settings password
+// specifically to unlock the Duty Chart. Reset to 'settings' whenever the
+// modal closes so a cancelled Duty-unlock attempt can't leak into a later
+// legitimate Settings-open.
+let pwModalPurpose = 'settings';
+
 function openSettings(){
   if(monitorMode){ toast('Monitoring access is view-only — Settings is not available.'); return; }
+  pwModalPurpose='settings';
   if(settingsUnlocked){showPage('settings');return;}
   const overlay=$('pwOverlay');
   overlay.style.display='flex';
@@ -2604,7 +2652,7 @@ function openSettings(){
   $('pwModalTitle').textContent=settingsPwExists?'Settings Access':'Create Settings Password';
   setTimeout(()=>$('pwInput').focus(),80);
 }
-function closePwModal(){$('pwOverlay').style.display='none';}
+function closePwModal(){$('pwOverlay').style.display='none'; pwModalPurpose='settings';}
 
 async function checkPw(){
   const val=$('pwInput').value.trim();
@@ -2621,6 +2669,12 @@ async function checkPw(){
   }
   const hash=await sha256(val);
   if(hash===cachedSettingsHash){
+    if(pwModalPurpose==='dutyUnlock'){
+      pwModalPurpose='settings';
+      closePwModal();
+      await dutyUnlockConfirmed();
+      return;
+    }
     settingsUnlocked=true;
     closePwModal();
     showPage('settings');
@@ -2962,12 +3016,25 @@ function dutyAutoGrowAll(){
   wrap.querySelectorAll('textarea.duty-auto').forEach(dutyAutoGrow);
 }
 
+// Hides/shows the toolbar's Add/Export buttons and the lock badge to match
+// DUTY_LOCKED. Called every render, plus whenever the lock state itself
+// changes, so the toolbar never lags behind the per-chart buttons below.
+function dutyApplyLockToToolbar(){
+  const badge=$('dutyLockBadge'), exportBtn=$('dutyExportBtn'), addBtn=$('dutyAddGroupBtn');
+  if(badge) badge.style.display = DUTY_LOCKED ? 'block' : 'none';
+  if(exportBtn) exportBtn.style.display = DUTY_LOCKED ? 'none' : '';
+  if(addBtn) addBtn.style.display = DUTY_LOCKED ? 'none' : '';
+}
+
 // ── Render ──────────────────────────────────────────────────
 function dutyRenderAll(){
+  dutyApplyLockToToolbar();
   const wrap = $('dutyGroupsWrap');
   if(!wrap) return;
   if(!DUTY_CHARTS.length){
-    wrap.innerHTML = `<div class="duty-empty">कुनै Duty Chart छैन। "+ नयाँ Duty Chart थप्नुहोस्" थिचेर सुरु गर्नुहोस्।</div>`;
+    wrap.innerHTML = DUTY_LOCKED
+      ? `<div class="duty-empty">कुनै Duty Chart छैन।</div>`
+      : `<div class="duty-empty">कुनै Duty Chart छैन। "+ नयाँ Duty Chart थप्नुहोस्" थिचेर सुरु गर्नुहोस्।</div>`;
     return;
   }
   const now = dutyNowContext();
@@ -2976,36 +3043,38 @@ function dutyRenderAll(){
 }
 
 function dutyGroupHtml(g, now){
+  const L = DUTY_LOCKED;
   return `
     <div class="duty-group" data-gid="${esc(g.id)}">
       <div class="duty-group-head">
-        <input class="duty-group-title" value="${esc(g.title)}" onchange="dutyRenameGroup('${esc(g.id)}',this.value)" title="Chart title — click to edit">
-        <button class="duty-btn" onclick="dutyAddSection('${esc(g.id)}')">+ नयाँ Station/Section</button>
-        <button class="duty-btn duty-btn-danger" onclick="dutyRemoveGroup('${esc(g.id)}')">🗑️ यो Chart मेट्नुहोस्</button>
+        <input class="duty-group-title" value="${esc(g.title)}" ${L?'readonly':`onchange="dutyRenameGroup('${esc(g.id)}',this.value)"`} title="Chart title — click to edit">
+        ${L?'':`<button class="duty-btn" onclick="dutyAddSection('${esc(g.id)}')">+ नयाँ Station/Section</button>`}
+        ${L?'':`<button class="duty-btn duty-btn-danger" onclick="dutyRemoveGroup('${esc(g.id)}')">🗑️ यो Chart मेट्नुहोस्</button>`}
       </div>
-      ${g.sections.map(s=>dutySectionHtml(g.id,s,now)).join('') || '<div class="duty-empty">कुनै section छैन — "+ नयाँ Station/Section" थिचेर थप्नुहोस्।</div>'}
+      ${g.sections.map(s=>dutySectionHtml(g.id,s,now)).join('') || `<div class="duty-empty">${L?'कुनै section छैन।':'कुनै section छैन — "+ नयाँ Station/Section" थिचेर थप्नुहोस्।'}</div>`}
     </div>`;
 }
 
 function dutySectionHtml(gid, s, now){
   now = now || dutyNowContext();
+  const L = DUTY_LOCKED;
   // Which column (if any) matches today's date-of-month.
   const colRanges = s.columns.map(c=>dutyParseDayRange(c));
   const currentColIdx = colRanges.findIndex(r=>dutyDayInRange(now.day, r));
   return `
     <div class="duty-section" data-sid="${esc(s.id)}">
       <div class="duty-section-head">
-        <input class="duty-section-title" value="${esc(s.name)}" onchange="dutyRenameSection('${esc(gid)}','${esc(s.id)}',this.value)" title="Section/station name — click to edit">
-        <button class="duty-btn" onclick="dutyAddColumn('${esc(gid)}','${esc(s.id)}')">+ Column</button>
-        <button class="duty-btn duty-btn-danger" onclick="dutyRemoveSection('${esc(gid)}','${esc(s.id)}')">🗑️ Section मेट्नुहोस्</button>
+        <input class="duty-section-title" value="${esc(s.name)}" ${L?'readonly':`onchange="dutyRenameSection('${esc(gid)}','${esc(s.id)}',this.value)"`} title="Section/station name — click to edit">
+        ${L?'':`<button class="duty-btn" onclick="dutyAddColumn('${esc(gid)}','${esc(s.id)}')">+ Column</button>`}
+        ${L?'':`<button class="duty-btn duty-btn-danger" onclick="dutyRemoveSection('${esc(gid)}','${esc(s.id)}')">🗑️ Section मेट्नुहोस्</button>`}
       </div>
       <div style="overflow-x:auto">
       <table class="duty-tbl">
         <thead><tr>
           <th style="min-width:140px">कर्मचारीको नाम</th>
           <th style="min-width:110px">फोन नम्बर</th>
-          ${s.columns.map((c,ci)=>`<th class="${ci===currentColIdx?'duty-col-now':''}" style="min-width:130px"><textarea class="duty-auto" rows="1" oninput="dutyAutoGrow(this)" onchange="dutyRenameColumn('${esc(gid)}','${esc(s.id)}',${ci},this.value)">${esc(c)}</textarea>${ci===currentColIdx?'<span class="duty-now-tag">आज</span>':''}</th>`).join('')}
-          <th style="width:34px"></th>
+          ${s.columns.map((c,ci)=>`<th class="${ci===currentColIdx?'duty-col-now':''}" style="min-width:130px"><textarea class="duty-auto" rows="1" oninput="dutyAutoGrow(this)" ${L?'readonly':`onchange="dutyRenameColumn('${esc(gid)}','${esc(s.id)}',${ci},this.value)"`}>${esc(c)}</textarea>${ci===currentColIdx?'<span class="duty-now-tag">आज</span>':''}</th>`).join('')}
+          ${L?'':'<th style="width:34px"></th>'}
         </tr></thead>
         <tbody>
           ${s.staff.map((st,ri)=>{
@@ -3015,21 +3084,21 @@ function dutySectionHtml(gid, s, now){
             const isNowRow = currentColIdx>=0 && dutyHourInRange(now.hour, dutyParseTimeRange(shifts[currentColIdx]));
             return `
             <tr class="${isNowRow?'duty-row-now':''}">
-              <td><textarea class="duty-auto" rows="1" oninput="dutyAutoGrow(this)" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'name',this.value)" placeholder="नाम">${esc(st.name)}</textarea>${isNowRow?'<span class="duty-now-tag">ड्युटीमा</span>':''}</td>
-              <td><textarea class="duty-auto" rows="1" oninput="dutyAutoGrow(this)" onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'phone',this.value)" placeholder="फोन" inputmode="tel">${esc(st.phone||'')}</textarea></td>
+              <td><textarea class="duty-auto" rows="1" oninput="dutyAutoGrow(this)" ${L?'readonly':`onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'name',this.value)"`} placeholder="नाम">${esc(st.name)}</textarea>${isNowRow?'<span class="duty-now-tag">ड्युटीमा</span>':''}</td>
+              <td><textarea class="duty-auto" rows="1" oninput="dutyAutoGrow(this)" ${L?'readonly':`onchange="dutyEditStaff('${esc(gid)}','${esc(s.id)}',${ri},'phone',this.value)"`} placeholder="फोन" inputmode="tel">${esc(st.phone||'')}</textarea></td>
               ${shifts.map((v,ci)=>{
                 const cellIsNow = isNowRow && ci===currentColIdx;
-                return `<td class="${ci===currentColIdx?'duty-col-now':''}${cellIsNow?' duty-cell-now':''}"><textarea class="duty-auto" rows="1" oninput="dutyAutoGrow(this)" onchange="dutyEditShift('${esc(gid)}','${esc(s.id)}',${ri},${ci},this.value)">${esc(v||'')}</textarea></td>`;
+                return `<td class="${ci===currentColIdx?'duty-col-now':''}${cellIsNow?' duty-cell-now':''}"><textarea class="duty-auto" rows="1" oninput="dutyAutoGrow(this)" ${L?'readonly':`onchange="dutyEditShift('${esc(gid)}','${esc(s.id)}',${ri},${ci},this.value)"`}>${esc(v||'')}</textarea></td>`;
               }).join('')}
-              <td class="duty-rm"><button class="duty-btn duty-btn-danger" style="padding:3px 7px" onclick="dutyRemoveStaff('${esc(gid)}','${esc(s.id)}',${ri})" title="यो कर्मचारी हटाउनुहोस्">✕</button></td>
+              ${L?'':`<td class="duty-rm"><button class="duty-btn duty-btn-danger" style="padding:3px 7px" onclick="dutyRemoveStaff('${esc(gid)}','${esc(s.id)}',${ri})" title="यो कर्मचारी हटाउनुहोस्">✕</button></td>`}
             </tr>`;
           }).join('')}
         </tbody>
       </table>
       </div>
-      <div class="duty-row-actions">
+      ${L?'':`<div class="duty-row-actions">
         <button class="duty-btn" onclick="dutyAddStaff('${esc(gid)}','${esc(s.id)}')">+ कर्मचारी थप्नुहोस्</button>
-      </div>
+      </div>`}
     </div>`;
 }
 
@@ -3037,8 +3106,69 @@ function dutySectionHtml(gid, s, now){
 function dutyFindGroup(gid){ return DUTY_CHARTS.find(g=>g.id===gid); }
 function dutyFindSection(gid,sid){ const g=dutyFindGroup(gid); return g ? g.sections.find(s=>s.id===sid) : null; }
 
+// ── Lock guard ──────────────────────────────────────────────
+// Every mutating duty function below calls this first. Locking itself needs
+// no password (it's the safe direction); unlocking does — see
+// dutyRequestUnlock() / dutyUnlockConfirmed() near the Settings-password code.
+function dutyCheckLocked(){
+  if(DUTY_LOCKED){
+    toast('🔒 Duty Chart लक भएको छ — Settings → 🔒 Duty Chart Lock बाट अनलक गर्नुहोस्।', 3000);
+    return true;
+  }
+  return false;
+}
+
+async function dutyLockNow(){
+  DUTY_LOCKED = true;
+  dutyRenderLockSettingsRow();
+  dutyRenderAll();
+  const ok = await sbPushDutyLock(true);
+  toast(ok ? '🔒 Duty Chart लक भयो — अब कुनै device बाट edit हुँदैन' : '🔒 Locked locally — cloud save असफल भयो, नेटवर्क जाँच्नुहोस्', 3500);
+}
+window.dutyLockNow = dutyLockNow;
+
+// Opens the same password modal Settings itself uses, tagged so checkPw()
+// unlocks the Duty Chart on success instead of opening Settings.
+function dutyRequestUnlock(){
+  if(!settingsPwExists){ toast('पहिले Settings password सेट गर्नुहोस्।', 3000); return; }
+  pwModalPurpose='dutyUnlock';
+  const overlay=$('pwOverlay');
+  overlay.style.display='flex';
+  $('pwInput').value=''; $('pwError').textContent='';
+  const nr=$('pwFirstRunNotice'), cr=$('pwConfirmRow');
+  if(nr) nr.style.display='none';
+  if(cr) cr.style.display='none';
+  $('pwModalTitle').textContent='Unlock Duty Chart';
+  setTimeout(()=>$('pwInput').focus(),80);
+}
+window.dutyRequestUnlock = dutyRequestUnlock;
+
+// Called by checkPw() only after the Settings password has verified.
+async function dutyUnlockConfirmed(){
+  DUTY_LOCKED = false;
+  dutyRenderLockSettingsRow();
+  dutyRenderAll();
+  const ok = await sbPushDutyLock(false);
+  toast(ok ? '🔓 Duty Chart अनलक भयो — अब edit गर्न मिल्छ' : '🔓 Unlocked locally — cloud save असफल भयो, नेटवर्क जाँच्नुहोस्', 3500);
+}
+
+// Fills in the status line + action button on Settings → Duty Chart Lock.
+function dutyRenderLockSettingsRow(){
+  const statusEl=$('dutyLockStatus'), actionEl=$('dutyLockAction');
+  if(!statusEl || !actionEl) return;
+  if(DUTY_LOCKED){
+    statusEl.innerHTML = '🔒 <span style="color:var(--red)">हाल लक भएको छ</span> — कुनै पनि device बाट Duty Chart मा edit गर्न मिल्दैन।';
+    actionEl.innerHTML = '<button class="btn btn-blue btn-sm" onclick="dutyRequestUnlock()">🔓 Unlock गर्नुहोस् (password चाहिन्छ)</button>';
+  } else {
+    statusEl.innerHTML = '🔓 <span style="color:#1e9e5a">हाल खुला छ</span> — Duty Chart सामान्य रूपमा edit गर्न मिल्छ।';
+    actionEl.innerHTML = '<button class="btn btn-sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="dutyLockNow()">🔒 Lock गर्नुहोस्</button>';
+  }
+}
+window.dutyRenderLockSettingsRow = dutyRenderLockSettingsRow;
+
 // ── Group-level edits ───────────────────────────────────────
 function dutyAddGroup(){
+  if(dutyCheckLocked()) return;
   const title = (prompt('नयाँ Duty Chart को शीर्षक लेख्नुहोस्:', 'नयाँ Duty Chart')||'').trim();
   if(!title) return;
   DUTY_CHARTS.push({ id: dutyNextId(), title, sections: [] });
@@ -3048,6 +3178,7 @@ function dutyAddGroup(){
 window.dutyAddGroup = dutyAddGroup;
 
 function dutyRenameGroup(gid, val){
+  if(dutyCheckLocked()) { dutyRenderAll(); return; }
   const g=dutyFindGroup(gid); if(!g) return;
   g.title = (val||'').trim() || g.title;
   dutySaveCharts();
@@ -3055,6 +3186,7 @@ function dutyRenameGroup(gid, val){
 window.dutyRenameGroup = dutyRenameGroup;
 
 function dutyRemoveGroup(gid){
+  if(dutyCheckLocked()) return;
   const g=dutyFindGroup(gid); if(!g) return;
   if(!confirm(`"${g.title}" पूरै Duty Chart मेट्नुहुन्छ? यो पूर्ववत हुँदैन।`)) return;
   DUTY_CHARTS = DUTY_CHARTS.filter(x=>x.id!==gid);
@@ -3065,6 +3197,7 @@ window.dutyRemoveGroup = dutyRemoveGroup;
 
 // ── Section-level edits ─────────────────────────────────────
 function dutyAddSection(gid){
+  if(dutyCheckLocked()) return;
   const g=dutyFindGroup(gid); if(!g) return;
   const name = (prompt('नयाँ Station/Section को नाम लेख्नुहोस्:', 'नयाँ Station')||'').trim();
   if(!name) return;
@@ -3077,6 +3210,7 @@ function dutyAddSection(gid){
 window.dutyAddSection = dutyAddSection;
 
 function dutyRenameSection(gid, sid, val){
+  if(dutyCheckLocked()) { dutyRenderAll(); return; }
   const s=dutyFindSection(gid,sid); if(!s) return;
   s.name = (val||'').trim() || s.name;
   dutySaveCharts();
@@ -3084,6 +3218,7 @@ function dutyRenameSection(gid, sid, val){
 window.dutyRenameSection = dutyRenameSection;
 
 function dutyRemoveSection(gid, sid){
+  if(dutyCheckLocked()) return;
   const g=dutyFindGroup(gid); if(!g) return;
   const s=dutyFindSection(gid,sid); if(!s) return;
   if(!confirm(`"${s.name}" section मेट्नुहुन्छ?`)) return;
@@ -3094,6 +3229,7 @@ window.dutyRemoveSection = dutyRemoveSection;
 
 // ── Column-level edits ──────────────────────────────────────
 function dutyAddColumn(gid, sid){
+  if(dutyCheckLocked()) return;
   const s=dutyFindSection(gid,sid); if(!s) return;
   const label = (prompt('नयाँ column को शीर्षक लेख्नुहोस्:', 'नयाँ सिफ्ट')||'').trim();
   if(!label) return;
@@ -3104,6 +3240,7 @@ function dutyAddColumn(gid, sid){
 window.dutyAddColumn = dutyAddColumn;
 
 function dutyRenameColumn(gid, sid, ci, val){
+  if(dutyCheckLocked()) { dutyRenderAll(); return; }
   const s=dutyFindSection(gid,sid); if(!s) return;
   s.columns[ci] = (val||'').trim() || s.columns[ci];
   dutySaveCharts();
@@ -3112,6 +3249,7 @@ window.dutyRenameColumn = dutyRenameColumn;
 
 // ── Staff-row-level edits ───────────────────────────────────
 function dutyAddStaff(gid, sid){
+  if(dutyCheckLocked()) return;
   const s=dutyFindSection(gid,sid); if(!s) return;
   s.staff.push({ name:'', phone:'', shifts: s.columns.map(()=>'') });
   dutySaveCharts(); dutyRenderAll();
@@ -3125,6 +3263,7 @@ function dutyAddStaff(gid, sid){
 window.dutyAddStaff = dutyAddStaff;
 
 function dutyEditStaff(gid, sid, ri, field, val){
+  if(dutyCheckLocked()) { dutyRenderAll(); return; }
   const s=dutyFindSection(gid,sid); if(!s || !s.staff[ri]) return;
   s.staff[ri][field] = val;
   dutySaveCharts();
@@ -3132,6 +3271,7 @@ function dutyEditStaff(gid, sid, ri, field, val){
 window.dutyEditStaff = dutyEditStaff;
 
 function dutyEditShift(gid, sid, ri, ci, val){
+  if(dutyCheckLocked()) { dutyRenderAll(); return; }
   const s=dutyFindSection(gid,sid); if(!s || !s.staff[ri]) return;
   if(!Array.isArray(s.staff[ri].shifts)) s.staff[ri].shifts=[];
   s.staff[ri].shifts[ci] = val;
@@ -3140,6 +3280,7 @@ function dutyEditShift(gid, sid, ri, ci, val){
 window.dutyEditShift = dutyEditShift;
 
 function dutyRemoveStaff(gid, sid, ri){
+  if(dutyCheckLocked()) return;
   const s=dutyFindSection(gid,sid); if(!s) return;
   s.staff.splice(ri,1);
   dutySaveCharts(); dutyRenderAll();
@@ -3271,6 +3412,7 @@ function dutyBuildDayWiseWorkbook(){
 }
 
 async function dutyExportDayWiseExcel(){
+  if(dutyCheckLocked()) return;
   if(!DUTY_CHARTS.length){ toast('कुनै Duty Chart छैन — पहिले Duty Chart बनाउनुहोस्।',3000); return; }
   toast('Excel तयार गर्दै…', 1500);
   try{
@@ -7453,17 +7595,28 @@ async function applySystemGone(t, stations){
   sbPushFeederStatusSilent();
 
   // ── STEP 3: Cross-device send-once check (after local state is applied)
-  const alreadyCloud = await cloudAlreadyInState(affected, 'system-gone');
-  if(alreadyCloud){
-    toast('⛔ System Gone already active (set by another user) — no duplicate message sent.',3500);
-    return;
-  }
   const isAll = targets.length===allStations.length && allStations.every(s=>targets.includes(s));
   const eta = ($('outageEta')?.value||'').trim();
   const etaSuffix = eta ? ` (Est. restore: ${eta})` : '';
   const msg = (isAll
     ? `System Gone at ${time}`
     : `System Gone of ${targets.join(', ')} at ${time}`) + etaSuffix + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+  const alreadyCloud = await cloudAlreadyInState(affected, 'system-gone');
+  if(alreadyCloud){
+    // Another device already sent the outbound notice — don't duplicate the
+    // WhatsApp/SMS, but this event DID genuinely happen on THIS device too,
+    // so it must still appear in the Log / downtime report. Record it locally
+    // (and push to Supabase) with a status that makes clear no message went out.
+    recordLogDirect({
+      type:'System Gone',
+      recipients:'—', status:'Already sent by another device — logged only',
+      station: isAll?'All Substations':targets.join(', '),
+      feeder:'All Feeders', time, msg
+    });
+    sbInsertLog(LOG[0]);
+    toast('⛔ System Gone already active (set by another user) — logged here, no duplicate message sent.',3500);
+    return;
+  }
   dispatchBulkMsg(msg,'System Gone', isAll?'All Substations':targets.join(', '));
   toast(`⛔ System Gone — ${isAll?'all substations':targets.join(', ')} updated. Click "System Restored" on each affected substation to revert.`,3500);
 }
@@ -7507,11 +7660,20 @@ async function restoreSystemGoneFor(st, presetTime, suppressMsg){
     return;   // caller (e.g. restoreAllSystemGone) sends ONE combined message instead
   }
 
+  const msg=`System of ${st} restored at ${t}`;
   if(!anyStillGoneInCloud){
-    toast('✅ System already restored by another user — feeders reverted, no duplicate message.',3000);
+    // Another device already restored & sent the notice — don't duplicate the
+    // message, but THIS station's restore genuinely happened here too and
+    // must still show up in the Log / downtime report.
+    recordLogDirect({
+      type:'System Restored',
+      recipients:'—', status:'Already restored by another device — logged only',
+      station: st, feeder:'All Feeders', time:t, msg
+    });
+    sbInsertLog(LOG[0]);
+    toast('✅ System already restored by another user — logged here, no duplicate message.',3000);
     return;
   }
-  const msg=`System of ${st} restored at ${t}`;
   dispatchBulkMsg(msg,'System Restored',st);
   if(failedPush.length){
     toast('⚠ System Restored — notice sent, but '+failedPush.length+' feeder(s) did not sync to cloud: '+failedPush.join(', ')+'. They may still show as System Gone on other devices — reopen the substation to retry.',7000);
@@ -7554,11 +7716,20 @@ async function restoreAllSystemGone(){
 
   if(!restoredStations.length){ toast('Nothing left to restore — already handled elsewhere.',3000); return; }
 
+  const msg = `System of ${restoredStations.join(', ')} restored at ${t}`;
   if(!anyStillGoneInCloud){
-    toast('✅ Already restored by another user — feeders reverted, no duplicate message.',3000);
+    // Another device already restored & sent the combined notice — don't
+    // duplicate the message, but these restores genuinely happened on THIS
+    // device too and must still show up in the Log / downtime report.
+    recordLogDirect({
+      type:'System Restored',
+      recipients:'—', status:'Already restored by another device — logged only',
+      station: restoredStations.join(', '), feeder:'All Feeders', time:t, msg
+    });
+    sbInsertLog(LOG[0]);
+    toast('✅ Already restored by another user — logged here, no duplicate message.',3000);
     return;
   }
-  const msg = `System of ${restoredStations.join(', ')} restored at ${t}`;
   dispatchBulkMsg(msg,'System Restored', restoredStations.join(', '));
   toast('✅ Restore All Substations — one message sent.',3500);
 }
@@ -7695,12 +7866,21 @@ async function applyIncomerFailed(t){
   renderFeederStatus();
   for(const name of all){ await sbPushOneFeedStatus(name,{status:'incomer-failed',time}); }
 
-  if(alreadyCloud){
-    toast('🛑 11 KV Incomer Failed already active for this substation (set by another user) — no duplicate sent.',3500);
-    return;
-  }
   const eta11 = ($('outageEta')?.value||'').trim();
   const msg=`11 KV Incomer of ${st} Failed at ${time}` + (eta11 ? ` (Est. restore: ${eta11})` : '') + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+  if(alreadyCloud){
+    // Another device already sent the notice — don't duplicate the message,
+    // but this failure genuinely happened on THIS device too and must still
+    // show up in the Log / downtime report.
+    recordLogDirect({
+      type:'11KV Incomer Failed',
+      recipients:'—', status:'Already sent by another device — logged only',
+      station: st, feeder:'All Feeders', time, msg
+    });
+    sbInsertLog(LOG[0]);
+    toast('🛑 11 KV Incomer Failed already active for this substation (set by another user) — logged here, no duplicate sent.',3500);
+    return;
+  }
   dispatchBulkMsg(msg,'11KV Incomer Failed',st);
   toast('🛑 11 KV Incomer Failed — all feeders of this substation updated. Click "11 KV Incomer Restored" to revert.',3500);
   } finally { delete outageOpLock[st]; }
@@ -7741,11 +7921,20 @@ async function restoreFromIncomerFailed(){
   renderFeederStatus();
   const failedPush = await pushFeederStatusBatch(all);
 
+  const msg=`11 KV Incomer of ${st} Restored at ${t}`;
   if(!anyStillFailedInCloud){
-    toast('✅ 11 KV Incomer already restored by another user — feeders reverted, no duplicate message.',3000);
+    // Another device already restored & sent the notice — don't duplicate the
+    // message, but this restore genuinely happened on THIS device too and
+    // must still show up in the Log / downtime report.
+    recordLogDirect({
+      type:'11KV Incomer Restored',
+      recipients:'—', status:'Already restored by another device — logged only',
+      station: st, feeder:'All Feeders', time:t, msg
+    });
+    sbInsertLog(LOG[0]);
+    toast('✅ 11 KV Incomer already restored by another user — logged here, no duplicate message.',3000);
     return;
   }
-  const msg=`11 KV Incomer of ${st} Restored at ${t}`;
   dispatchBulkMsg(msg,'11KV Incomer Restored',st);
   if(failedPush.length){
     toast('⚠ 11 KV Incomer Restored — notice sent, but '+failedPush.length+' feeder(s) did not sync to cloud: '+failedPush.join(', ')+'. They may still show as 11 KV Incomer Failed on other devices — reopen the substation to retry.',7000);
@@ -9941,6 +10130,7 @@ try{
       try{ await sbPullData(true); }catch(e){ console.warn('pull failed:', e.message); }
       try{ await sbPullDutyCharts(true); }catch(e){ console.warn('duty chart pull failed:', e.message); }
       try{ await sbPullTfxMiti(true); }catch(e){ console.warn('tfx miti pull failed:', e.message); }
+      try{ await fetchPasswordHashes(); }catch(e){ console.warn('duty lock refresh failed:', e.message); }
       markInitialPullDone(); // safe to auto-push settings from here on
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
       // Pull sequence is done — NOW reveal the app and allow editing.
