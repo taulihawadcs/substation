@@ -11217,13 +11217,49 @@ function tfxRenderSavedList(){
 }
 
 function tfxLoadInspection(id){
-  const rec = TFX_DB.inspections.find(x=>x.id===id);
-  if(!rec) return;
-  window._tfxCurrentDraft = JSON.parse(JSON.stringify(rec));
-  tfxCurrentInspectionId = id;
-  tfxRenderForm();
-  tfxToast('फारम लोड भयो');
-  $('tfxFormRoot').scrollIntoView({behavior:'smooth'});
+  tfxConfirmMonitorPassword().then(ok=>{
+    if(!ok) return;
+    const rec = TFX_DB.inspections.find(x=>x.id===id);
+    if(!rec) return;
+    window._tfxCurrentDraft = JSON.parse(JSON.stringify(rec));
+    tfxCurrentInspectionId = id;
+    tfxRenderForm();
+    tfxToast('फारम लोड भयो');
+    $('tfxFormRoot').scrollIntoView({behavior:'smooth'});
+  });
+}
+// -------------------------- Password-gated edit ---------------------
+// Opening an already-saved inspection form for editing requires the
+// Monitor password (same one used for the Monitor view-only role).
+// New forms can still be created and saved with no password at all —
+// this gate only applies to loading an EXISTING saved record back into
+// the editable form.
+async function tfxConfirmMonitorPassword(){
+  return new Promise(resolve=>{
+    tfxOpenModal(`
+      <h3>🔒 सेभ गरिएको फारम सम्पादन</h3>
+      <p style="font-size:12.5px;color:#5a6178;margin:0 0 12px;">यो फारम खोल्न र सम्पादन गर्न Monitor पासवर्ड प्रविष्ट गर्नुहोस्।</p>
+      <div class="tfx-field"><label>Monitor पासवर्ड</label><input type="password" id="tfxEditPwInput" autocomplete="off"></div>
+      <p id="tfxEditPwError" style="color:#c0392b;font-size:12px;min-height:16px;margin:4px 0 0;"></p>
+      <div class="tfx-modal-close-row">
+        <button class="tfx-btn tfx-ghost" id="tfxEditPwCancel">रद्द गर्नुहोस्</button>
+        <button class="tfx-btn tfx-primary" id="tfxEditPwConfirm">खोल्नुहोस्</button>
+      </div>
+    `);
+    const input = $('tfxEditPwInput'), err = $('tfxEditPwError');
+    if(input) input.focus();
+    const finish = (result)=>{ tfxCloseModal(); resolve(result); };
+    $('tfxEditPwCancel').onclick = ()=>finish(false);
+    const attempt = async ()=>{
+      const val = input.value;
+      if(!val){ err.textContent='पासवर्ड प्रविष्ट गर्नुहोस्।'; return; }
+      const hash = await sha256(val);
+      if(hash===MONITOR_HASH){ finish(true); }
+      else { err.textContent='गलत पासवर्ड।'; input.value=''; input.focus(); }
+    };
+    $('tfxEditPwConfirm').onclick = attempt;
+    input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); attempt(); } });
+  });
 }
 // -------------------------- Password-gated delete ------------------
 // Transformer records (inspection forms + जलेको रेकर्ड) are official field
