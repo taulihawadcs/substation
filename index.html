@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21,7 +22,7 @@
   --radius:10px; --shadow:0 1px 4px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.05);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--txt);font-family:'Archivo',sans-serif;line-height:1.5;min-height:100vh}
+body{background:var(--bg);color:var(--txt);font-family:'Archivo',sans-serif;line-height:1.5;min-height:100vh;overflow-x:hidden}
 .topbar{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;display:flex;flex-direction:column;align-items:stretch;padding:0}
 .topbar-brand{font-weight:800;font-size:26px;letter-spacing:-.02em;padding:18px 20px 6px;color:var(--txt);text-align:center;line-height:1.2;
   max-height:80px;overflow:hidden;transition:max-height .35s ease,opacity .3s ease,padding .3s ease}
@@ -143,6 +144,25 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .settings-content{min-width:0;overflow:hidden}
 .snav-toggle{display:none}
 @media(max-width:640px){
+  /* ── Log page: fix whole-page horizontal overflow on mobile ──
+     .log-export-btns was flex-shrink:0 with no wrap, so its 6 buttons
+     (🔔 Alert Tone / 📲 Push / ☁ Pull / ↓ Export Active / ↓ Export All / 🗑
+     Clear) forced a width wider than the screen and dragged the ENTIRE page
+     (header, nav tabs, everything) into horizontal scroll — not just the
+     table, which already scrolls fine on its own via .log-tbl-wrap's
+     overflow-x:auto. Letting this row wrap keeps the overflow contained to
+     just the table, where it belongs. */
+  .log-page-wrap{padding:14px 10px 60px;max-width:100%;overflow-x:hidden}
+  .log-toolbar{gap:8px}
+  .log-export-btns{flex-wrap:wrap;flex-shrink:1;gap:6px}
+  .log-export-btns .btn{padding:6px 9px;font-size:11px}
+  .log-station-tabs{gap:5px}
+  .log-tbl th,.log-tbl td{padding:6px 7px;font-size:11px}
+  .log-tbl .msgcell{max-width:160px;font-size:10px}
+  #dtReportCard .card-head span[style*="flex-wrap"]{gap:6px}
+  #dtReportCard select,#dtReportCard input[type="date"],#dtReportCard input[type="time"]{font-size:11px}
+}
+@media(max-width:640px){
   .settings-grid{grid-template-columns:1fr;gap:12px}
   /* Collapsible menu: only the toggle bar shows; tapping it pulls the
      menu open. Selecting an item collapses it again. */
@@ -254,6 +274,11 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   line-height:1.3;
 }
+.fs-outage-count{
+  font-size:9.5px;font-weight:700;color:var(--dim2);
+  white-space:nowrap;margin-left:4px;
+}
+.fs-outage-count.has-outages{color:#c2410c}
 .fs-meta{display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap}
 .fs-time{font-size:10px;color:var(--dim2);font-family:'JetBrains Mono',monospace}
 .fs-pre{
@@ -555,6 +580,7 @@ select.big option,
   .fs-row{padding:5px 9px 5px 8px;border-radius:9px;gap:7px}
   .fs-icon{width:24px;height:24px;font-size:11px}
   .fs-name{font-size:11px}
+  .fs-outage-count{font-size:8.5px}
   .fs-meta{margin-top:1px;gap:5px}
   .fs-badge{font-size:9px;padding:2px 8px;min-width:60px}
   .fs-time{font-size:9px}
@@ -1967,6 +1993,31 @@ gemini-1.5-flash</textarea>
   </div>
 </div>
 
+<!-- DUTY CHART — weekly BS ("आजको मिति") confirmation popup. Asked once every
+     7 days when the Duty Chart page is opened, so the BS date the chart uses
+     for "today" highlighting never silently drifts uncorrected for long. -->
+<div id="dutyBsOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:14px;padding:26px 24px 22px;width:min(340px,92vw);box-shadow:0 8px 40px rgba(0,0,0,.22);text-align:center">
+    <div style="font-size:28px;margin-bottom:8px">🗓️</div>
+    <div style="font-size:16.5px;font-weight:800;color:var(--txt);margin-bottom:10px">Is Today: <span id="dutyBsQuestionDate"></span>?</div>
+    <div style="font-size:12px;color:var(--dim2);margin-bottom:14px;line-height:1.5">Duty Chart मा आजको मिति ठीक देखाउन हरेक हप्ता एक पटक पुष्टि गरिन्छ। मिति फरक भए तल सच्याउनुहोस्।</div>
+    <div id="dutyBsYesRow">
+      <button onclick="dutyBsConfirmYes()" style="width:100%;padding:11px;border:none;border-radius:9px;background:var(--blue);color:#fff;font-family:'Archivo',sans-serif;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px">✓ हो, मिति ठीक छ</button>
+      <button onclick="dutyBsShowCorrect()" style="width:100%;padding:9px;border:1.5px solid var(--line2);border-radius:9px;background:#fff;font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;color:var(--dim);cursor:pointer">✏️ मिति फरक छ — सच्याउनुहोस्</button>
+    </div>
+    <div id="dutyBsCorrectRow" style="display:none">
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <input type="number" id="dutyBsY" placeholder="वर्ष" style="width:33%;padding:9px 6px;border:1.5px solid var(--line2);border-radius:8px;font-size:14px;font-family:'Archivo',sans-serif;text-align:center">
+        <input type="number" id="dutyBsM" placeholder="महिना" min="1" max="12" style="width:33%;padding:9px 6px;border:1.5px solid var(--line2);border-radius:8px;font-size:14px;font-family:'Archivo',sans-serif;text-align:center">
+        <input type="number" id="dutyBsD" placeholder="गते" min="1" max="32" style="width:33%;padding:9px 6px;border:1.5px solid var(--line2);border-radius:8px;font-size:14px;font-family:'Archivo',sans-serif;text-align:center">
+      </div>
+      <div id="dutyBsCorrectError" style="font-size:11.5px;color:var(--red);min-height:15px;margin-bottom:6px"></div>
+      <button onclick="dutyBsSaveCorrected()" style="width:100%;padding:10px;border:none;border-radius:9px;background:var(--blue);color:#fff;font-family:'Archivo',sans-serif;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:8px">सुरक्षित गर्नुहोस्</button>
+    </div>
+    <button onclick="dutyBsDismiss()" style="width:100%;padding:8px;border:none;background:transparent;color:var(--dim2);font-family:'Archivo',sans-serif;font-size:12px;font-weight:600;cursor:pointer">पछि सोध्नुहोस् (Ask me later)</button>
+  </div>
+</div>
+
 <!-- MODE SWITCH: Operator <-> Monitor, mid-session, no reload needed -->
 <div id="modeOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:14px;padding:28px 28px 24px;width:min(340px,92vw);box-shadow:0 8px 40px rgba(0,0,0,.22);text-align:center">
@@ -2652,7 +2703,7 @@ function openSettings(){
   $('pwModalTitle').textContent=settingsPwExists?'Settings Access':'Create Settings Password';
   setTimeout(()=>$('pwInput').focus(),80);
 }
-function closePwModal(){$('pwOverlay').style.display='none'; pwModalPurpose='settings';}
+function closePwModal(){$('pwOverlay').style.display='none'; pwModalPurpose='settings'; dtReportUnlockPending=null;}
 
 async function checkPw(){
   const val=$('pwInput').value.trim();
@@ -2673,6 +2724,12 @@ async function checkPw(){
       pwModalPurpose='settings';
       closePwModal();
       await dutyUnlockConfirmed();
+      return;
+    }
+    if(pwModalPurpose==='dtReportEdit'){
+      pwModalPurpose='settings';
+      closePwModal();
+      dtReportUnlockConfirmed();
       return;
     }
     settingsUnlocked=true;
@@ -2752,8 +2809,9 @@ function showPage(name){
   if(name==='main')     document.querySelector('.nav-tab[onclick*="main"]').classList.add('active');
   else if(name==='log') { $('navLog').classList.add('active'); renderLogPage(); }
   else if(name==='transformer') { $('navTransformer').classList.add('active'); tfxRenderAll(); }
-  else if(name==='duty') { $('navDuty').classList.add('active'); dutyRenderAll(); dutyStartPolling(); }
+  else if(name==='duty') { $('navDuty').classList.add('active'); dutyRenderAll(); dutyStartPolling(); dutyMaybeAskBsDate(); }
   else if(name==='settings') document.querySelector('.nav-tab[onclick*="openSettings"]').classList.add('active');
+  if(name!=='log') dtLockReportEditing();
   if(name!=='duty') dutyStopPolling();
   if(name==='settings'){ refreshAllTables(); setTimeout(testSupabase, 300); updateSbConnUI(); updateRcvMuteUI(); }
 }
@@ -3000,6 +3058,75 @@ function dutyNowContext(){
   }
   const hour = new Date().getHours();
   return { day, hour };
+}
+
+// ── Weekly "Is Today: <BS date>?" confirmation popup ──────────────────
+// Duty Chart's "today" highlighting depends on the shared BS-date anchor
+// (tfxCurrentBsMitiObj / tfxSetTodayBsDate, same system the Letters module
+// uses). That anchor only advances correctly if it was accurate when last
+// set. So once every 7 days, opening the Duty Chart page asks the operator
+// to confirm or correct today's BS date before rendering. Device-local
+// (localStorage) — each device confirms independently, matching how the
+// device physically being used is the one whose clock/BS knowledge matters.
+const DUTY_BS_ASK_KEY = 'sms2_duty_bs_last_asked';
+const DUTY_BS_ASK_INTERVAL_MS = 7*24*60*60*1000; // once every 7 days
+
+function dutyBsShouldAsk(){
+  const last = ld(DUTY_BS_ASK_KEY, null);
+  if(!last) return true;
+  return (Date.now() - last) >= DUTY_BS_ASK_INTERVAL_MS;
+}
+function dutyBsMarkAsked(){ sv(DUTY_BS_ASK_KEY, Date.now()); }
+
+// Called every time the Duty Chart page opens. Shows the popup if a week (or
+// more) has passed since it was last confirmed/corrected on this device.
+function dutyMaybeAskBsDate(){
+  if(typeof monitorMode!=='undefined' && monitorMode) return;   // view-only role — nothing to confirm
+  if(!dutyBsShouldAsk()) return;
+  let o;
+  try{ o = tfxCurrentBsMitiObj(); }catch(e){ return; }   // BS engine not ready — skip silently
+  const overlay=$('dutyBsOverlay'); if(!overlay) return;
+  $('dutyBsQuestionDate').textContent = tfxFormatBsDate(o.y,o.m,o.d);
+  $('dutyBsY').value=o.y; $('dutyBsM').value=o.m; $('dutyBsD').value=o.d;
+  $('dutyBsCorrectError').textContent='';
+  $('dutyBsYesRow').style.display='block';
+  $('dutyBsCorrectRow').style.display='none';
+  overlay.style.display='flex';
+}
+// "Yes, correct" — just marks it confirmed for another week; the anchor
+// itself needs no change since it's already right.
+function dutyBsConfirmYes(){
+  dutyBsMarkAsked();
+  $('dutyBsOverlay').style.display='none';
+  toast('✓ मिति पुष्टि भयो — अर्को हप्ता फेरि सोधिनेछ।', 2500);
+}
+function dutyBsShowCorrect(){
+  $('dutyBsYesRow').style.display='none';
+  $('dutyBsCorrectRow').style.display='block';
+  setTimeout(()=>$('dutyBsD').focus(),50);
+}
+// Saves the corrected date, re-anchoring the SAME shared BS system Letters
+// uses (so Duty Chart, Letters, and everywhere else stay in agreement) —
+// then marks this week's confirmation done and re-renders the chart so the
+// "today" highlight updates immediately.
+function dutyBsSaveCorrected(){
+  const y=parseInt($('dutyBsY').value,10), m=parseInt($('dutyBsM').value,10), d=parseInt($('dutyBsD').value,10);
+  const err=$('dutyBsCorrectError');
+  if(!y || y<2000 || y>2200){ err.textContent='वर्ष मिलेन।'; return; }
+  if(!m || m<1 || m>12){ err.textContent='महिना १-१२ बीच हुनुपर्छ।'; return; }
+  if(!d || d<1 || d>32){ err.textContent='गते मिलेन।'; return; }
+  try{ tfxSetTodayBsDate(y,m,d); }catch(e){ err.textContent='सुरक्षित गर्न सकिएन: '+e.message; return; }
+  dutyBsMarkAsked();
+  $('dutyBsOverlay').style.display='none';
+  dutyRenderAll();
+  toast('✓ मिति सच्याइयो — Duty Chart र पत्रहरूमा लागू भयो।', 3000);
+}
+function dutyBsDismiss(){
+  // "Ask me later" — deliberately does NOT mark as asked, so it will prompt
+  // again the next time the Duty Chart page is opened rather than waiting a
+  // full week, in case today's confirmation genuinely matters (e.g. right at
+  // a month/shift boundary).
+  $('dutyBsOverlay').style.display='none';
 }
 
 // Auto-adjust row height: grows a duty-chart textarea to fit its content
@@ -6064,12 +6191,135 @@ function dtComposeIso(dateStr, hm){
   return d.toISOString();
 }
 
+// ── Settings-password gate for editing the 24-hr downtime report ──
+// Correcting start/end times, deleting an entry, or adding a missed one all
+// change what goes to the upper authority, so — same as Duty Chart unlock —
+// the Settings password is required before any of it is allowed. Verified
+// once per visit to the Log page (dtReportUnlocked resets whenever the
+// operator navigates away), not on every single keystroke.
+let dtReportUnlocked = false;
+
+// Opens the same shared password modal Settings/Duty Chart use, tagged so
+// checkPw() unlocks report editing on success instead of opening Settings.
+// onOk runs only after the password verifies; nothing changes if cancelled.
+function dtRequestUnlock(onOk){
+  if(typeof monitorMode!=='undefined' && monitorMode){ toast('Monitoring access is view-only'); return; }
+  if(dtReportUnlocked){ if(onOk) onOk(); return; }
+  if(!settingsPwExists){ toast('पहिले ⚙ Settings बाट Settings password सेट गर्नुहोस्।', 3500); return; }
+  dtReportUnlockPending = onOk||null;
+  pwModalPurpose='dtReportEdit';
+  const overlay=$('pwOverlay');
+  overlay.style.display='flex';
+  $('pwInput').value=''; $('pwError').textContent='';
+  const nr=$('pwFirstRunNotice'), cr=$('pwConfirmRow');
+  if(nr) nr.style.display='none';
+  if(cr) cr.style.display='none';
+  $('pwModalTitle').textContent='Unlock Report Editing';
+  setTimeout(()=>$('pwInput').focus(),80);
+}
+let dtReportUnlockPending = null;
+// Called by checkPw() only after the Settings password has verified.
+function dtReportUnlockConfirmed(){
+  dtReportUnlocked = true;
+  toast('🔓 रिपोर्ट सम्पादन अनलक भयो — यो Log पृष्ठमा रहँदासम्म फेरि पासवर्ड सोधिँदैन।', 3000);
+  const cb = dtReportUnlockPending; dtReportUnlockPending = null;
+  if(cb) cb(); else dtRenderSummary();
+}
+// Re-lock whenever the operator leaves the Log page, so coming back later
+// (even the same day) asks for the password again.
+function dtLockReportEditing(){ dtReportUnlocked = false; }
+
+// ── Mandatory cross-verification against the main Log ──
+// The downtime report must never silently diverge from what the Log (the
+// actual dispatched/received messages) says really happened. Every manual
+// start/end edit is checked against the matching Log entry for that exact
+// feeder before it's allowed to save. A feeder can trip/shutdown and get
+// Charged several times in one day — the FEEDER + TYPE alone isn't enough to
+// find "the" matching Log row, so we always pick the entry CLOSEST in time to
+// the value being typed, never just the first/last one for that feeder.
+
+// DT event type → Log 'condition' string(s) for the START (failure) side.
+const DT_LOG_START_LABELS = {
+  'trip'           : ['Trip'],
+  'shutdown'       : ['Shutdown'],
+  'system-gone'    : ['System Gone'],
+  'incomer-failed' : ['11KV Incomer Failed'],
+  'kv33'           : ['33KV Incomer Failed']
+};
+// DT event type → Log 'condition' string(s) for the END (restore) side.
+const DT_LOG_END_LABELS = {
+  'trip'           : ['Charged'],
+  'shutdown'       : ['Charged'],
+  'system-gone'    : ['System Restored'],
+  'incomer-failed' : ['11KV Incomer Restored'],
+  'kv33'           : ['33KV Incomer Restored']
+};
+// Only manually-added entries (dtAddManualEvent, the "Add Missed Entry" form)
+// have no corresponding Log row by definition — everything else (live events
+// and history-imported events alike) was built from a real Log entry and can
+// be cross-checked against it.
+function dtHasLogTrail(ev){ return !ev.manual; }
+
+// Find the Log entry for this feeder+edge CLOSEST in time to candidateIso.
+// Returns {entry, diffMin} or null if no matching-type entry exists at all
+// for this feeder anywhere in the log.
+function dtClosestLogMatch(feeder, type, which, candidateIso){
+  const labels = (which==='start'?DT_LOG_START_LABELS:DT_LOG_END_LABELS)[type];
+  if(!labels) return null;
+  const target = new Date(candidateIso).getTime();
+  let best=null, bestDiff=Infinity;
+  LOG.forEach(r=>{
+    if(r.feeder!==feeder) return;
+    if(!labels.includes(r.condition)) return;
+    const rowDate = r.date ? new Date(r.date) : null;
+    if(!rowDate || isNaN(rowDate.getTime())) return;
+    const diff = Math.abs(rowDate.getTime()-target);
+    if(diff<bestDiff){ bestDiff=diff; best=r; }
+  });
+  if(!best) return null;
+  return {entry:best, diffMin: Math.round(bestDiff/60000)};
+}
+
+// Mandatory gate: called before ANY manual start/end save. Shows the closest
+// Log entry (if any) and requires explicit confirmation when it disagrees
+// with the time being typed, or when no corresponding Log entry exists at
+// all. Returns true to proceed with the save, false to abort it.
+// toleranceMin: a small gap (e.g. a minute of typing/rounding) is accepted
+// silently; anything beyond it must be confirmed.
+function dtVerifyAgainstLog(ev, which, candidateIso){
+  if(!dtHasLogTrail(ev)) return true;   // nothing to verify a manual/imported entry against
+  const toleranceMin = 2;
+  const match = dtClosestLogMatch(ev.feeder, ev.type, which, candidateIso);
+  const edgeNe = which==='start' ? 'सुरु (Start)' : 'अन्त्य (End)';
+  if(!match){
+    return confirm(
+      `⚠ लगमा जाँच फेल भयो\n\n`+
+      `${ev.feeder} को ${DT_TYPE_LABEL[ev.type]||ev.type} — ${edgeNe} समयसँग मिल्ने कुनै लग एन्ट्री फेला परेन।\n\n`+
+      `यो समय हातैले (म्यानुअल) राख्ने हो र लगमा कुनै प्रमाण नभएको बुझेर अगाडि बढ्ने हो?`
+    );
+  }
+  if(match.diffMin<=toleranceMin) return true;   // agrees closely enough — no prompt needed
+  const logHM = String(match.entry.time||'').trim() || dtHMFromIso(new Date(match.entry.date).toISOString());
+  return confirm(
+    `⚠ लग समयसँग मिलेन\n\n`+
+    `${ev.feeder} — ${DT_TYPE_LABEL[ev.type]||ev.type} (${edgeNe})\n`+
+    `लगमा रेकर्ड भएको नजिकको समय: ${logHM}\n`+
+    `तपाईंले हाल्नुभएको समय: ${dtHMFromIso(candidateIso)}\n`+
+    `फरक: करिब ${match.diffMin} मिनेट\n\n`+
+    `लगसँग नमिले पनि यही समय राख्ने (पुष्टि गर्नुहोस्) हो?`
+  );
+}
+
+
 // Edit start/end DATE+TIME of an event — any duration allowed. For group
 // outages (System Gone / Incomer Failed / 33 KV / Trip All) that created the
 // same event on many feeders (same type + same start minute), the operator is
 // asked once whether the correction should apply to ALL related feeders.
+// Every save is mandatorily cross-checked against the main Log (see
+// dtVerifyAgainstLog above) before it is allowed to commit.
 function dtEditWhen(id, which){
   if(typeof monitorMode!=='undefined' && monitorMode){ toast('Monitoring access is view-only'); dtRenderSummary(); return; }
+  if(!dtReportUnlocked){ dtRequestUnlock(()=>dtEditWhen(id, which)); return; }
   const ev=DT_EVENTS.find(e=>e.id===id && !e.deleted); if(!ev){ dtRenderSummary(); return; }
   const dEl=$((which==='start'?'dtsd_':'dted_')+id), tEl=$((which==='start'?'dtst_':'dtet_')+id);
   const dateVal=dEl?dEl.value:''; const timeVal=(tEl?tEl.value:'').trim();
@@ -6090,6 +6340,7 @@ function dtEditWhen(id, which){
   if(which==='start'){
     const iso=dtComposeIso(dateVal, timeVal);
     if(!iso){ toast('Start date/time अवैध छ'); dtRenderSummary(); return; }
+    if(!dtVerifyAgainstLog(ev,'start',iso)){ dtRenderSummary(); return; }   // mandatory Log cross-check
     targets.forEach(e=>{
       e.start=iso; e.startHM=(timeVal.length===4?'0':'')+timeVal;
       if(e.end){
@@ -6104,6 +6355,7 @@ function dtEditWhen(id, which){
     } else {
       const iso=dtComposeIso(dateVal||String(ev.start).slice(0,10), timeVal);
       if(!iso){ toast('End date/time अवैध छ'); dtRenderSummary(); return; }
+      if(!dtVerifyAgainstLog(ev,'end',iso)){ dtRenderSummary(); return; }   // mandatory Log cross-check
       targets.forEach(e=>{
         let end=iso;
         if(new Date(end)<new Date(e.start)) end=e.start;   // duration never negative
@@ -6139,6 +6391,7 @@ function dtEditTime(id, field, val){
 }
 function dtDeleteEvent(id){
   if(typeof monitorMode!=='undefined' && monitorMode){ toast('Monitoring access is view-only'); return; }
+  if(!dtReportUnlocked){ dtRequestUnlock(()=>dtDeleteEvent(id)); return; }
   const i=DT_EVENTS.findIndex(e=>e.id===id); if(i<0) return;
   const ev=DT_EVENTS[i];
   if(!confirm(`Delete this downtime entry?\n\n${ev.station} — ${ev.feeder}\n${DT_TYPE_LABEL[ev.type]||ev.type}: ${ev.startHM}${ev.endHM?' – '+ev.endHM:' (ongoing)'}\n\nIt will be removed from the report on ALL devices.`)) return;
@@ -6166,6 +6419,7 @@ function dtAddStationChanged(){
 }
 function dtAddManualEvent(){
   if(typeof monitorMode!=='undefined' && monitorMode){ toast('Monitoring access is view-only'); return; }
+  if(!dtReportUnlocked){ dtRequestUnlock(()=>dtAddManualEvent()); return; }
   const st=$('dtAddStation')?$('dtAddStation').value:'';
   const fd=$('dtAddFeeder')?$('dtAddFeeder').value:'';
   const ty=$('dtAddType')?$('dtAddType').value:'';
@@ -7033,6 +7287,27 @@ function renderMonitorRecent(){
   }).join('') + '</div>';
 }
 
+// ── Outage count shown next to each feeder name in the status panel ──
+// Counts how many outage events (Trip / Shutdown / System Gone / Incomer
+// Failed / 33 KV Incomer Failed) this feeder has had in the 24-hr window that
+// started at the daily report's send time (default 10:00 AM) — the SAME
+// window the daily downtime report itself uses, via dtCurrentWindowStart()/
+// dtDayBounds(). An event counts if it STARTED inside this window (mirrors
+// the COUNT rule in dtAggregateRange), including one still ongoing.
+function fsOutageCountToday(feederName){
+  try{
+    const [ds, de] = dtDayBounds(dtCurrentWindowStart());
+    let n=0;
+    DT_EVENTS.forEach(e=>{
+      if(e.deleted || e.feeder!==feederName) return;
+      if(!DT_OUTAGE_TYPES.includes(e.type)) return;
+      const s=new Date(e.start).getTime();
+      if(s>=ds && s<=de) n++;
+    });
+    return n;
+  }catch(err){ return 0; }   // never let a counting glitch break the status panel
+}
+
 function renderFeederStatus(){
   expireChargedFeeders();
   if(monitorMode) renderMonitorRecent();
@@ -7188,10 +7463,12 @@ function renderFeederStatusBlock(st, feeders, panel){
 
     const row=document.createElement('div');
     row.className=`fs-row s-${info.status}`;
+    const outageN = fsOutageCountToday(name);
+    const outageCountHtml = `<span class="fs-outage-count${outageN>0?' has-outages':''}" title="यस फिडरमा आजको २४ घण्टा रिपोर्ट अवधि (बिहान १० बजेदेखि) भित्र भएको outage संख्या">${outageN>0 ? '⚠ '+outageN+'× today' : ''}</span>`;
     row.innerHTML=`
       <div class="fs-icon">${icon}</div>
       <div class="fs-info">
-        <div class="fs-name" title="${esc(name)}">${esc(name)}</div>
+        <div class="fs-name" title="${esc(name)}">${esc(name)}${outageCountHtml}</div>
         <div class="fs-meta">
           ${timeStr}
           ${preHint}
@@ -7296,7 +7573,17 @@ async function onFeederStatusAction(feederName,sel){
     await markFeederCharged(feederName);
   } else if(action==='normal'){
     if(cur.status==='normal'){ toast('Already Normal — no change'); return; }
-    feederStatusMap[feederName]={status:'normal',time:''};
+    // Ask the ACTUAL time this was restored (same as every other restore path) —
+    // pre-filled with "now" but editable, so the downtime report's end time and
+    // duration reflect what really happened, not just the moment this button was
+    // clicked (which matters a lot when catching up on paperwork later, or when
+    // another device syncs this change after the fact).
+    const normalT = dtAskTime('⚡ '+feederName+' — Normal (पुनर्स्थापना) कति बजे भयो?');
+    if(normalT===null) return;   // operator cancelled
+    dtCloseTimeOverride = normalT;
+    try{
+      feederStatusMap[feederName]={status:'normal',time:''};
+    } finally { dtCloseTimeOverride = null; }
     renderFeederStatus();
     sbPushOneFeedStatus(feederName,{status:'normal',time:''});
   } else if(action==='system-gone'){
