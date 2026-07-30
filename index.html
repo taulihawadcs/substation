@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1102,6 +1101,7 @@ body.duty-page-open #page-duty{
           </div>
           <div style="flex:1;min-width:130px">
             <label>Affected Area / Site</label>
+            <select id="tripSiteDropdown" onchange="aaApplyDropdown('tripSiteDropdown','tripSite')" style="width:100%;padding:5px 8px;font-size:11px;margin-bottom:4px" disabled><option value="">— कुनै क्षेत्र सेटअप गरिएको छैन —</option></select>
             <input type="text" id="tripSite" placeholder="optional" autocomplete="off" oninput="autoBuild()" style="width:100%;padding:6px 10px">
           </div>
           <div style="flex:1;min-width:130px">
@@ -1156,6 +1156,7 @@ body.duty-page-open #page-duty{
           </div>
           <div style="flex:1;min-width:130px">
             <label>Affected Area / Site</label>
+            <select id="siteDropdown" onchange="aaApplyDropdown('siteDropdown','site')" style="width:100%;padding:5px 8px;font-size:11px;margin-bottom:4px" disabled><option value="">— कुनै क्षेत्र सेटअप गरिएको छैन —</option></select>
             <input type="text" id="site" placeholder="e.g. ओदारी, वडा नं. ३…" autocomplete="off" style="width:100%;padding:6px 10px">
           </div>
           <div style="flex:1;min-width:130px">
@@ -1184,7 +1185,8 @@ body.duty-page-open #page-duty{
               <input type="text" id="outageEta" list="etaOptions" placeholder="e.g. 1 hr" autocomplete="off" style="width:110px;padding:5px 8px;font-size:12px;margin-left:6px">
             </div>
             <div>
-              <label style="font-size:11px;font-weight:700;color:#b45309">Affected Area:</label>
+              <label style="font-size:11px;font-weight:700;color:#b45309">Affected Area:</label><br>
+              <select id="outageSiteDropdown" onchange="aaApplyDropdown('outageSiteDropdown','outageSite')" style="width:130px;padding:4px 6px;font-size:10px;margin-left:6px;margin-bottom:3px" disabled><option value="">— सेटअप छैन —</option></select><br>
               <input type="text" id="outageSite" placeholder="optional" autocomplete="off" style="width:130px;padding:5px 8px;font-size:12px;margin-left:6px">
             </div>
             <div>
@@ -1410,6 +1412,7 @@ body.duty-page-open #page-duty{
       <div class="snav-item" onclick="showSection('sec-substations')">Substations</div>
       <div class="snav-item" onclick="showSection('sec-feeders')">Feeders</div>
       <div class="snav-item" onclick="showSection('sec-groupfeeders')">Group Outage Feeders</div>
+      <div class="snav-item" onclick="showSection('sec-affectedareas')">Affected Area</div>
       <div class="snav-item" onclick="showSection('sec-reasons')">Shutdown Reasons</div>
       <div class="snav-item" onclick="showSection('sec-tripreasons')">Trip Reasons</div>
       <div class="snav-item" onclick="showSection('sec-askedby')">Asked By (माग्ने)</div>
@@ -1507,6 +1510,23 @@ body.duty-page-open #page-duty{
               <select id="gfStation" onchange="renderGroupFeedersUI()"></select>
             </div>
             <div id="gfWrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:12px"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="s-section" id="sec-affectedareas">
+        <div class="card">
+          <div class="card-head"><span class="card-title">Affected Area — per-feeder outage areas</span></div>
+          <div class="card-body">
+            <p class="hint" style="margin-bottom:10px">
+              प्रत्येक फिडरको outage ले असर गर्ने क्षेत्र/ठाउँहरू यहाँ थप्नुहोस्। Dispatch box को <b>Affected Area / Site</b> मा यी सबै क्षेत्र
+              अल्पविराम (,) ले छुट्याएर पूर्वनिर्धारित रूपमा भरिनेछ — चाहेमा dropdown बाट केही मात्र क्षेत्र पनि छान्न सकिन्छ। परिवर्तन सबै डिभाइसमा सिंक हुन्छ।
+            </p>
+            <div class="field" style="max-width:420px">
+              <label>Substation (सबस्टेशन)</label>
+              <select id="aaStation" onchange="renderAffectedAreasUI()"></select>
+            </div>
+            <div id="aaWrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px"></div>
           </div>
         </div>
       </div>
@@ -1809,6 +1829,14 @@ gemini-1.5-flash</textarea>
               हरेक डिभाइसको <b>code</b> उसले पठाएका सन्देशहरूसँग Log मा जोडिन्छ — कसले के गर्‍यो, code बाट थाहा हुन्छ।
             </p>
             <p style="font-size:12px;margin-bottom:10px">This device: <b id="myDeviceCode" style="font-family:monospace"></b></p>
+            <div style="border:1px solid var(--line,#e6ebf1);border-radius:10px;padding:10px 12px;background:var(--bg2,#f8fafc);margin-bottom:12px">
+              <div style="font-size:11.5px;font-weight:700;margin-bottom:6px">तपाईंको नाम (Log मा देखिने)</div>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <input type="text" id="myNameInput" placeholder="e.g. Ram Bahadur Thapa" style="flex:1;min-width:160px;padding:6px 9px;font-size:12px">
+                <button class="btn btn-ghost btn-sm" onclick="saveMyNameFromSettings()">Save</button>
+              </div>
+              <div style="font-size:9.5px;color:var(--dim2);margin-top:5px">Log मा छोटो रूपमा देखिन्छ: <b id="myNamePreview" style="font-family:monospace"></b></div>
+            </div>
             <button class="btn btn-ghost btn-sm" style="margin-bottom:10px" onclick="renderDeviceRegistry()">⟳ Refresh Requests</button>
             <div id="deviceRegistryList"></div>
           </div>
@@ -1944,6 +1972,30 @@ gemini-1.5-flash</textarea>
     </button>
     <div id="appLockChecking" style="font-size:11px;color:var(--dim2);margin-top:10px;min-height:16px;font-family:'JetBrains Mono',monospace"></div>
   </div>
+  <!-- Shown once per device, right after password verification, if no name
+       is saved yet on this device — before the cloud-pull loading card.
+       Mandatory (no Skip) for Operator; optional (Skip visible) for Monitor,
+       since monitors never send anything a name would be attributed to. -->
+  <div id="appLockNameCard" style="display:none;background:#fff;border-radius:18px;padding:32px 28px 26px;width:min(360px,92vw);box-shadow:0 16px 60px rgba(0,0,0,.4);text-align:center">
+    <div style="font-size:34px;margin-bottom:8px">🧑‍💼</div>
+    <div style="font-size:16.5px;font-weight:800;color:var(--txt);margin-bottom:4px">तपाईंको नाम</div>
+    <div id="appLockNameHint" style="font-size:12px;color:var(--dim2);margin-bottom:16px;line-height:1.5">Log मा पठाउने व्यक्ति पहिचान गर्न आफ्नो पूरा नाम लेख्नुहोस्। यो एक पटक मात्र सोधिन्छ।</div>
+    <input type="text" id="appLockNameInput" placeholder="e.g. Ram Bahadur Thapa"
+      autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false"
+      style="width:100%;padding:12px 16px;border:2px solid var(--line2);border-radius:10px;font-size:15px;font-family:'Archivo',sans-serif;text-align:center;margin-bottom:8px;outline:none;transition:border-color .15s"
+      onfocus="this.style.borderColor='var(--blue)'"
+      onblur="this.style.borderColor='var(--line2)'"
+      onkeydown="if(event.key==='Enter')confirmAppLockName()">
+    <div id="appLockNameError" style="font-size:12px;color:var(--red);min-height:16px;margin-bottom:6px"></div>
+    <button onclick="confirmAppLockName()"
+      style="width:100%;padding:12px;border:none;border-radius:10px;background:var(--blue);color:#fff;font-family:'Archivo',sans-serif;font-size:14.5px;font-weight:700;cursor:pointer;margin-bottom:8px">
+      Continue →
+    </button>
+    <button id="appLockNameSkip" onclick="skipAppLockName()"
+      style="width:100%;padding:9px;border:none;background:transparent;color:var(--dim2);font-family:'Archivo',sans-serif;font-size:12px;font-weight:600;cursor:pointer;display:none">
+      Skip (Monitor — view only)
+    </button>
+  </div>
   <!-- Shown instead of the card above while the post-unlock Supabase pull is
        in flight (both the password path and the monitor auto-relogin path) —
        so nothing is editable, and no edit can even be queued, until this
@@ -1956,6 +2008,18 @@ gemini-1.5-flash</textarea>
   <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:20px;letter-spacing:.06em"><span class="js-dcs-center">तौलिहवा वितरण केन्द्र</span> · NEA <span class="js-dcs-shortname">Taulihawa</span></div>
 </div>
 <style>@keyframes applockSpin{to{transform:rotate(360deg)}}</style>
+
+<!-- ========== FEEDER PUSH RETRY BANNER ==========
+     Shown whenever one or more feeder status changes could not reach
+     Supabase — either blocked because this session's cloud pull hasn't
+     finished yet, the edit went stale (>2 min) before it could send, or a
+     genuine network failure. Never silently drops an edit; stays up until
+     every pending push succeeds or is manually retried. -->
+<div id="feederPushRetryBanner" style="display:none;position:fixed;left:12px;right:12px;bottom:76px;z-index:8000;align-items:center;gap:10px;background:#fff7ed;border:1.5px solid #fdba74;border-radius:12px;padding:11px 14px;box-shadow:0 8px 28px rgba(0,0,0,.16)">
+  <span style="font-size:18px">⚠</span>
+  <span id="feederPushRetryLabel" style="flex:1;font-size:12.5px;font-weight:700;color:#9a3412">Feeder status did not sync to cloud</span>
+  <button onclick="retryPendingFeederPushes()" style="padding:7px 14px;border:none;border-radius:8px;background:#ea580c;color:#fff;font-family:'Archivo',sans-serif;font-size:12px;font-weight:700;cursor:pointer">Retry</button>
+</div>
 
 <!-- ========== PUSH NOTIFICATION OPT-IN (shown at most once, ever) ========== -->
 <div id="pushPromptOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9500;align-items:center;justify-content:center;padding:16px">
@@ -2224,7 +2288,10 @@ let DATA = {
   receivers:   ld('sms2_receivers',   DEFAULTS.receivers),
   // Which feeders each GROUP outage affects, per substation. Absent/empty =
   // ALL feeders (default). { [station]: { 'system-gone':[names], 'incomer-failed':[..], 'kv33':[..], 'tripall':[..] } }
-  groupfeeders: ld('sms2_groupfeeders', {})
+  groupfeeders: ld('sms2_groupfeeders', {}),
+  // Named areas/sites affected by each feeder's outage, used to pre-fill the
+  // dispatch box's Affected Area/Site field. { [feederName]: [areaName,...] }
+  affectedareas: ld('sms2_affectedareas', {})
 };
 
 // `saveData` is monkey-patched later by the Supabase sync layer; declaring it
@@ -2393,6 +2460,16 @@ let settingsUnlocked   = false;
 let cachedEntryHash    = null;
 let cachedSettingsHash = null;
 let settingsPwExists   = false;
+
+// ── Resume-staleness tracking (declared early — sbPushOneFeedStatus and
+//    other push paths reference these, and must never hit them before
+//    initialization; see forceFreshPull() further down for full logic) ──
+let lastFullPullAt = 0;   // when this session last completed a FULL cloud pull
+let pullInFlight   = false;
+let hiddenAt        = 0;   // when the tab was last hidden (visibilitychange)
+let initialPullDone = false;   // true once THIS session's first cloud pull has completed
+let feederPushFailures    = 0;   // count of failed feeder_status pushes this session
+let feederSyncProblemShown = 0;  // throttle timestamp for the sync-problem toast
 let DUTY_LOCKED        = false;   // Duty Chart read-only lock — Settings → Duty Chart Lock
 
 // ── Monitor "stay signed in" ──────────────────────────────────────────
@@ -2455,8 +2532,9 @@ async function sbPushDutyLock(locked){
    and "Supabase pull actually finished" — no edit is possible, queued or
    otherwise, until the real cloud data has loaded. */
 function appLockShowLoading(){
-  const card=$('appLockCard'), loading=$('appLockLoadingCard');
+  const card=$('appLockCard'), loading=$('appLockLoadingCard'), nameCard=$('appLockNameCard');
   if(card) card.style.display='none';
+  if(nameCard) nameCard.style.display='none';
   if(loading) loading.style.display='block';
 }
 function appLockHideAndReveal(){
@@ -2465,6 +2543,59 @@ function appLockHideAndReveal(){
   lock.style.transition='opacity .4s'; lock.style.opacity='0';
   setTimeout(()=>{ lock.style.display='none'; }, 420);
 }
+
+// ── Operator name prompt — shown once per device, right after password
+// verification, before the cloud-pull loading screen. Mandatory for
+// Operator (Continue is the only way forward); optional for Monitor (a
+// Skip button is revealed instead).
+let _nameCardPendingAsMonitor = false;
+function appLockShowNamePrompt(asMonitor){
+  _nameCardPendingAsMonitor = asMonitor;
+  const card=$('appLockCard'), loading=$('appLockLoadingCard'), nameCard=$('appLockNameCard');
+  if(card) card.style.display='none';
+  if(loading) loading.style.display='none';
+  if(nameCard) nameCard.style.display='block';
+  const skip=$('appLockNameSkip'), hint=$('appLockNameHint');
+  if(skip) skip.style.display = asMonitor ? 'block' : 'none';
+  if(hint) hint.textContent = asMonitor
+    ? 'Log मा पठाउने व्यक्ति पहिचान गर्न आफ्नो नाम लेख्नुहोस् (वैकल्पिक — Monitor ले सन्देश पठाउँदैन)।'
+    : 'Log मा पठाउने व्यक्ति पहिचान गर्न आफ्नो पूरा नाम लेख्नुहोस्। यो अनिवार्य छ र एक पटक मात्र सोधिन्छ।';
+  $('appLockNameError').textContent='';
+  $('appLockNameInput').value='';
+  setTimeout(()=>$('appLockNameInput').focus(),80);
+}
+function confirmAppLockName(){
+  const val=$('appLockNameInput').value.trim();
+  const err=$('appLockNameError');
+  if(!val){
+    err.textContent = _nameCardPendingAsMonitor
+      ? 'नाम लेख्नुहोस्, वा Skip थिच्नुहोस्।'
+      : 'नाम लेख्नु अनिवार्य छ।';
+    return;
+  }
+  if(val.replace(/\s+/g,'').length<2){ err.textContent='नाम धेरै छोटो छ।'; return; }
+  const short = setOperatorName(val);
+  err.textContent='';
+  toast('✓ नाम सुरक्षित भयो: '+short, 2200);
+  appLockShowLoading();
+  if(typeof _appLockNameResolve==='function') _appLockNameResolve();
+}
+function skipAppLockName(){
+  if(!_nameCardPendingAsMonitor) return;   // Skip only ever visible for Monitor
+  appLockShowLoading();
+  if(typeof _appLockNameResolve==='function') _appLockNameResolve();
+}
+// Returns a Promise that resolves once the operator has either entered a
+// name or (Monitor only) skipped. Resolves immediately if a name is already
+// saved on this device — the prompt only ever appears once per device.
+function ensureOperatorName(asMonitor){
+  return new Promise(resolve=>{
+    if(getOperatorName()){ resolve(); return; }
+    _appLockNameResolve = resolve;
+    appLockShowNamePrompt(asMonitor);
+  });
+}
+let _appLockNameResolve = null;
 
 /* ── Entry unlock ── */
 async function appUnlock(){
@@ -2497,6 +2628,10 @@ async function appUnlock(){
     // as it stays visible, no edit — queued or otherwise — is possible until
     // this device has actually pulled the current Supabase data.
     err.textContent=''; errRed.textContent='';
+    // Ask for the operator's name (once per device; mandatory for Operator,
+    // skippable for Monitor) BEFORE showing the loading spinner — resolves
+    // immediately if already saved on this device.
+    await ensureOperatorName(asMonitor);
     appLockShowLoading();
     // Cloud sync must never crash the UI — every step below is still wrapped
     // in its own try/catch, and sbFetch itself times out after 12s per call,
@@ -2510,6 +2645,8 @@ async function appUnlock(){
       try{ await fetchPasswordHashes(); }catch(e){ console.warn('duty lock refresh failed:', e.message); }
       markInitialPullDone(); // safe to auto-push settings from here on
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
+      if(typeof lastFullPullAt!=='undefined') lastFullPullAt = Date.now();
+      if(typeof retryPendingFeederPushes==='function'){ try{ await retryPendingFeederPushes(); }catch(e){} }
       // Pull sequence is done — NOW reveal the app and allow editing.
       appLockHideAndReveal();
       restoreLastStation();
@@ -2730,6 +2867,12 @@ async function checkPw(){
       pwModalPurpose='settings';
       closePwModal();
       dtReportUnlockConfirmed();
+      return;
+    }
+    if(pwModalPurpose==='clearLog'){
+      pwModalPurpose='settings';
+      closePwModal();
+      clearLogConfirmed();
       return;
     }
     settingsUnlocked=true;
@@ -3665,6 +3808,8 @@ function onStationChange(){
   renderFeederStatus();
   updateTripAllToggleUI();
   activeOutageAlert();   // नेपालीमा सक्रिय अवरोध सूचना
+  if(typeof aaSyncTripShutdownDropdown==='function') aaSyncTripShutdownDropdown();
+  if(typeof aaSyncOutageDropdown==='function') aaSyncOutageDropdown();
   // Remember last selected station
   try{ localStorage.setItem('sms2_last_station', $('station').value); }catch(e){}
   if($('station').value) compactHeader();
@@ -3935,6 +4080,7 @@ async function dispatchOutage(){
    ============================================================ */
 function onFeederChange(){
   if(getMultiVal('feeder').length) $('time').value=nowHM();
+  if(typeof aaSyncTripShutdownDropdown==='function') aaSyncTripShutdownDropdown();
   autoBuild();
 }
 
@@ -4968,6 +5114,7 @@ function _pushToLog(entry){
     ts: new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',
           hour:'2-digit',minute:'2-digit',second:'2-digit'}),
     date: new Date(),
+    operator_short: typeof getOperatorShortName==='function' ? getOperatorShortName() : '',
     ...entry
   };
   LOG.unshift(row);
@@ -5060,7 +5207,7 @@ function renderLogTable(){
       <td style="font-size:11px;color:var(--dim)">${esc(r.reason||'—')}</td>
       <td class="log-ts">${esc(r.time||'—')}</td>
       <td style="font-size:11px">${esc(r.recipients)}</td>
-      <td class="${stCls}">${esc(r.status)}${r.device_code?`<div style="font-size:9px;color:var(--dim2);font-family:monospace;margin-top:2px" title="Sent from device ${esc(r.device_code)}">${esc(r.device_code)}</div>`:''}</td>
+      <td class="${stCls}">${esc(r.status)}${(r.operator_short||r.device_code)?`<div style="font-size:9.5px;color:var(--dim2);font-family:monospace;margin-top:2px;letter-spacing:.02em" title="${r.operator_name?('Sent by '+esc(r.operator_name)):(r.device_code?('Sent from device '+esc(r.device_code)):'')}">${esc(r.operator_short||r.device_code)}</div>`:''}</td>
       <td class="msgcell">${esc((r.msg||'').substring(0,120)+(r.msg&&r.msg.length>120?'…':''))}</td>
       ${canEdit?`<td><button onclick="deleteLogEntry(${i})" title="Delete this log entry" style="background:none;border:none;cursor:pointer;font-size:14px;opacity:.65">🗑</button></td>`:''}
     </tr>`;
@@ -5128,6 +5275,21 @@ function downloadCsv(rows, filename){
 }
 
 function clearLogFn(){
+  if(!LOG.length){toast('Log already empty');return;}
+  if(typeof monitorMode!=='undefined' && monitorMode){ toast('Monitoring access is view-only'); return; }
+  if(!settingsPwExists){ toast('पहिले ⚙ Settings बाट Settings password सेट गर्नुहोस्।', 3500); return; }
+  pwModalPurpose='clearLog';
+  const overlay=$('pwOverlay');
+  overlay.style.display='flex';
+  $('pwInput').value=''; $('pwError').textContent='';
+  const nr=$('pwFirstRunNotice'), cr=$('pwConfirmRow');
+  if(nr) nr.style.display='none';
+  if(cr) cr.style.display='none';
+  $('pwModalTitle').textContent='Clear Log — Settings Password';
+  setTimeout(()=>$('pwInput').focus(),80);
+}
+// Called by checkPw() only after the Settings password has verified.
+function clearLogConfirmed(){
   if(!LOG.length){toast('Log already empty');return;}
   if(!confirm('Clear all log entries? This cannot be undone.')) return;
   LOG.length=0;
@@ -5212,6 +5374,136 @@ function gfSave(st){
   if(!Object.keys(DATA.groupfeeders[st]).length) delete DATA.groupfeeders[st];
   saveData('groupfeeders');
   renderGroupFeedersUI();
+}
+
+// ── Affected Area (Settings) ──────────────────────────────────────────
+// DATA.affectedareas: { [feederName]: [areaName, areaName, ...] }
+// Feeds the dispatch box's Affected Area/Site dropdown (see aaFieldHtml /
+// aaApplyAll / aaApplySelection below) — default = all areas joined by
+// commas; operator can instead pick specific areas from a dropdown.
+function fillAaStations(){
+  const sel=$('aaStation'); if(!sel) return;
+  const cur=sel.value;
+  const stations=[...new Set(DATA.feeders.map(f=>f.station))];
+  sel.innerHTML=stations.map(st=>`<option value="${esc(st)}">${esc(st)}</option>`).join('');
+  if(cur && stations.includes(cur)) sel.value=cur;
+}
+function renderAffectedAreasUI(){
+  const wrap=$('aaWrap'); if(!wrap) return;
+  fillAaStations();
+  const st=$('aaStation')?$('aaStation').value:'';
+  if(!st){ wrap.innerHTML='<div class="hint">पहिले सबस्टेशन थप्नुहोस्।</div>'; return; }
+  const feeders=DATA.feeders.filter(f=>f.station===st).map(f=>f.name);
+  if(!feeders.length){ wrap.innerHTML='<div class="hint">यस सबस्टेशनमा फिडर छैन।</div>'; return; }
+  wrap.innerHTML=feeders.map(fd=>{
+    const areas=(DATA.affectedareas&&DATA.affectedareas[fd])||[];
+    return `<div style="border:1px solid var(--line,#e6ebf1);border-radius:10px;padding:10px 12px;background:var(--bg2,#f8fafc)">
+      <div style="font-size:12px;font-weight:800;margin-bottom:7px">${esc(fd)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px" id="aaTags_${esc(aaSafeId(fd))}">
+        ${areas.length ? areas.map((a,i)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:#eef2ff;border:1px solid #c7d2fe;color:#4338ca;border-radius:14px;padding:2px 4px 2px 10px;font-size:11px;font-weight:600">
+          ${esc(a)}<button onclick="aaRemoveArea('${esc(fd)}',${i})" style="background:none;border:none;color:#4338ca;cursor:pointer;font-size:13px;line-height:1;padding:2px 5px" title="Remove">✕</button>
+        </span>`).join('') : '<span style="font-size:11px;color:var(--dim2);font-style:italic">कुनै क्षेत्र थपिएको छैन</span>'}
+      </div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="aaNewInput_${esc(aaSafeId(fd))}" placeholder="नयाँ क्षेत्र नाम…" autocomplete="off"
+          style="flex:1;padding:6px 9px;font-size:12px" onkeydown="if(event.key==='Enter'){event.preventDefault();aaAddArea('${esc(fd)}')}">
+        <button class="btn btn-ghost btn-sm" onclick="aaAddArea('${esc(fd)}')">+ थप्नुहोस्</button>
+      </div>
+      <div style="font-size:9px;color:var(--dim2);margin-top:5px">${areas.length} क्षेत्र — dispatch box मा पूर्वनिर्धारित रूपमा सबै अल्पविरामले छुट्याइएर देखिन्छ</div>
+    </div>`;
+  }).join('');
+}
+// Element IDs can't contain spaces/Devanagari-unsafe chars reliably across
+// browsers — build a stable ASCII-safe id from the feeder name's index.
+function aaSafeId(feederName){
+  return String(DATA.feeders.findIndex(f=>f.name===feederName));
+}
+function aaAddArea(feederName){
+  const inputEl = $('aaNewInput_'+aaSafeId(feederName));
+  const val = (inputEl?inputEl.value:'').trim();
+  if(!val){ toast('क्षेत्र नाम लेख्नुहोस्'); return; }
+  if(!DATA.affectedareas) DATA.affectedareas={};
+  if(!DATA.affectedareas[feederName]) DATA.affectedareas[feederName]=[];
+  if(DATA.affectedareas[feederName].includes(val)){ toast('यो क्षेत्र पहिले नै थपिएको छ'); return; }
+  DATA.affectedareas[feederName].push(val);
+  saveData('affectedareas');
+  renderAffectedAreasUI();
+}
+function aaRemoveArea(feederName, idx){
+  if(!DATA.affectedareas || !DATA.affectedareas[feederName]) return;
+  DATA.affectedareas[feederName].splice(idx,1);
+  if(!DATA.affectedareas[feederName].length) delete DATA.affectedareas[feederName];
+  saveData('affectedareas');
+  renderAffectedAreasUI();
+}
+
+// ── Affected Area dropdown — dispatch box (Trip / Shutdown / Outage) ──
+// The underlying text input (#tripSite / #site / #outageSite) stays the
+// single source of truth that every message-builder already reads — this
+// dropdown is a convenience that WRITES into that same input, never a
+// separate data path. Default option = every configured area for the
+// relevant feeder(s)/station, comma-separated; the rest of the list lets the
+// operator pick one specific area instead.
+
+// Union of areas across several feeders, de-duplicated, original add-order
+// preserved per feeder (feeder order as given).
+function aaAreasForFeeders(feederNames){
+  const seen=new Set(), out=[];
+  (feederNames||[]).forEach(fd=>{
+    ((DATA.affectedareas&&DATA.affectedareas[fd])||[]).forEach(a=>{
+      if(!seen.has(a)){ seen.add(a); out.push(a); }
+    });
+  });
+  return out;
+}
+// Union of areas across every feeder belonging to a station — used by the
+// System Gone / Incomer Failed / 33 KV outage box, which affects the whole
+// station rather than one hand-picked feeder.
+function aaAreasForStation(stationName){
+  const feederNames = DATA.feeders.filter(f=>f.station===stationName).map(f=>f.name);
+  return aaAreasForFeeders(feederNames);
+}
+// Rebuilds a <select> with "All areas (default)" + each individual area.
+// Called whenever the relevant feeder/station selection changes, so the
+// dropdown always reflects what's actually configured right now.
+function aaRefreshDropdown(selectId, areas){
+  const sel=$(selectId); if(!sel) return;
+  if(!areas.length){
+    sel.innerHTML='<option value="">— कुनै क्षेत्र सेटअप गरिएको छैन —</option>';
+    sel.disabled=true;
+    return;
+  }
+  sel.disabled=false;
+  const allJoined = areas.join(', ');
+  sel.innerHTML =
+    `<option value="${esc(allJoined)}">सबै क्षेत्र (पूर्वनिर्धारित): ${esc(allJoined)}</option>` +
+    areas.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');
+  sel.value = allJoined;   // default selection = all areas, comma-separated
+}
+// Writes the dropdown's current selection into the paired text input. Called
+// on change, and also right after aaRefreshDropdown() so the text field
+// starts pre-filled with "all areas" the moment feeders/station are picked.
+function aaApplyDropdown(selectId, inputId){
+  const sel=$(selectId), inp=$(inputId);
+  if(!sel || !inp || sel.disabled) return;
+  inp.value = sel.value;
+  autoBuild();
+}
+// Called from onFeederChange() (Trip/Shutdown share the same feeder picker)
+// and from onStationChange()/outage-station-picker changes.
+function aaSyncTripShutdownDropdown(){
+  const feeders = feederPicker.getValues();
+  const areas = aaAreasForFeeders(feeders);
+  aaRefreshDropdown('tripSiteDropdown', areas);
+  aaRefreshDropdown('siteDropdown', areas);
+  aaApplyDropdown('tripSiteDropdown','tripSite');
+  aaApplyDropdown('siteDropdown','site');
+}
+function aaSyncOutageDropdown(){
+  const st = $('station')?$('station').value:'';
+  const areas = st ? aaAreasForStation(st) : [];
+  aaRefreshDropdown('outageSiteDropdown', areas);
+  aaApplyDropdown('outageSiteDropdown','outageSite');
 }
 
 function renderStationsTable(){
@@ -5477,6 +5769,8 @@ function addReceiverRow(){ DATA.receivers.push({id:nextRcvId++,name:'New Receive
 function refreshAllTables(){
   if(typeof renderDcsTable==='function') renderDcsTable();
   if(typeof renderGroupFeedersUI==='function') renderGroupFeedersUI();
+  if(typeof renderAffectedAreasUI==='function') renderAffectedAreasUI();
+  if(typeof populateMyNameField==='function') populateMyNameField();
   renderStationsTable(); renderFeedersTable();
   renderSimpleTable('reasons',     'tbl-reasons',     'Reason');
   renderSimpleTable('tripreasons', 'tbl-tripreasons', 'Reason');
@@ -8656,6 +8950,10 @@ drop policy if exists "anon_all_devices" on device_registry;
 create policy "anon_all_devices" on device_registry for all to anon using (true) with check (true);
 -- Per-device attribution of sent messages
 alter table message_log add column if not exists device_code text;
+-- Per-operator attribution (real name + short initials tag), shown in the
+-- Log instead of the raw device code.
+alter table message_log add column if not exists operator_name text;
+alter table message_log add column if not exists operator_short text;
 
 -- ── Performance indexes ───────────────────────────────────────────
 create index if not exists idx_feeder_status_updated on feeder_status(updated_at desc);
@@ -9055,7 +9353,9 @@ async function sbInsertLog(entry){
       recipients: entry.recipients||'',
       status:     entry.status||'',
       msg:        entry.msg||'',
-      device_code: getDeviceCode()
+      device_code: getDeviceCode(),
+      operator_name:  typeof getOperatorName==='function' ? getOperatorName() : '',
+      operator_short: entry.operator_short || (typeof getOperatorShortName==='function' ? getOperatorShortName() : '')
     });
   }catch(e){
     console.warn('Supabase log insert failed:',e.message);
@@ -9071,7 +9371,9 @@ async function sbPushLog(){
     const rows=LOG.map(e=>({
       ts:e.ts||'',station:e.station||'',feeder:e.feeder||'',
       condition:e.condition||'',reason:e.reason||'',sent_at:e.time||'',
-      recipients:e.recipients||'',status:e.status||'',msg:e.msg||''
+      recipients:e.recipients||'',status:e.status||'',msg:e.msg||'',
+      device_code:e.device_code||getDeviceCode(),
+      operator_short:e.operator_short||'', operator_name:e.operator_name||''
     }));
     // Use upsert-style insert ignoring duplicates via Prefer header
     const url=getSbUrl()+'/rest/v1/message_log';
@@ -9106,6 +9408,7 @@ async function sbPullLog(){
           id:r.id,ts:r.ts,station:r.station,feeder:r.feeder,condition:r.condition,
           reason:r.reason,time:r.sent_at,recipients:r.recipients,status:r.status,msg:r.msg,
           device_code:r.device_code||'',
+          operator_short:r.operator_short||'', operator_name:r.operator_name||'',
           date:new Date(r.created_at||Date.now())
         });
         added++;
@@ -9125,8 +9428,45 @@ async function sbPullLog(){
 
 /* ── Push feeder status to Supabase ── */
 /* ── Push single feeder status to Supabase (silent, no toast) ── */
-async function sbPushOneFeedStatus(name, info){
+// Edits that couldn't be pushed yet (no pull done this session, or the edit
+// went stale before it could send) — surfaced to the operator with a Retry
+// button rather than silently dropped or silently pushed late.
+const PUSH_STALE_MS = 2*60*1000;   // 2 minutes: edit→push must happen within this window
+let pendingFeederPushRetries = {}; // name -> {info, editedAt}
+
+async function sbPushOneFeedStatus(name, info, editedAt){
   if(!sbReady()){ console.log('[SB] push skipped — paused:', name); return; }
+  // editedAt = the wall-clock moment this status change was actually made.
+  // Every existing call site predates this parameter, so default to "now" —
+  // safe for a freshly-triggered UI action, since the whole call chain from
+  // tap to here is well under a second.
+  if(editedAt==null) editedAt = Date.now();
+
+  // ── Guard 1: never push ahead of this session's first full pull ──
+  // Local feederStatusMap may still hold whatever this device had loaded
+  // BEFORE the current session's cloud data was pulled (fresh login, or a
+  // resume after being backgrounded — see forceFreshPull). Pushing here
+  // would overwrite correct cloud data with that stale snapshot. Queue it
+  // instead; it will be retried automatically once the pull finishes.
+  if((typeof initialPullDone!=='undefined' && !initialPullDone) ||
+     (typeof pullInFlight!=='undefined' && pullInFlight)){
+    pendingFeederPushRetries[name] = {info, editedAt};
+    flagFeederPushBlocked(name, 'waiting for this session\'s cloud data to finish loading');
+    return false;
+  }
+
+  // ── Guard 2: the edit itself must still be fresh ──
+  // If more than PUSH_STALE_MS has passed between when the change was made
+  // and this actually executing (queued while offline, tab backgrounded
+  // mid-push, a very slow network, etc.), do NOT push it — the cloud may
+  // have moved on since. Surface it as a failed push with a manual retry
+  // instead of silently sending an old value.
+  if(Date.now() - editedAt > PUSH_STALE_MS){
+    pendingFeederPushRetries[name] = {info, editedAt};
+    flagFeederPushBlocked(name, 'edit is more than 2 minutes old — re-checking before sending');
+    return false;
+  }
+
   const station = DATA.feeders.find(f=>f.name===name)?.station||$('station').value||'';
   const nowIso  = new Date().toISOString();
   const payload = { feeder_name:name, station, status:info.status, time_label:info.time||'', updated_at:nowIso };
@@ -9154,6 +9494,7 @@ async function sbPushOneFeedStatus(name, info){
     if(rowsUpdated){
       noteLocalFeederWrite(name, nowIso);
       console.log('[SB] ✓ PATCH updated row for', name);
+      delete pendingFeederPushRetries[name];
       return true;
     }
 
@@ -9167,6 +9508,7 @@ async function sbPushOneFeedStatus(name, info){
     if(postRes.ok){
       noteLocalFeederWrite(name, nowIso);
       console.log('[SB] ✓ INSERT ok for', name);
+      delete pendingFeederPushRetries[name];
       return true;
     }
     // Step 3: INSERT got duplicate key (another device inserted between our PATCH and POST) — PATCH again
@@ -9179,15 +9521,50 @@ async function sbPushOneFeedStatus(name, info){
           headers:{...sbHeaders(), 'Prefer':'return=minimal'},
           body: JSON.stringify({station, status:info.status, time_label:info.time||'', updated_at:nowIso}) }
       );
-      if(r2.ok){ noteLocalFeederWrite(name, nowIso); console.log('[SB] ✓ retry PATCH ok for', name); return true; }
+      if(r2.ok){ noteLocalFeederWrite(name, nowIso); console.log('[SB] ✓ retry PATCH ok for', name); delete pendingFeederPushRetries[name]; return true; }
     }
     throw new Error('INSERT failed ('+postRes.status+') '+postBody);
   }catch(e){
     console.error('[SB] ✗ push failed for', name, e.message);
     feederPushFailures++;
+    pendingFeederPushRetries[name] = {info, editedAt};
     flagFeederSyncProblem(e.message);
     return false;
   }
+}
+
+// Small persistent banner (not just a toast, which disappears) so a blocked
+// or failed feeder push is never silently lost — stays until every pending
+// push has succeeded or the operator dismisses it, with a one-tap Retry.
+function flagFeederPushBlocked(name, reason){
+  updateFeederPushRetryUI();
+  const now=Date.now();
+  if(now - feederSyncProblemShown < 8000) return;  // gentle throttle, still logs to console every time
+  feederSyncProblemShown = now;
+  console.warn('[SB] push blocked for', name, '—', reason);
+}
+// Retries every currently-pending feeder push (called by the Retry button,
+// and automatically once a forced re-pull finishes).
+async function retryPendingFeederPushes(){
+  const entries = Object.entries(pendingFeederPushRetries);
+  if(!entries.length) return;
+  for(const [name, {info}] of entries){
+    // Re-stamp editedAt to "now" — the operator/system is explicitly asking
+    // to send this status NOW, so the 2-minute freshness window restarts.
+    await sbPushOneFeedStatus(name, info, Date.now());
+  }
+  updateFeederPushRetryUI();
+}
+function updateFeederPushRetryUI(){
+  const n = Object.keys(pendingFeederPushRetries).length;
+  const el = $('feederPushRetryBanner');
+  if(!el) return;
+  if(!n){ el.style.display='none'; return; }
+  el.style.display='flex';
+  const label = $('feederPushRetryLabel');
+  if(label) label.textContent = n===1
+    ? '1 feeder status did not sync to cloud'
+    : n+' feeder statuses did not sync to cloud';
 }
 
 // Push a batch of feeder statuses (used by the group-restore flows: 33 KV
@@ -9213,8 +9590,9 @@ async function pushFeederStatusBatch(names){
 }
 
 // Track + surface feeder-status push failures (so a broken table doesn't fail silently)
-let feederPushFailures = 0;
-let feederSyncProblemShown = 0;
+// (feederPushFailures / feederSyncProblemShown declared near the top of the
+// script, alongside appUnlocked — referenced by sbPushOneFeedStatus, which
+// is defined earlier in the file than this point.)
 function flagFeederSyncProblem(detail){
   const now = Date.now();
   // throttle the toast to once every 20s so a bulk op doesn't spam
@@ -9307,13 +9685,13 @@ async function sbAutoLoad(){
    DATA SYNC — feeders, stations, staff, receivers via Supabase
    API keys (Green API, Gemini, HttpSMS, CallMeBot) are excluded.
    ============================================================ */
-const DATA_SYNC_KEYS = ['dcs','currentDcsId','stations','feeders','reasons','tripreasons','askedby','givenby','receivers','groupfeeders'];
+const DATA_SYNC_KEYS = ['dcs','currentDcsId','stations','feeders','reasons','tripreasons','askedby','givenby','receivers','groupfeeders','affectedareas'];
 
 // Keys whose contents are partitioned per-DCS (each record carries a `dcs` tag
 // or is keyed by a station belonging to a DCS). These must be synced as the
 // ACTIVE DCS's slice only — never the combined array — otherwise one DCS's push
 // overwrites every other DCS's data in the single shared cloud row.
-const DCS_PARTITIONED_KEYS = ['stations','feeders','givenby','groupfeeders'];
+const DCS_PARTITIONED_KEYS = ['stations','feeders','givenby','groupfeeders','affectedareas'];
 // Keys that are global to a project and shared by all DCSs on it.
 const DCS_GLOBAL_KEYS = ['reasons','tripreasons','askedby','receivers'];
 
@@ -9337,6 +9715,11 @@ function activeSliceFor(key){
     case 'givenby':  return DATA.givenby.filter(g=>g && stationNamesOfCur.has(g.station));
     case 'groupfeeders': {
       const out={}; Object.keys(DATA.groupfeeders||{}).forEach(st=>{ if(stationNamesOfCur.has(st)) out[st]=DATA.groupfeeders[st]; });
+      return out;
+    }
+    case 'affectedareas': {
+      const feederNamesOfCur = new Set(DATA.feeders.filter(f=>f && stationNamesOfCur.has(f.station)).map(f=>f.name));
+      const out={}; Object.keys(DATA.affectedareas||{}).forEach(fd=>{ if(feederNamesOfCur.has(fd)) out[fd]=DATA.affectedareas[fd]; });
       return out;
     }
     default: return DATA[key];
@@ -9376,6 +9759,15 @@ function mergeSliceInto(key, dcsId, slice){
       Object.keys(gf).forEach(st=>{ if(stationNamesOfDcs.has(st)) delete gf[st]; });
       Object.assign(gf, src);
       DATA.groupfeeders = gf;
+      break;
+    }
+    case 'affectedareas': {
+      const src = (slice && typeof slice === 'object' && !Array.isArray(slice)) ? slice : {};
+      const feederNamesOfDcs = new Set(DATA.feeders.filter(f=>f && stationNamesOfDcs.has(f.station)).map(f=>f.name));
+      const aa = {...(DATA.affectedareas||{})};
+      Object.keys(aa).forEach(fd=>{ if(feederNamesOfDcs.has(fd)) delete aa[fd]; });
+      Object.assign(aa, src);
+      DATA.affectedareas = aa;
       break;
     }
   }
@@ -9549,6 +9941,7 @@ function dcsSliceBundle(dcsId){
     feeders:      activeSliceFor('feeders'),
     givenby:      activeSliceFor('givenby'),
     groupfeeders: activeSliceFor('groupfeeders'),
+    affectedareas: activeSliceFor('affectedareas'),
     reasons:      DATA.reasons,
     tripreasons:  DATA.tripreasons,
     askedby:      DATA.askedby
@@ -9682,10 +10075,71 @@ window.sbMigrateLegacyRows = sbMigrateLegacyRows;
    data. If a push slipped out in that window, it would overwrite good
    cloud data (built up by other operators) with stale local defaults.
    So: queue the key and push it later, once the pull has actually
-   finished — never push ahead of the first pull.
+   finished — never push ahead of the first pull. (initialPullDone is
+   declared near the top of the script — see appUnlocked — since
+   sbPushOneFeedStatus, defined earlier in the file, also references it.)
    ────────────────────────────────────────────────────────────── */
-let initialPullDone = false;
 const _pendingSyncKeys = new Set();
+
+/* ── Resume-staleness guard ──────────────────────────────────────────
+   Root cause of "24-hr report duration changed by old data": a phone/tab
+   left backgrounded (screen locked, app switched away, laptop slept) keeps
+   appUnlocked=true and its in-memory feederStatusMap exactly as it was when
+   it went to sleep. If the operator then taps a feeder status the moment
+   they come back, sbPushOneFeedStatus fired immediately with THAT stale
+   data — silently overwriting whatever more-recent status another device
+   had correctly written to Supabase in the meantime, which corrupts the
+   downtime duration derived from feeder_status.
+
+   Fix: track when this device last completed a FULL pull. If the tab was
+   hidden for longer than RESUME_STALE_MS, force a fresh pull — reusing the
+   same lock-screen the login flow already uses — before any edit on this
+   device is allowed to reach Supabase again. Supabase's data always wins;
+   nothing typed/tapped during the stale window before that re-pull is ever
+   pushed. (lastFullPullAt / pullInFlight / hiddenAt are declared near the
+   top of the script, alongside appUnlocked — sbPushOneFeedStatus, defined
+   earlier in the file than this block, must never risk referencing them
+   before initialization.) */
+const RESUME_STALE_MS = 60*1000; // backgrounded over 1 min → treat as a new session
+
+async function forceFreshPull(reason){
+  if(pullInFlight) return;
+  pullInFlight = true;
+  try{
+    const lock=$('appLock');
+    if(lock){
+      lock.style.display='flex'; lock.style.opacity='1'; lock.style.transition='none';
+      appLockShowLoading();
+    }
+    console.warn('[resync] forcing fresh pull —', reason);
+    try{ await sbPullData(true); }catch(e){ console.warn('resync pull failed:', e.message); }
+    try{ await sbAutoLoad(); }catch(e){ console.warn('resync feeder pull failed:', e.message); }
+    try{ dtReconcileOpenEvents(); }catch(e){ console.warn('resync dt reconcile failed:', e.message); }
+    renderFeederStatus();
+    lastFullPullAt = Date.now();
+    if(typeof retryPendingFeederPushes==='function'){ try{ await retryPendingFeederPushes(); }catch(e){} }
+    if(lock){ lock.style.transition='opacity .3s'; lock.style.opacity='0'; setTimeout(()=>{ lock.style.display='none'; },320); }
+  } finally {
+    pullInFlight = false;
+  }
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden){ hiddenAt = Date.now(); return; }
+  if(!appUnlocked) return;   // still on the login screen — nothing to resync yet
+  if(!hiddenAt) return;
+  const hiddenFor = Date.now() - hiddenAt;
+  hiddenAt = 0;
+  if(hiddenFor >= RESUME_STALE_MS) forceFreshPull('tab hidden '+Math.round(hiddenFor/1000)+'s');
+});
+// pageshow with persisted=true fires on back/forward-cache restores that
+// visibilitychange can miss on some mobile browsers — same guard, belt and
+// suspenders.
+window.addEventListener('pageshow', (e)=>{
+  if(!e.persisted) return;
+  if(!appUnlocked) return;
+  if(!lastFullPullAt || (Date.now()-lastFullPullAt) >= RESUME_STALE_MS) forceFreshPull('page restored from cache');
+});
+
 const _saveDataOrig = saveData;
 // Reassignment (not a second `function saveData` declaration) — otherwise
 // hoisting makes both declarations point to the wrapper, and the wrapper's
@@ -9753,6 +10207,32 @@ function getDeviceCode(){
     localStorage.setItem('nea_device_code', c);
   }
   return c;
+}
+
+/* ── Operator name — replaces the raw device code as who-sent-this in the
+   Log, so entries read as a person's name instead of a random device
+   code. The device code itself is UNCHANGED and keeps doing its existing
+   job (device approval / sync authorization) — this is purely an
+   additional, friendlier attribution layer for the Log display.
+   Mandatory to proceed as Operator; optional (skippable) as Monitor,
+   since monitors never send anything the name would attribute. ── */
+function getOperatorName(){ return localStorage.getItem('nea_operator_fullname') || ''; }
+function getOperatorShortName(){ return localStorage.getItem('nea_operator_shortname') || ''; }
+function setOperatorName(fullName){
+  const clean = String(fullName||'').trim().replace(/\s+/g,' ');
+  localStorage.setItem('nea_operator_fullname', clean);
+  const short = operatorShortNameFrom(clean);
+  localStorage.setItem('nea_operator_shortname', short);
+  return short;
+}
+// "Ram Bahadur Thapa" → "RBT" (initials, no spaces). A single-word name
+// ("Sundar") → first 3 letters, "SUN" — never just one letter, so it stays
+// recognizable next to a 6-character device code in the same column.
+function operatorShortNameFrom(fullName){
+  const words = String(fullName||'').trim().split(/\s+/).filter(Boolean);
+  if(!words.length) return '';
+  if(words.length===1) return words[0].slice(0,3).toUpperCase();
+  return words.map(w=>w[0]).join('').toUpperCase().slice(0,6);
 }
 
 /* ── FRESH DEVICE / UPDATED FILE DEFAULTS ──────────────────────────
@@ -9845,6 +10325,25 @@ function updateDeviceAuthBanner(){
   } else if(b){ b.remove(); }
   const my=$('myDeviceCode');
   if(my) my.textContent = getDeviceCode()+' · '+APP_VERSION+' · '+deviceAuthStatus;
+  populateMyNameField();
+}
+// Fills the Settings → Device Access "My Name" box with whatever is
+// currently saved on this device (blank if never set — Monitor may have
+// skipped it).
+function populateMyNameField(){
+  const input=$('myNameInput'), preview=$('myNamePreview');
+  if(!input) return;
+  if(document.activeElement!==input) input.value = typeof getOperatorName==='function' ? getOperatorName() : '';
+  if(preview) preview.textContent = (typeof getOperatorShortName==='function' ? getOperatorShortName() : '') || '—';
+}
+// "Save" button in Settings → Device Access.
+function saveMyNameFromSettings(){
+  const val=$('myNameInput').value.trim();
+  if(!val){ toast('नाम लेख्नुहोस्।'); return; }
+  if(val.replace(/\s+/g,'').length<2){ toast('नाम धेरै छोटो छ।'); return; }
+  const short=setOperatorName(val);
+  populateMyNameField();
+  toast('✓ नाम अपडेट भयो: '+short, 2500);
 }
 
 /* ── Settings → Device Access registry UI ─────────────────────── */
@@ -10259,7 +10758,7 @@ async function syncFromCloud(){
 
   // ── Sync log (every call) ──
   try{
-    const logRows = await sbFetch('message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code&order=id.desc&limit=200');
+    const logRows = await sbFetch('message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code,operator_name,operator_short&order=id.desc&limit=200');
     // Diff by the DB row id — exact, no collisions. (Previously this used a
     // ts+station+feeder string key, which collides whenever two different
     // messages hit the same feeder in the same minute — e.g. a trip and a
@@ -10278,6 +10777,7 @@ async function syncFromCloud(){
           condition:r.condition, reason:r.reason, time:r.sent_at,
           recipients:r.recipients, status:r.status, msg:r.msg,
           device_code:r.device_code||'',
+          operator_short:r.operator_short||'', operator_name:r.operator_name||'',
           date:new Date(r.created_at||Date.now())
         });
         added++;
@@ -10420,6 +10920,8 @@ try{
       try{ await fetchPasswordHashes(); }catch(e){ console.warn('duty lock refresh failed:', e.message); }
       markInitialPullDone(); // safe to auto-push settings from here on
       try{ await sbAutoLoad(); }catch(e){ console.warn('autoload failed:', e.message); }
+      if(typeof lastFullPullAt!=='undefined') lastFullPullAt = Date.now();
+      if(typeof retryPendingFeederPushes==='function'){ try{ await retryPendingFeederPushes(); }catch(e){} }
       // Pull sequence is done — NOW reveal the app and allow editing.
       appLockHideAndReveal();
       restoreLastStation();
