@@ -2504,6 +2504,10 @@ const DT_LOG_END_LABELS = {   // the END (restore) side
 // flagged 'stale' rather than the more benign 'syncing' — see
 // dtLogSyncState() further down.
 const DT_SYNC_GRACE_MS = 45*1000;   // 3 poll cycles' worth of slack
+// Bulk/station-wide event types are logged ONCE per dispatch under
+// feeder:'All Feeders' (see dispatchBulkMsg), not under each individual
+// feeder's name — see dtClosestLogMatch() further down for why this matters.
+const DT_BULK_TYPES = new Set(['system-gone','incomer-failed','kv33']);
 
 // ── Monitor "stay signed in" ──────────────────────────────────────────
 // Monitor (view-only) staff shouldn't have to retype the password every
@@ -6670,7 +6674,7 @@ function dtHasLogTrail(ev){ return !ev.manual; }
 // DT_LOG label maps, for the same TDZ-safety reason.)
 function dtLogSyncState(ev){
   if(!dtHasLogTrail(ev)) return 'ok';   // manual entries have nothing to check against
-  const match = dtClosestLogMatch(ev.feeder, ev.type, 'start', ev.start);
+  const match = dtClosestLogMatch(ev.feeder, ev.type, 'start', ev.start, ev.station);
   if(match && match.diffMin<=2) return 'ok';
   const ageMs = Date.now() - new Date(ev.start).getTime();
   return ageMs <= DT_SYNC_GRACE_MS ? 'syncing' : 'stale';
@@ -6679,13 +6683,23 @@ function dtLogSyncState(ev){
 // Find the Log entry for this feeder+edge CLOSEST in time to candidateIso.
 // Returns {entry, diffMin} or null if no matching-type entry exists at all
 // for this feeder anywhere in the log.
-function dtClosestLogMatch(feeder, type, which, candidateIso){
+// Bulk/station-wide event types are logged ONCE per dispatch, under
+// feeder:'All Feeders' (see dispatchBulkMsg) — not under each individual
+// feeder's name, even though DT_EVENTS correctly creates one entry PER
+// feeder for the downtime report. Without accounting for this, every
+// feeder in a System Gone / Incomer Failed / 33 KV group would wrongly show
+// "Log not found", even though the event genuinely was logged.
+// (DT_BULK_TYPES is declared near the top of the script alongside the other
+// DT_LOG constants, for the same TDZ-safety reason.)
+function dtClosestLogMatch(feeder, type, which, candidateIso, station){
   const labels = (which==='start'?DT_LOG_START_LABELS:DT_LOG_END_LABELS)[type];
   if(!labels) return null;
   const target = new Date(candidateIso).getTime();
+  const isBulk = DT_BULK_TYPES.has(type);
   let best=null, bestDiff=Infinity;
   LOG.forEach(r=>{
-    if(r.feeder!==feeder) return;
+    const feederMatches = r.feeder===feeder || (isBulk && r.feeder==='All Feeders' && (!station || r.station===station));
+    if(!feederMatches) return;
     if(!labels.includes(r.condition)) return;
     const rowDate = r.date ? new Date(r.date) : null;
     if(!rowDate || isNaN(rowDate.getTime())) return;
@@ -6705,7 +6719,7 @@ function dtClosestLogMatch(feeder, type, which, candidateIso){
 function dtVerifyAgainstLog(ev, which, candidateIso){
   if(!dtHasLogTrail(ev)) return true;   // nothing to verify a manual/imported entry against
   const toleranceMin = 2;
-  const match = dtClosestLogMatch(ev.feeder, ev.type, which, candidateIso);
+  const match = dtClosestLogMatch(ev.feeder, ev.type, which, candidateIso, ev.station);
   const edgeNe = which==='start' ? 'सुरु (Start)' : 'अन्त्य (End)';
   if(!match){
     return confirm(
