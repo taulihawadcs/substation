@@ -227,6 +227,9 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .picker-chip.sel{background:var(--blue);color:#fff;border-color:var(--blue)}
 .picker-empty{font-size:12px;color:var(--dim2);padding:4px 4px;font-style:italic}
 .multi-hint{font-size:11px;color:var(--dim2);margin-top:5px}
+.aa-picker{gap:4px}
+.aa-picker .picker-chip{padding:3px 9px;font-size:10.5px;border-radius:14px}
+.aa-picker .picker-empty{font-size:10px;padding:2px 3px}
 
 /* ── Feeder Status Panel ──────────────────────────────── */
 .feeder-status-panel{display:flex;flex-direction:column;gap:6px}
@@ -1101,7 +1104,7 @@ body.duty-page-open #page-duty{
           </div>
           <div style="flex:1;min-width:130px">
             <label>Affected Area / Site</label>
-            <select id="tripSiteDropdown" onchange="aaApplyDropdown('tripSiteDropdown','tripSite')" style="width:100%;padding:5px 8px;font-size:11px;margin-bottom:4px" disabled><option value="">— कुनै क्षेत्र सेटअप गरिएको छैन —</option></select>
+            <div id="tripSitePicker" class="multi-picker aa-picker" style="min-height:34px;padding:5px 6px;margin-bottom:4px;display:none"></div>
             <input type="text" id="tripSite" placeholder="optional" autocomplete="off" oninput="autoBuild()" style="width:100%;padding:6px 10px">
           </div>
           <div style="flex:1;min-width:130px">
@@ -1156,7 +1159,7 @@ body.duty-page-open #page-duty{
           </div>
           <div style="flex:1;min-width:130px">
             <label>Affected Area / Site</label>
-            <select id="siteDropdown" onchange="aaApplyDropdown('siteDropdown','site')" style="width:100%;padding:5px 8px;font-size:11px;margin-bottom:4px" disabled><option value="">— कुनै क्षेत्र सेटअप गरिएको छैन —</option></select>
+            <div id="sitePicker" class="multi-picker aa-picker" style="min-height:34px;padding:5px 6px;margin-bottom:4px;display:none"></div>
             <input type="text" id="site" placeholder="e.g. ओदारी, वडा नं. ३…" autocomplete="off" style="width:100%;padding:6px 10px">
           </div>
           <div style="flex:1;min-width:130px">
@@ -1186,7 +1189,7 @@ body.duty-page-open #page-duty{
             </div>
             <div>
               <label style="font-size:11px;font-weight:700;color:#b45309">Affected Area:</label><br>
-              <select id="outageSiteDropdown" onchange="aaApplyDropdown('outageSiteDropdown','outageSite')" style="width:130px;padding:4px 6px;font-size:10px;margin-left:6px;margin-bottom:3px" disabled><option value="">— सेटअप छैन —</option></select><br>
+              <div id="outageSitePicker" class="multi-picker aa-picker" style="width:150px;min-height:30px;padding:4px 5px;margin-left:6px;margin-bottom:3px;display:none"></div>
               <input type="text" id="outageSite" placeholder="optional" autocomplete="off" style="width:130px;padding:5px 8px;font-size:12px;margin-left:6px">
             </div>
             <div>
@@ -2471,6 +2474,36 @@ let initialPullDone = false;   // true once THIS session's first cloud pull has 
 let feederPushFailures    = 0;   // count of failed feeder_status pushes this session
 let feederSyncProblemShown = 0;  // throttle timestamp for the sync-problem toast
 let DUTY_LOCKED        = false;   // Duty Chart read-only lock — Settings → Duty Chart Lock
+// Daily downtime report auto-send — OFF by default on every fresh setup.
+// Cloud-synced (app_config, same table/pattern as duty_locked) so every
+// device agrees on whether the report goes out automatically; only
+// togglable from Settings behind the Settings password (see
+// dailyReportAutoRequestUnlock further down).
+let DAILY_REPORT_AUTO_ENABLED = false;
+
+// DT event type → Log 'condition' string(s), for cross-checking a downtime
+// report entry against the main Log (see dtVerifyAgainstLog / dtLogSyncState
+// further down). Declared early because dtRenderSummary — defined earlier in
+// the file than these were originally — now references them transitively via
+// dtLogSyncState on every render, not just on manual edit.
+const DT_LOG_START_LABELS = {   // the START (failure) side
+  'trip'           : ['Trip'],
+  'shutdown'       : ['Shutdown'],
+  'system-gone'    : ['System Gone'],
+  'incomer-failed' : ['11KV Incomer Failed'],
+  'kv33'           : ['33KV Incomer Failed']
+};
+const DT_LOG_END_LABELS = {   // the END (restore) side
+  'trip'           : ['Charged'],
+  'shutdown'       : ['Charged'],
+  'system-gone'    : ['System Restored'],
+  'incomer-failed' : ['11KV Incomer Restored'],
+  'kv33'           : ['33KV Incomer Restored']
+};
+// How stale a report entry can be with no matching Log row before it's
+// flagged 'stale' rather than the more benign 'syncing' — see
+// dtLogSyncState() further down.
+const DT_SYNC_GRACE_MS = 45*1000;   // 3 poll cycles' worth of slack
 
 // ── Monitor "stay signed in" ──────────────────────────────────────────
 // Monitor (view-only) staff shouldn't have to retype the password every
@@ -2493,11 +2526,12 @@ function hasValidMonitorSession(){
 
 async function fetchPasswordHashes(){
   try{
-    const rows=await sbFetch('app_config?key=in.("app_password","settings_password","duty_locked")&select=key,value');
+    const rows=await sbFetch('app_config?key=in.("app_password","settings_password","duty_locked","daily_report_auto_enabled")&select=key,value');
     rows.forEach(r=>{
       if(r.key==='app_password')      cachedEntryHash    = r.value;
       if(r.key==='settings_password') cachedSettingsHash = r.value;
       if(r.key==='duty_locked')       DUTY_LOCKED        = (r.value==='1');
+      if(r.key==='daily_report_auto_enabled') DAILY_REPORT_AUTO_ENABLED = (r.value==='1');
     });
     settingsPwExists = !!cachedSettingsHash;
   }catch(e){
@@ -2520,6 +2554,25 @@ async function sbPushDutyLock(locked){
     return true;
   }catch(e){
     console.warn('duty lock push failed:', e.message);
+    return false;
+  }
+}
+
+// Pushes the daily-report auto-send toggle — same table/pattern as
+// duty_locked, so every device agrees on whether the report goes out
+// automatically instead of each device deciding independently.
+async function sbPushDailyReportAutoEnabled(enabled){
+  try{
+    const url=getSbUrl()+'/rest/v1/app_config?on_conflict=key';
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{...sbHeaders(),'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({key:'daily_report_auto_enabled', value: enabled?'1':'0', updated_at:new Date().toISOString()})
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    return true;
+  }catch(e){
+    console.warn('daily report auto-send toggle push failed:', e.message);
     return false;
   }
 }
@@ -2873,6 +2926,12 @@ async function checkPw(){
       pwModalPurpose='settings';
       closePwModal();
       clearLogConfirmed();
+      return;
+    }
+    if(pwModalPurpose==='dailyReportAuto'){
+      pwModalPurpose='settings';
+      closePwModal();
+      dailyReportAutoUnlockConfirmed();
       return;
     }
     settingsUnlocked=true;
@@ -3739,6 +3798,12 @@ class MultiPicker {
 const feederPicker      = new MultiPicker('feeder-picker',      onFeederChange);
 const reasonPicker      = new MultiPicker('reason-picker',      autoBuild);
 const tripReasonPicker  = new MultiPicker('tripreason-picker',  autoBuild);
+// Affected Area pickers — multi-select chips feeding the Trip/Shutdown/
+// Outage "Affected Area / Site" text fields. onChange handlers set below,
+// after aaApplyDropdown is defined (they call it directly).
+const tripSitePicker    = new MultiPicker('tripSitePicker',   ()=>aaApplyDropdown('tripSitePicker','tripSite'));
+const sitePicker        = new MultiPicker('sitePicker',       ()=>aaApplyDropdown('sitePicker','site'));
+const outageSitePicker  = new MultiPicker('outageSitePicker', ()=>aaApplyDropdown('outageSitePicker','outageSite'));
 
 function getMultiVal(key){
   if(key==='feeder')     return feederPicker.getValues();
@@ -4490,7 +4555,15 @@ async function dispatchToAll(msg, type){
   }
 
   const enabled=DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
-  if(!enabled.length){ toast('No enabled receivers with contacts — add them in Settings'); return; }
+  if(!enabled.length){
+    toast('No enabled receivers with contacts — add them in Settings');
+    const names = DATA.receivers.filter(r=>r.enabled).map(r=>r.name).join(', ') || 'None';
+    recordLog(type, names, 'noted — no receivers configured');
+    lastDispatchedMsg = msg;
+    updateFeederStatusFromDispatch(type, getMultiVal('feeder'));
+    clearForm();
+    return;
+  }
 
   const wrap=$('sendStatusWrap');
   wrap.innerHTML='<div style="font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--dim2);margin:12px 0 6px">Sending…</div>';
@@ -5050,6 +5123,9 @@ async function runAI(){
    ============================================================ */
 function clearForm(){
   feederPicker.clear(); reasonPicker.clear(); tripReasonPicker.clear();
+  if(typeof tripSitePicker!=='undefined'){ tripSitePicker.reset([]); $('tripSitePicker').style.display='none'; }
+  if(typeof sitePicker!=='undefined'){ sitePicker.reset([]); $('sitePicker').style.display='none'; }
+  if(typeof outageSitePicker!=='undefined'){ outageSitePicker.reset([]); $('outageSitePicker').style.display='none'; }
   $('condition').value=''; $('askedBy').value=''; $('askedByTrip').value='';
   $('site').value=''; $('time').value=''; $('workDetail').value='';
   if($('tripSite'))   $('tripSite').value='';
@@ -5463,30 +5539,33 @@ function aaAreasForStation(stationName){
   const feederNames = DATA.feeders.filter(f=>f.station===stationName).map(f=>f.name);
   return aaAreasForFeeders(feederNames);
 }
-// Rebuilds a <select> with "All areas (default)" + each individual area.
-// Called whenever the relevant feeder/station selection changes, so the
-// dropdown always reflects what's actually configured right now.
-function aaRefreshDropdown(selectId, areas){
-  const sel=$(selectId); if(!sel) return;
+// Shows/populates a picker with the given area names, defaulting to ALL of
+// them selected (matches the old dropdown's "all areas, comma-separated"
+// default) — but as an actual multi-select: any subset can be tapped in or
+// out. Hides the picker entirely if there's nothing to pick from.
+function aaRefreshPicker(picker, containerId, areas){
+  const box=$(containerId);
   if(!areas.length){
-    sel.innerHTML='<option value="">— कुनै क्षेत्र सेटअप गरिएको छैन —</option>';
-    sel.disabled=true;
+    if(box) box.style.display='none';
+    picker.reset([]);
     return;
   }
-  sel.disabled=false;
-  const allJoined = areas.join(', ');
-  sel.innerHTML =
-    `<option value="${esc(allJoined)}">सबै क्षेत्र (पूर्वनिर्धारित): ${esc(allJoined)}</option>` +
-    areas.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');
-  sel.value = allJoined;   // default selection = all areas, comma-separated
+  if(box) box.style.display='flex';
+  picker.reset(areas);                 // clears then re-adds options, all deselected
+  areas.forEach(a=>picker.selected.add(a));   // default = every area selected
+  picker.setOptions(areas);            // re-render chips showing the default selection
 }
-// Writes the dropdown's current selection into the paired text input. Called
-// on change, and also right after aaRefreshDropdown() so the text field
-// starts pre-filled with "all areas" the moment feeders/station are picked.
-function aaApplyDropdown(selectId, inputId){
-  const sel=$(selectId), inp=$(inputId);
-  if(!sel || !inp || sel.disabled) return;
-  inp.value = sel.value;
+// Writes the picker's current selection into the paired text input, joined
+// by commas — and, critically, clears the field to '' when the selection is
+// empty (e.g. every chip deselected, or the picker was hidden because the
+// newly-selected feeder/station has no areas configured). The previous
+// dropdown-based version never cleared the field in that case, which is the
+// bug this replaces.
+function aaApplyDropdown(pickerVarName, inputId){
+  const picker = {tripSitePicker, sitePicker, outageSitePicker}[pickerVarName];
+  const inp=$(inputId);
+  if(!inp) return;
+  inp.value = picker ? picker.getValues().join(', ') : '';
   autoBuild();
 }
 // Called from onFeederChange() (Trip/Shutdown share the same feeder picker)
@@ -5494,16 +5573,16 @@ function aaApplyDropdown(selectId, inputId){
 function aaSyncTripShutdownDropdown(){
   const feeders = feederPicker.getValues();
   const areas = aaAreasForFeeders(feeders);
-  aaRefreshDropdown('tripSiteDropdown', areas);
-  aaRefreshDropdown('siteDropdown', areas);
-  aaApplyDropdown('tripSiteDropdown','tripSite');
-  aaApplyDropdown('siteDropdown','site');
+  aaRefreshPicker(tripSitePicker, 'tripSitePicker', areas);
+  aaRefreshPicker(sitePicker,     'sitePicker',     areas);
+  aaApplyDropdown('tripSitePicker','tripSite');
+  aaApplyDropdown('sitePicker','site');
 }
 function aaSyncOutageDropdown(){
   const st = $('station')?$('station').value:'';
   const areas = st ? aaAreasForStation(st) : [];
-  aaRefreshDropdown('outageSiteDropdown', areas);
-  aaApplyDropdown('outageSiteDropdown','outageSite');
+  aaRefreshPicker(outageSitePicker, 'outageSitePicker', areas);
+  aaApplyDropdown('outageSitePicker','outageSite');
 }
 
 function renderStationsTable(){
@@ -5892,6 +5971,11 @@ function dtOnStatusChange(feeder, newStatus, timeHM){
       open.end   = endIso;
       open.endHM = dtHMFromIso(endIso);
       open.durationMin = Math.max(0, Math.round((new Date(open.end)-new Date(open.start))/60000));
+      // This is a REAL close (a genuine Charged/Restored/type-change status
+      // change actually happened) — lock it so no later dedup/merge pass can
+      // ever silently overwrite this finalized start/end/duration, even if a
+      // subsequent outage on the same feeder happens to start close in time.
+      open.locked = true;
       dtMarkDirty(open.id);
       closedEnd = endIso;
     }
@@ -5986,7 +6070,11 @@ function dtSendTime(){
   const m=/^(\d{1,2}):(\d{2})$/.exec(dtSendTimeStr());
   return m?{h:+m[1],mi:+m[2]}:{h:10,mi:0};
 }
-function dtAutoEnabled(){ return localStorage.getItem('sms2_dt_auto_enabled')!=='0'; }
+// Whether the daily downtime report sends automatically. Cloud-synced and
+// OFF by default — only an operator who knows the Settings password can turn
+// this on (see dailyReportAutoRequestUnlock), and the setting then applies
+// to every device, not just the one that enabled it.
+function dtAutoEnabled(){ return DAILY_REPORT_AUTO_ENABLED===true; }
 
 function dtDateStrOf(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -6160,7 +6248,7 @@ async function dtSyncPush(){
   const rows=[...dtDirty].map(id=>DT_EVENTS.find(e=>e.id===id)).filter(Boolean).map(e=>({
     id:e.id, station:e.station||'', feeder:e.feeder||'', type:e.type||'',
     start_ts:e.start, end_ts:e.end||null, duration_min:(e.durationMin==null?null:e.durationMin),
-    start_hm:e.startHM||'', end_hm:e.endHM||'', deleted:!!e.deleted,
+    start_hm:e.startHM||'', end_hm:e.endHM||'', deleted:!!e.deleted, locked:!!e.locked,
     updated_at:new Date().toISOString()
   }));
   if(rows.length){
@@ -6189,7 +6277,7 @@ async function dtSyncPull(){
       start:r.start_ts, startHM:r.start_hm||dtHMFromIso(r.start_ts),
       end:r.end_ts||null, endHM:r.end_hm||(r.end_ts?dtHMFromIso(r.end_ts):''),
       durationMin:(r.duration_min==null?null:r.duration_min),
-      deleted:!!r.deleted, assumed:false
+      deleted:!!r.deleted, assumed:false, locked:!!r.locked
     };
     if(!local){ if(!remote.deleted){ DT_EVENTS.push(remote); changed++; } }
     else if(local.start!==remote.start || local.end!==remote.end || !!local.deleted!==remote.deleted){
@@ -6223,9 +6311,23 @@ function dtDedupeOpenEvents(){
       if(!nxt) break;
       const curStart=new Date(cur.start).getTime();
       const nxtStart=new Date(nxt.start).getTime();
+      // A LOCKED event (genuinely closed via a real status change — see
+      // dtOnStatusChange) is a finalized outage/charged pair and must never
+      // be merged into, overwritten by, or used to swallow a later event,
+      // no matter how close their timestamps land. Only unlocked events
+      // (still-open, or closed via dtReconcileOpenEvents' guess) are
+      // eligible for this cleanup.
+      if(cur.locked){ continue; }
       // Two starts within 3 minutes with no meaningful gap = the same outage
       // recorded twice → merge: keep the earlier, drop the later (tombstone).
       if(Math.abs(nxtStart-curStart) <= 3*60*1000 && (!cur.end || new Date(cur.end).getTime()>=nxtStart)){
+        if(nxt.locked){
+          // The LATER one is the real, finalized record — keep it and
+          // tombstone the earlier (unlocked/duplicate) one instead.
+          nxt._absorbedFrom = cur.id;
+          cur.deleted=true; dtMarkDirty(cur.id); dtMarkDirty(nxt.id); changed++;
+          list.splice(i,1); i--; continue;
+        }
         // carry the later end if it is more complete
         if(nxt.end && (!cur.end || new Date(nxt.end)>new Date(cur.end))){
           cur.end=nxt.end; cur.endHM=nxt.endHM;
@@ -6373,6 +6475,7 @@ async function dtImportHistory(silent){
 function dtRenderSummary(){
   const chips=$('dtSummaryChips'), wrap=$('dtDetailWrap');
   if(!chips||!wrap) return;
+  const tgl=$('dtAutoTgl'); if(tgl) tgl.checked=dtAutoEnabled();
   const date=dtSelectedDate();
   const rng=dtRangeFor(dtPeriod(), date);
   const a=dtAggregateRange(rng.startMs, rng.endMs);
@@ -6442,6 +6545,12 @@ function dtRenderSummary(){
         +(ev.end?'':' <span style="color:#d97706;font-weight:700;font-size:10px">ongoing</span>')
       : (ev.end?`<span style="font-size:9px;color:var(--dim2)">${esc(ed.slice(5))}</span> <span class="log-ts">${esc(ev.endHM)}</span>`:'<span style="color:#d97706;font-weight:700">ongoing</span>');
     const warnTag=ev.assumed?` <span title="End time was assumed during history import — please verify" style="cursor:help">⚠</span>`:'';
+    const syncState = dtLogSyncState(ev);
+    const syncTag = syncState==='syncing'
+      ? ` <span title="यो घटनाको Log एन्ट्री अझै यो डिभाइसमा आइपुगेको छैन — केही सेकेन्डमा आफै देखिनेछ (Sync gap)." style="cursor:help;font-size:9px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:1px 5px;color:#1d4ed8;font-weight:700">⏳ syncing</span>`
+      : syncState==='stale'
+      ? ` <span title="यस घटनासँग मिल्ने Log एन्ट्री फेला परेन। सामान्यतया केही सेकेन्डमा सिंक हुन्छ — यदि धेरै बेर देखिइरहेको छ भने, नेटवर्क/Supabase जाँच्नुहोस्।" style="cursor:help;font-size:9px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:1px 5px;color:#b91c1c;font-weight:700">⚠ Log not found</span>`
+      : '';
     const grpN=DT_EVENTS.filter(e=>!e.deleted && e.type===ev.type && e.station===ev.station && String(e.start).slice(0,16)===String(ev.start).slice(0,16)).length;
     const grpTag=grpN>1?` <span title="${grpN} feeders share this ${esc(DT_TYPE_LABEL[ev.type]||ev.type)} event — corrections can apply to all" style="font-size:9px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:1px 5px;color:#4338ca;font-weight:700">×${grpN}</span>`:'';
     // Duration shown is CLIPPED to this report's window when the event
@@ -6454,7 +6563,7 @@ function dtRenderSummary(){
       ? ` <span title="This outage's FULL duration is ${fmtDur(rawMin)} (${esc(ev.startHM)}–${ev.end?esc(ev.endHM):'ongoing'}). Only ${fmtDur(ev.dayMin)} of it falls inside this report's window — the rest was already counted in a previous report." style="cursor:help;font-size:9px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:1px 5px;color:#c2410c;font-weight:700">✂ clipped</span>`
       : '';
     h+=`<tr><td style="font-size:11px;font-weight:600">${esc(ev.station)}</td><td style="font-size:11px">${esc(ev.feeder)}</td>`+
-       `<td style="font-size:11px">${esc(DT_TYPE_LABEL[ev.type]||ev.type)}${grpTag}</td>`+
+       `<td style="font-size:11px">${esc(DT_TYPE_LABEL[ev.type]||ev.type)}${grpTag}${syncTag}</td>`+
        `<td>${startCell}</td><td>${endCell}${warnTag}</td>`+
        `<td style="font-weight:600">${fmtDur(ev.dayMin)}${clipTag}</td>`+
        (canEdit?`<td><button onclick="dtDeleteEvent('${esc(ev.id)}')" title="Delete this entry" style="background:none;border:none;cursor:pointer;font-size:14px;opacity:.65">🗑</button></td>`:'')+
@@ -6531,28 +6640,41 @@ function dtLockReportEditing(){ dtReportUnlocked = false; }
 // Charged several times in one day — the FEEDER + TYPE alone isn't enough to
 // find "the" matching Log row, so we always pick the entry CLOSEST in time to
 // the value being typed, never just the first/last one for that feeder.
+// (DT_LOG_START_LABELS / DT_LOG_END_LABELS are declared near the top of the
+// script, alongside DUTY_LOCKED — dtRenderSummary, defined earlier in the
+// file, references them on every render via dtLogSyncState.)
 
-// DT event type → Log 'condition' string(s) for the START (failure) side.
-const DT_LOG_START_LABELS = {
-  'trip'           : ['Trip'],
-  'shutdown'       : ['Shutdown'],
-  'system-gone'    : ['System Gone'],
-  'incomer-failed' : ['11KV Incomer Failed'],
-  'kv33'           : ['33KV Incomer Failed']
-};
-// DT event type → Log 'condition' string(s) for the END (restore) side.
-const DT_LOG_END_LABELS = {
-  'trip'           : ['Charged'],
-  'shutdown'       : ['Charged'],
-  'system-gone'    : ['System Restored'],
-  'incomer-failed' : ['11KV Incomer Restored'],
-  'kv33'           : ['33KV Incomer Restored']
-};
 // Only manually-added entries (dtAddManualEvent, the "Add Missed Entry" form)
 // have no corresponding Log row by definition — everything else (live events
 // and history-imported events alike) was built from a real Log entry and can
 // be cross-checked against it.
 function dtHasLogTrail(ev){ return !ev.manual; }
+
+// ── Proactive "Log not synced yet" indicator ──────────────────────────
+// syncFromCloud() pulls feeder_status and message_log as two SEPARATE
+// network calls. If the feeder_status pull succeeds but the message_log
+// pull fails on that same cycle (a network blip, a timeout — anything), a
+// brand-new report entry can appear here before its matching Log row has
+// arrived on THIS device. It's not data loss — the next successful sync
+// (every 15s) always backfills it — but showing nothing during that window
+// looks exactly like the "shows in report, missing from Log" bug this is
+// meant to rule out. So: flag it, and say so honestly.
+// Returns 'ok' | 'syncing' | 'stale' :
+//   'ok'      — a matching Log entry was found (normal case, no tag shown)
+//   'syncing' — no match yet, but the event is recent enough that this is
+//               almost certainly just an in-flight sync — expected to
+//               resolve on the next poll cycle
+//   'stale'   — no match, and the event is old enough that it's unlikely to
+//               still be "just syncing" — worth a closer look
+// (DT_SYNC_GRACE_MS is declared near the top of the script alongside the
+// DT_LOG label maps, for the same TDZ-safety reason.)
+function dtLogSyncState(ev){
+  if(!dtHasLogTrail(ev)) return 'ok';   // manual entries have nothing to check against
+  const match = dtClosestLogMatch(ev.feeder, ev.type, 'start', ev.start);
+  if(match && match.diffMin<=2) return 'ok';
+  const ageMs = Date.now() - new Date(ev.start).getTime();
+  return ageMs <= DT_SYNC_GRACE_MS ? 'syncing' : 'stale';
+}
 
 // Find the Log entry for this feeder+edge CLOSEST in time to candidateIso.
 // Returns {entry, diffMin} or null if no matching-type entry exists at all
@@ -7279,10 +7401,43 @@ async function dtAutoSendCheck(){
 
 /* ── Auto-send toggle + time controls ── */
 function dtAutoToggleChanged(){
-  const on=$('dtAutoTgl') && $('dtAutoTgl').checked;
-  try{ localStorage.setItem('sms2_dt_auto_enabled', on?'1':'0'); }catch(e){}
-  toast(on?'✅ Automatic daily report ON — sends every day at '+dtSendTimeStr()
-         :'⏸ Automatic daily report OFF — use 📤 Send Report Now manually',3500);
+  const tgl=$('dtAutoTgl');
+  const wantsOn = tgl && tgl.checked;
+  if(!wantsOn){
+    // Turning OFF is always allowed with no password — disabling automation
+    // is never the risky direction.
+    DAILY_REPORT_AUTO_ENABLED = false;
+    sbPushDailyReportAutoEnabled(false);
+    toast('⏸ Automatic daily report OFF — use 📤 Send Report Now manually',3500);
+    return;
+  }
+  // Turning ON requires the Settings password. Snap the checkbox back to
+  // unchecked immediately — it only becomes checked once the password is
+  // confirmed (dailyReportAutoUnlockConfirmed), never optimistically.
+  if(tgl) tgl.checked=false;
+  dailyReportAutoRequestUnlock();
+}
+// Opens the shared password modal, tagged so checkPw() enables auto-send on
+// success instead of opening Settings. Mirrors dtRequestUnlock/duty unlock.
+function dailyReportAutoRequestUnlock(){
+  if(typeof monitorMode!=='undefined' && monitorMode){ toast('Monitoring access is view-only'); return; }
+  if(!settingsPwExists){ toast('पहिले ⚙ Settings बाट Settings password सेट गर्नुहोस्।', 3500); return; }
+  pwModalPurpose='dailyReportAuto';
+  const overlay=$('pwOverlay');
+  overlay.style.display='flex';
+  $('pwInput').value=''; $('pwError').textContent='';
+  const nr=$('pwFirstRunNotice'), cr=$('pwConfirmRow');
+  if(nr) nr.style.display='none';
+  if(cr) cr.style.display='none';
+  $('pwModalTitle').textContent='Enable Automatic Daily Report';
+  setTimeout(()=>$('pwInput').focus(),80);
+}
+// Called by checkPw() only after the Settings password has verified.
+function dailyReportAutoUnlockConfirmed(){
+  DAILY_REPORT_AUTO_ENABLED = true;
+  sbPushDailyReportAutoEnabled(true);
+  const tgl=$('dtAutoTgl'); if(tgl) tgl.checked=true;
+  toast('✅ Automatic daily report ON — sends every day at '+dtSendTimeStr()+' (applies to all devices)',3500);
 }
 function dtAutoTimeChanged(){
   const el=$('dtAutoTime'); if(!el) return;
@@ -7927,7 +8082,15 @@ async function onFeederStatusAction(feederName,sel){
       return;
     }
     const enabled = DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
-    if(!enabled.length){ toast(`${typeLabel} noted — no receivers configured`); return; }
+    if(!enabled.length){
+      // No receivers configured — nothing to SEND, but the status change is
+      // real and must still appear in the Log (this is exactly the same
+      // "state updates, Log silently skipped" gap already fixed for the
+      // System Gone / Incomer Failed "already sent" cases).
+      recordLogDirect({type:typeLabel, recipients:'—', status:'noted — no receivers configured', station, feeder:feederName, time:t, msg, reason});
+      toast(`${typeLabel} noted — no receivers configured`);
+      return;
+    }
     toast(`Sending ${typeLabel} notice for ${feederName}…`, 2000);
     const wrap=$('sendStatusWrap');
     if(wrap){
@@ -8029,7 +8192,11 @@ async function dispatchChargedMsg(feederName,msg){
     return;
   }
   const enabled=DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
-  if(!enabled.length){toast('Charged noted — no receivers configured');return;}
+  if(!enabled.length){
+    recordLogDirect({type:'Charged', recipients:'—', status:'noted — no receivers configured', station, feeder:feederName, time:t, msg});
+    toast('Charged noted — no receivers configured');
+    return;
+  }
   toast(`Sending Charged notice for ${feederName}…`,2000);
   const wrap=$('sendStatusWrap');
   wrap.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--dim2);margin:6px 0 3px;text-transform:uppercase;letter-spacing:.06em">Charged Notice…</div>`;
@@ -8723,7 +8890,14 @@ async function dispatchBulkMsg(msg, label, station){
   }
 
   const enabled = DATA.receivers.filter(r => r.enabled && r.contact.trim());
-  if(!enabled.length){ toast(`${label} noted — no receivers configured`); return; }
+  if(!enabled.length){
+    recordLogDirect({
+      type: label, recipients:'—', status:'noted — no receivers configured',
+      station, feeder:'All Feeders', time:t, msg
+    });
+    toast(`${label} noted — no receivers configured`);
+    return;
+  }
 
   const wrap = $('sendStatusWrap');
   wrap.innerHTML = `<div style="font-size:11px;font-weight:600;color:var(--dim2);margin:6px 0 3px;text-transform:uppercase;letter-spacing:.06em">${esc(label)} Notice…</div>`;
@@ -8847,8 +9021,11 @@ create table if not exists downtime_events (
   start_hm      text,
   end_hm        text,
   deleted       boolean default false,
+  locked        boolean default false,
   updated_at    timestamptz default now()
 );
+-- Safe to re-run: adds the column if this table already existed before this update.
+alter table downtime_events add column if not exists locked boolean default false;
 
 -- TABLE 6: Transformer Inspections (विग्रेको ट्रान्सफर्मर निरीक्षण फारम)
 -- Full form stored as JSONB so schema evolves without SQL migrations.
@@ -10786,7 +10963,14 @@ async function syncFromCloud(){
     });
     if(added){
       LOG.sort((a,b)=>new Date(b.date)-new Date(a.date));
-      if($('page-log').classList.contains('active')) renderLogPage();
+      if($('page-log').classList.contains('active')){
+        renderLogPage();
+        // New Log rows may be exactly what closes the gap behind a "⏳
+        // syncing" tag in the downtime report — re-render so it clears
+        // itself the moment the matching row actually arrives, instead of
+        // sitting there until some unrelated action happens to redraw it.
+        if(typeof dtRenderSummary==='function') dtRenderSummary();
+      }
       if(monitorMode) renderMonitorRecent();
       // 🔔 Alert tone + notification for messages sent from other devices —
       // fires once per poll even if several messages landed at once, and
