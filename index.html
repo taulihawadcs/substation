@@ -2487,14 +2487,14 @@ let DAILY_REPORT_AUTO_ENABLED = false;
 // the file than these were originally — now references them transitively via
 // dtLogSyncState on every render, not just on manual edit.
 const DT_LOG_START_LABELS = {   // the START (failure) side
-  'trip'           : ['Trip'],
+  'trip'           : ['Trip', 'Trip All'],
   'shutdown'       : ['Shutdown'],
   'system-gone'    : ['System Gone'],
   'incomer-failed' : ['11KV Incomer Failed'],
   'kv33'           : ['33KV Incomer Failed']
 };
 const DT_LOG_END_LABELS = {   // the END (restore) side
-  'trip'           : ['Charged'],
+  'trip'           : ['Charged', 'Restore All'],
   'shutdown'       : ['Charged'],
   'system-gone'    : ['System Restored'],
   'incomer-failed' : ['11KV Incomer Restored'],
@@ -2507,7 +2507,11 @@ const DT_SYNC_GRACE_MS = 45*1000;   // 3 poll cycles' worth of slack
 // Bulk/station-wide event types are logged ONCE per dispatch under
 // feeder:'All Feeders' (see dispatchBulkMsg), not under each individual
 // feeder's name — see dtClosestLogMatch() further down for why this matters.
-const DT_BULK_TYPES = new Set(['system-gone','incomer-failed','kv33']);
+// 'trip' is included because Trip All / Restore All ALSO dispatch this way
+// even though each affected feeder still gets its own DT_EVENTS entry with
+// type:'trip' — a plain single-feeder Trip still matches by exact feeder
+// name regardless (the two match conditions are OR'd, never exclusive).
+const DT_BULK_TYPES = new Set(['system-gone','incomer-failed','kv33','trip']);
 
 // ── Monitor "stay signed in" ──────────────────────────────────────────
 // Monitor (view-only) staff shouldn't have to retype the password every
@@ -4080,7 +4084,7 @@ function buildOutagePreviewMsg(){
     if(!targets.length) return '⚠ कुनै सबस्टेशन छानिएको छैन — कम्तीमा एउटा ✔ गर्नुहोस्।';
     const allStations=[...new Set(DATA.feeders.map(f=>f.station))];
     const isAll = targets.length===allStations.length && allStations.every(s=>targets.includes(s));
-    return (isAll ? `System Gone at ${time}` : `System Gone of ${targets.join(', ')} at ${time}`) + etaSuffix + snSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+    return (isAll ? `System Gone at ${time}` : `System of ${targets.join(', ')} Gone at ${time}`) + etaSuffix + snSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   }
   if(cond==='incomer-failed') return `11 KV Incomer of ${st} Failed at ${time}` + etaSuffix + snSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   if(cond==='kv33-failed')    return `33 KV Incomer of ${st} Failed at ${time}` + etaSuffix + snSuffix + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
@@ -6696,9 +6700,20 @@ function dtClosestLogMatch(feeder, type, which, candidateIso, station){
   if(!labels) return null;
   const target = new Date(candidateIso).getTime();
   const isBulk = DT_BULK_TYPES.has(type);
+  // A bulk dispatch across SEVERAL (but not all) stations logs one row with
+  // station as a comma-joined list, e.g. "Station A, Station B" — while each
+  // DT_EVENTS entry carries just its own single home station. So this can't
+  // be an exact string match; check whether the event's station appears
+  // anywhere in that list instead. "All Substations" (used when every
+  // station was included) always counts as covering any station.
+  function stationCovers(logStation){
+    if(!station || !logStation) return true;   // nothing to check against — don't exclude on this basis
+    if(logStation==='All Substations') return true;
+    return logStation.split(',').map(s=>s.trim()).includes(station);
+  }
   let best=null, bestDiff=Infinity;
   LOG.forEach(r=>{
-    const feederMatches = r.feeder===feeder || (isBulk && r.feeder==='All Feeders' && (!station || r.station===station));
+    const feederMatches = r.feeder===feeder || (isBulk && r.feeder==='All Feeders' && stationCovers(r.station));
     if(!feederMatches) return;
     if(!labels.includes(r.condition)) return;
     const rowDate = r.date ? new Date(r.date) : null;
@@ -8080,9 +8095,52 @@ async function onFeederStatusAction(feederName,sel){
     }
     recentDispatched[_ck]=_now;
 
-    const msg = action==='trip'
-      ? `${feederName} of ${station} is auto tripped at ${t} due to ${reason}`
-      : `${feederName} of ${station} is under shutdown since ${t}. Reason: ${reason}.`;
+    const sep = '━━━━━━━━━━━━━━━━━━━━';
+    const footer = `${currentDcs().name || currentDcs().shortName || 'DCS'}, NEA`;
+    const tEN = t;
+    const tNE = t + ' बजे';
+    let msg;
+    if(action==='trip'){
+      if(typeof currentLang!=='undefined' && currentLang==='ne'){
+        msg = `⚡ FEEDER TRIP ALERT\n${sep}\n`
+            + fmtLine('Substation', station)
+            + fmtLine('Feeder    ', feederName)
+            + fmtLine('Reason    ', reason)
+            + fmtLine('Time      ', tNE)
+            + `${sep}\n`
+            + `माथि उल्लेखित फिडर ट्रिप भई विद्युत आपूर्ति अवरुद्ध भएको व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। असुविधाका लागि क्षमाप्रार्थी छौं।`
+            + `\n${footer}\n_(auto generated msg)_`;
+      } else {
+        msg = `⚡ FEEDER TRIP ALERT\n${sep}\n`
+            + fmtLine('Substation', station)
+            + fmtLine('Feeder    ', feederName)
+            + fmtLine('Reason    ', reason)
+            + fmtLine('Time      ', tEN)
+            + `${sep}\n`
+            + `The above feeder has tripped and power supply is disrupted. Restoration work has been initiated immediately. We apologize for the inconvenience.`
+            + `\n${footer}\n_(auto generated msg)_`;
+      }
+    } else {
+      if(typeof currentLang!=='undefined' && currentLang==='ne'){
+        msg = `🟥 POWER SHUTDOWN NOTICE\n${sep}\n`
+            + fmtLine('Substation', station)
+            + fmtLine('Feeder    ', feederName)
+            + fmtLine('Reason    ', reason)
+            + fmtLine('Time      ', tNE)
+            + `${sep}\n`
+            + `उक्त फिडर अन्तर्गत मर्मत कार्यका लागि केही समय विद्युत आपूर्ति बन्द हुने व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। असुविधाका लागि क्षमाप्रार्थी छौं।`
+            + `\n\n${footer}\n_(auto generated msg)_`;
+      } else {
+        msg = `🟥 POWER SHUTDOWN NOTICE\n${sep}\n`
+            + fmtLine('Substation', station)
+            + fmtLine('Feeder    ', feederName)
+            + fmtLine('Reason    ', reason)
+            + fmtLine('Time      ', tEN)
+            + `${sep}\n`
+            + `The above feeder is under shutdown for maintenance work. Power supply will be restored as soon as possible. We apologize for the inconvenience.`
+            + `\n\n${footer}\n_(auto generated msg)_`;
+      }
+    }
 
     feederStatusMap[feederName]={status:action,time:t};
     renderFeederStatus();
@@ -8093,6 +8151,7 @@ async function onFeederStatusAction(feederName,sel){
       toast('🔕 Receivers muted — logged but not sent. Unmute in Settings → Receivers.', 3500);
       const names = DATA.receivers.filter(r=>r.enabled).map(r=>r.name).join(', ') || 'None';
       recordLogDirect({type:typeLabel, recipients:names, status:'MUTED — not sent', station, feeder:feederName, time:t, msg, reason});
+      sbInsertLog(LOG[0]);   // must sync to every device's Log, not just this one
       return;
     }
     const enabled = DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
@@ -8102,6 +8161,7 @@ async function onFeederStatusAction(feederName,sel){
       // "state updates, Log silently skipped" gap already fixed for the
       // System Gone / Incomer Failed "already sent" cases).
       recordLogDirect({type:typeLabel, recipients:'—', status:'noted — no receivers configured', station, feeder:feederName, time:t, msg, reason});
+      sbInsertLog(LOG[0]);   // must sync to every device's Log, not just this one
       toast(`${typeLabel} noted — no receivers configured`);
       return;
     }
@@ -8116,13 +8176,28 @@ async function onFeederStatusAction(feederName,sel){
         statusDiv.appendChild(el);
       });
     }
+    // Log FIRST, before attempting to send — the status change already
+    // happened (feederStatusMap was written above), so the Log entry must
+    // exist regardless of whatever happens during the send loop below. If a
+    // future edge case (network glitch, a malformed receiver record, etc.)
+    // throws partway through sending, the event is still guaranteed to be
+    // in the Log — it just won't show the final recipient count.
+    recordLogDirect({type:typeLabel, recipients:enabled.map(r=>r.name).join(', '), status:'sending…', station, feeder:feederName, time:t, msg, reason});
+    const loggedRow = LOG[0];
     let ok=0;
-    for(const r of enabled){
-      const stEl=$(`fss_${r.id}`);
-      if(stEl){stEl.textContent='sending…';stEl.className='send-state st-s';}
-      if(await sendSilent(r,msg,stEl)) ok++;
+    try{
+      for(const r of enabled){
+        const stEl=$(`fss_${r.id}`);
+        if(stEl){stEl.textContent='sending…';stEl.className='send-state st-s';}
+        if(await sendSilent(r,msg,stEl)) ok++;
+      }
+    }catch(e){
+      console.error('Status-panel dispatch send loop failed:', e.message);
     }
-    recordLogDirect({type:typeLabel, recipients:enabled.map(r=>r.name).join(', '), status:ok+'/'+enabled.length+' sent', station, feeder:feederName, time:t, msg, reason});
+    // Update the already-guaranteed log row with the final result.
+    if(loggedRow) loggedRow.status = ok+'/'+enabled.length+' sent';
+    if($('page-log').classList.contains('active')) renderLogPage();
+    sbInsertLog(loggedRow||{type:typeLabel, recipients:enabled.map(r=>r.name).join(', '), status:ok+'/'+enabled.length+' sent', station, feeder:feederName, time:t, msg, reason});
     toast(`${typeLabel} notice sent: ${ok}/${enabled.length}`);
   }
 }
@@ -8203,11 +8278,13 @@ async function dispatchChargedMsg(feederName,msg){
       recipients: DATA.receivers.filter(r=>r.enabled).map(r=>r.name).join(', ') || 'None',
       status:'MUTED — not sent', station, feeder:feederName, time:t, msg
     });
+    sbInsertLog(LOG[0]);
     return;
   }
   const enabled=DATA.receivers.filter(r=>r.enabled&&r.contact.trim());
   if(!enabled.length){
     recordLogDirect({type:'Charged', recipients:'—', status:'noted — no receivers configured', station, feeder:feederName, time:t, msg});
+    sbInsertLog(LOG[0]);
     toast('Charged noted — no receivers configured');
     return;
   }
@@ -8362,7 +8439,7 @@ async function applySystemGone(t, stations){
   const etaSuffix = eta ? ` (Est. restore: ${eta})` : '';
   const msg = (isAll
     ? `System Gone at ${time}`
-    : `System Gone of ${targets.join(', ')} at ${time}`) + etaSuffix + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+    : `System of ${targets.join(', ')} Gone at ${time}`) + etaSuffix + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   const alreadyCloud = await cloudAlreadyInState(affected, 'system-gone');
   if(alreadyCloud){
     // Another device already sent the outbound notice — don't duplicate the
@@ -8900,6 +8977,7 @@ async function dispatchBulkMsg(msg, label, station){
       status: 'MUTED — not sent', station,
       feeder: 'All Feeders', time: t, msg
     });
+    sbInsertLog(LOG[0]);
     return;
   }
 
@@ -8909,6 +8987,7 @@ async function dispatchBulkMsg(msg, label, station){
       type: label, recipients:'—', status:'noted — no receivers configured',
       station, feeder:'All Feeders', time:t, msg
     });
+    sbInsertLog(LOG[0]);
     toast(`${label} noted — no receivers configured`);
     return;
   }
