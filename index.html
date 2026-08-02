@@ -2500,6 +2500,29 @@ const DT_LOG_END_LABELS = {   // the END (restore) side
   'incomer-failed' : ['11KV Incomer Restored'],
   'kv33'           : ['33KV Incomer Restored']
 };
+// Reverse of DT_LOG_START_LABELS — condition string → outage type, for
+// driving DT_EVENTS directly off the Log (see dtDriveFromLogEntry further
+// down). 'Trip All' maps to 'trip' since Trip-All-affected feeders still
+// track individually as type:'trip'.
+const DT_LOG_START_TYPE_OF = {
+  'Trip': 'trip', 'Trip All': 'trip',
+  'Shutdown': 'shutdown',
+  'System Gone': 'system-gone',
+  '11KV Incomer Failed': 'incomer-failed',
+  '33KV Incomer Failed': 'kv33'
+};
+// Close-side labels that are ambiguous between trip/shutdown ('Charged'
+// closes either) are resolved by checking which type is actually open for
+// that feeder at the time — see dtDriveFromLogEntry. These map a close
+// label to the SPECIFIC type it closes when unambiguous.
+const DT_LOG_END_TYPE_OF = {
+  'Restore All': 'trip',
+  'System Restored': 'system-gone',
+  '11KV Incomer Restored': 'incomer-failed',
+  '33KV Incomer Restored': 'kv33'
+  // 'Charged' deliberately omitted — ambiguous (trip OR shutdown), resolved
+  // by checking the feeder's currently-open event type instead.
+};
 // How stale a report entry can be with no matching Log row before it's
 // flagged 'stale' rather than the more benign 'syncing' — see
 // dtLogSyncState() further down.
@@ -5202,6 +5225,10 @@ function _pushToLog(entry){
     ...entry
   };
   LOG.unshift(row);
+  // The Log row is now the authoritative trigger for duration tracking —
+  // see dtDriveFromLogEntry for why this replaced the old feederStatusMap
+  // diff-only approach.
+  if(typeof dtDriveFromLogEntry==='function') dtDriveFromLogEntry(row);
   if($('page-log').classList.contains('active')) renderLogPage();
   // 🔔 Fire the same chime + browser notification for entries created on
   // THIS device too, not just ones pulled in from other devices via poll —
@@ -5955,6 +5982,26 @@ function dtIsoFromHM(hm){
 }
 function dtHMFromIso(iso){ const d=new Date(iso); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 
+// A Log row's TRUE event moment is its time label (HH:MM — the actual
+// confirmed/corrected time an outage or restore happened) anchored to its
+// calendar day — NOT row.date, which only records when the row itself was
+// written to the Log. These match for a normal immediate dispatch, but
+// diverge whenever an operator corrects the time via the "कति बजे भयो?"
+// prompt. Every place that needs a Log row's real event time (matching,
+// reconciling, closing/opening duration events) should go through this
+// single helper rather than re-deriving it inline — that's exactly what let
+// this exact bug slip into dtClosestLogMatch and dtReconcileOpenEvents.
+function dtLogRowEventIso(row){
+  if(!row || !row.date || isNaN(new Date(row.date).getTime())) return null;
+  const hmMatch = row.time && /^(\d{1,2}):(\d{2})$/.exec(row.time);
+  if(hmMatch){
+    const d = new Date(row.date);
+    d.setHours(+hmMatch[1], +hmMatch[2], 0, 0);
+    return d.toISOString();
+  }
+  return new Date(row.date).toISOString();
+}
+
 // Called automatically (via the feederStatusMap Proxy below) on EVERY status
 // change, no matter where it originates: form dispatch, status panel dropdown,
 // Trip All, System Gone, Incomer Failed, restores, or cloud sync.
@@ -6017,6 +6064,89 @@ function dtOnStatusChange(feeder, newStatus, timeHM){
   }catch(e){ console.warn('Downtime track error:', e.message); }
 }
 
+// ── Drive DT_EVENTS directly from a real Log entry ──────────────────────
+// A Log row IS the authoritative record of "this happened, at this time" —
+// far more so than a feederStatusMap before/after diff, which only sees
+// whatever this device's local snapshot looked like a moment ago and can
+// miss transitions entirely (a restore-then-reoutage collapsed into one
+// sync write, a device that was briefly offline, etc.). Rather than build
+// duration off that diff and reconcile it against the Log afterward, this
+// opens/closes the duration event directly off the Log entry itself, the
+// moment it's recorded — locally or pulled in from another device. Called
+// from _pushToLog, the single choke point every Log row passes through.
+function dtDriveFromLogEntry(entry){
+  try{
+    if(!entry || !entry.condition) return;
+    const rawFeeder = entry.feeder || '';
+    const rawStation = entry.station || '';
+    const whenIso = dtLogRowEventIso(entry) || new Date().toISOString();
+    const timeHM = entry.time || dtHMFromIso(whenIso);
+
+    // Resolve which actual feeders this Log row covers.
+    let feederNames;
+    if(rawFeeder==='All Feeders'){
+      // Bulk dispatch — every feeder belonging to the station(s) named.
+      const stationNames = rawStation==='All Substations'
+        ? [...new Set(DATA.feeders.map(f=>f.station))]
+        : rawStation.split(',').map(s=>s.trim()).filter(Boolean);
+      feederNames = DATA.feeders.filter(f=>stationNames.includes(f.station)).map(f=>f.name);
+    } else {
+      feederNames = rawFeeder.split(',').map(s=>s.trim()).filter(Boolean);
+    }
+    if(!feederNames.length) return;
+
+    let changed=false;
+
+    const startType = DT_LOG_START_TYPE_OF[entry.condition];
+    if(startType){
+      feederNames.forEach(feeder=>{
+        const station = dtStationOf(feeder) || rawStation.split(',')[0]?.trim() || '';
+        // If something is already open for this feeder of a DIFFERENT type,
+        // close it here first — a real transition genuinely happened (e.g.
+        // trip → shutdown), same as dtOnStatusChange's original behaviour.
+        const openEv = dtOpenEventFor(feeder);
+        if(openEv && openEv.type!==startType){
+          openEv.end=whenIso; openEv.endHM=timeHM;
+          openEv.durationMin=Math.max(0,Math.round((new Date(openEv.end)-new Date(openEv.start))/60000));
+          openEv.assumed=false; openEv.locked=true;
+          dtMarkDirty(openEv.id); changed=true;
+        }
+        // Don't open a duplicate if one of this exact type is already open.
+        if(dtOpenEventFor(feeder)?.type===startType) return;
+        const id=dtEventId(feeder, startType, whenIso);
+        if(!DT_EVENTS.find(e=>e.id===id)){
+          DT_EVENTS.push({
+            id, v2:true, station, feeder, type:startType,
+            start:whenIso, startHM:timeHM,
+            end:null, endHM:'', durationMin:null, locked:false
+          });
+          dtMarkDirty(id); changed=true;
+        }
+      });
+    } else {
+      // Close side. 'Charged' is ambiguous between trip/shutdown — resolve
+      // per feeder by checking which type is actually open right now.
+      feederNames.forEach(feeder=>{
+        const openEv = dtOpenEventFor(feeder);
+        if(!openEv) return;   // nothing open for this feeder — nothing to close
+        const explicitType = DT_LOG_END_TYPE_OF[entry.condition];
+        if(explicitType && openEv.type!==explicitType) return;   // this Log row doesn't close THIS type
+        if(!explicitType && entry.condition!=='Charged') return;  // unrecognized close label — leave alone
+        if(new Date(whenIso) < new Date(openEv.start)) return;    // guard against clock skew
+        openEv.end=whenIso; openEv.endHM=timeHM;
+        openEv.durationMin=Math.max(0,Math.round((new Date(openEv.end)-new Date(openEv.start))/60000));
+        openEv.assumed=false; openEv.locked=true;
+        dtMarkDirty(openEv.id); changed=true;
+      });
+    }
+
+    if(changed){
+      dtPrune(); dtSave();
+      const pg=$('page-log'); if(pg && pg.classList.contains('active')) dtRenderSummary();
+    }
+  }catch(e){ console.warn('dtDriveFromLogEntry error:', e.message); }
+}
+
 // Fresh page loads / cloud polls hydrate feederStatusMap through the SAME
 // Proxy used for live status changes (see feederStatusMap below). But on a
 // brand-new session the Proxy has no real "previous" value for a feeder —
@@ -6040,12 +6170,87 @@ function dtReconcileOpenEvents(){
   DT_EVENTS.forEach(ev=>{
     if(ev.deleted || ev.end) return;                    // only still-open events
     const live=(feederStatusMap[ev.feeder]||{}).status||'normal';
-    if(live===ev.type) return;                           // still genuinely ongoing
-    const endIso=new Date().toISOString();
+
+    // ── Split a missed restore-then-reoutage cycle ──────────────────────
+    // If the feeder's CURRENT live status is the SAME outage type as this
+    // still-open event, the code above would normally do nothing (looks
+    // "still genuinely ongoing"). But if this device's Proxy diff never
+    // observed an intermediate close (a restore-then-reoutage collapsed
+    // into one cloud write — see the Proxy 'set' trap comment above), this
+    // "open" event may actually be stale: the Log may show a restore that
+    // happened AFTER this event started, meaning the real story is
+    // "closed, then a brand-new outage began" — not "still the same one".
+    // Check the Log directly rather than trusting the live/type match.
+    if(live===ev.type){
+      const restoreMatch = (typeof dtClosestLogMatch==='function')
+        ? dtClosestLogMatch(ev.feeder, ev.type, 'end', new Date().toISOString(), ev.station)
+        : null;
+      const restoreEventIso = restoreMatch && restoreMatch.entry ? dtLogRowEventIso(restoreMatch.entry) : null;
+      if(restoreEventIso){
+        const restoreTime = new Date(restoreEventIso);
+        if(restoreTime > new Date(ev.start)){
+          // A real restore genuinely happened after this event opened —
+          // close THIS event at that restore time (Log-backed, not a
+          // guess), then open a fresh event for the outage that's
+          // currently live, using the Log's own start time if a matching
+          // "failed/gone" entry after the restore can be found.
+          const restoreIso = restoreTime.toISOString();
+          ev.end = restoreIso; ev.endHM = dtHMFromIso(restoreIso);
+          ev.durationMin = Math.max(0, Math.round((new Date(ev.end)-new Date(ev.start))/60000));
+          ev.assumed = false; ev.locked = true;
+          dtMarkDirty(ev.id);
+          const newStartMatch = dtClosestLogMatch(ev.feeder, ev.type, 'start', new Date().toISOString(), ev.station);
+          const newStartEventIso = newStartMatch && newStartMatch.entry ? dtLogRowEventIso(newStartMatch.entry) : null;
+          let newStartIso = new Date().toISOString();
+          if(newStartEventIso){
+            const cand = new Date(newStartEventIso);
+            if(cand > restoreTime) newStartIso = cand.toISOString();
+          }
+          const newId = dtEventId(ev.feeder, ev.type, newStartIso);
+          if(!DT_EVENTS.find(e=>e.id===newId)){
+            DT_EVENTS.push({
+              id:newId, v2:true, station:ev.station, feeder:ev.feeder, type:ev.type,
+              start:newStartIso, startHM:dtHMFromIso(newStartIso),
+              end:null, endHM:'', durationMin:null, locked:false
+            });
+            dtMarkDirty(newId);
+          }
+          changed=true;
+        }
+      }
+      return;   // either split above, or still genuinely the same ongoing outage
+    }
+
+    // Try to find the REAL close time from the Log first — it may already
+    // be sitting there even though feederStatusMap's before/after diff
+    // didn't catch it this cycle (e.g. this device's feederStatusMap already
+    // matched the cloud's reported status by the time this runs, so the
+    // proper dtCloseTimeOverride path in syncFromCloud never fired for it).
+    // Falling back to "now" here is what produced end times hours later
+    // than the real logged Charged/Restored time — a genuine, Log-backed
+    // time is always better than that guess when one is available.
+    const logMatch = (typeof dtClosestLogMatch==='function')
+      ? dtClosestLogMatch(ev.feeder, ev.type, 'end', new Date().toISOString(), ev.station)
+      : null;
+    let endIso, isAssumed;
+    const logEventIso = logMatch && logMatch.entry ? dtLogRowEventIso(logMatch.entry) : null;
+    if(logEventIso){
+      // Only trust it if it's genuinely after this event's start — a stale
+      // Log row from a PREVIOUS cycle on this same feeder must not be reused.
+      if(new Date(logEventIso) >= new Date(ev.start)){
+        endIso = logEventIso;
+        isAssumed = false;   // this is the real logged time, not a guess
+      }
+    }
+    if(!endIso){
+      endIso = new Date().toISOString();
+      isAssumed = true;   // genuinely no Log entry found — this really is a guess
+    }
     if(new Date(endIso) < new Date(ev.start)) return;     // guard against clock skew
     ev.end=endIso; ev.endHM=dtHMFromIso(endIso);
     ev.durationMin=Math.max(0,Math.round((new Date(ev.end)-new Date(ev.start))/60000));
-    ev.assumed=true;   // end time is a guess — real restore time was missed; editable in Log
+    ev.assumed=isAssumed;   // only flagged ⚠ when it's genuinely a guess now
+    ev.locked=!isAssumed;   // a Log-backed close is just as final as a live one
     dtMarkDirty(ev.id);
     changed=true;
   });
@@ -6249,6 +6454,13 @@ function dtAggregate(dateStr){
    propagate as tombstones (deleted=true).
    ============================================================ */
 var dtLastPull = localStorage.getItem('sms2_dt_last_pull') || '1970-01-01T00:00:00Z';
+// Highest message_log row id this device has ever pulled. Used instead of
+// "fetch the most recent 200 rows" — a global top-N fetch silently starves
+// out any quieter substation once a busier one's traffic fills that window,
+// since the cap applies across ALL stations combined, not per station. A
+// fetch of "everything newer than the last id I've seen" has no such limit
+// and can never leave a station permanently behind.
+var msgLogLastId = parseInt(localStorage.getItem('sms2_msglog_last_id')||'0', 10) || 0;
 var dtSyncBusy=false;
 
 async function dtSyncPush(){
@@ -6558,6 +6770,8 @@ function dtRenderSummary(){
       ? ` <span title="यो घटनाको Log एन्ट्री अझै यो डिभाइसमा आइपुगेको छैन — केही सेकेन्डमा आफै देखिनेछ (Sync gap)." style="cursor:help;font-size:9px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:1px 5px;color:#1d4ed8;font-weight:700">⏳ syncing</span>`
       : syncState==='stale'
       ? ` <span title="यस घटनासँग मिल्ने Log एन्ट्री फेला परेन। सामान्यतया केही सेकेन्डमा सिंक हुन्छ — यदि धेरै बेर देखिइरहेको छ भने, नेटवर्क/Supabase जाँच्नुहोस्।" style="cursor:help;font-size:9px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:1px 5px;color:#b91c1c;font-weight:700">⚠ Log not found</span>`
+      : syncState==='mismatch'
+      ? ` <span title="यो घटनाको समय Log मा रेकर्ड भएको समयसँग मिलेन — Start/End थिच्नुहोस् र सच्याउनुहोस्।" style="cursor:help;font-size:9px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:1px 5px;color:#92400e;font-weight:700">⚠ Log time मिलेन</span>`
       : '';
     const grpN=DT_EVENTS.filter(e=>!e.deleted && e.type===ev.type && e.station===ev.station && String(e.start).slice(0,16)===String(ev.start).slice(0,16)).length;
     const grpTag=grpN>1?` <span title="${grpN} feeders share this ${esc(DT_TYPE_LABEL[ev.type]||ev.type)} event — corrections can apply to all" style="font-size:9px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:1px 5px;color:#4338ca;font-weight:700">×${grpN}</span>`:'';
@@ -6678,21 +6892,42 @@ function dtHasLogTrail(ev){ return !ev.manual; }
 // DT_LOG label maps, for the same TDZ-safety reason.)
 function dtLogSyncState(ev){
   if(!dtHasLogTrail(ev)) return 'ok';   // manual entries have nothing to check against
-  const match = dtClosestLogMatch(ev.feeder, ev.type, 'start', ev.start, ev.station);
-  if(match && match.diffMin<=2) return 'ok';
-  const ageMs = Date.now() - new Date(ev.start).getTime();
-  return ageMs <= DT_SYNC_GRACE_MS ? 'syncing' : 'stale';
+  const startMatch = dtClosestLogMatch(ev.feeder, ev.type, 'start', ev.start, ev.station);
+  if(!startMatch || startMatch.diffMin>2){
+    const ageMs = Date.now() - new Date(ev.start).getTime();
+    return ageMs <= DT_SYNC_GRACE_MS ? 'syncing' : 'stale';
+  }
+  // Start is fine — now check the END too, if this event is closed. A close
+  // that came from a guess (dtReconcileOpenEvents with no Log backing, or an
+  // old reconcile from before that function could look the real time up)
+  // can end up minutes or hours away from what the Log actually recorded —
+  // exactly the "report says 20:33, Log says 18:32" mismatch this catches.
+  if(ev.end){
+    const endMatch = dtClosestLogMatch(ev.feeder, ev.type, 'end', ev.end, ev.station);
+    if(!endMatch){
+      const ageMs = Date.now() - new Date(ev.end).getTime();
+      return ageMs <= DT_SYNC_GRACE_MS ? 'syncing' : 'stale';
+    }
+    if(endMatch.diffMin>2) return 'mismatch';
+  }
+  return 'ok';
 }
 
 // Find the Log entry for this feeder+edge CLOSEST in time to candidateIso.
 // Returns {entry, diffMin} or null if no matching-type entry exists at all
 // for this feeder anywhere in the log.
-// Bulk/station-wide event types are logged ONCE per dispatch, under
-// feeder:'All Feeders' (see dispatchBulkMsg) — not under each individual
-// feeder's name, even though DT_EVENTS correctly creates one entry PER
-// feeder for the downtime report. Without accounting for this, every
-// feeder in a System Gone / Incomer Failed / 33 KV group would wrongly show
-// "Log not found", even though the event genuinely was logged.
+// Two different ways a Log row can cover several feeders at once, neither of
+// which is an exact single-name match:
+//  1. Bulk/station-wide types (System Gone, Incomer Failed, 33 KV, Trip All)
+//     log ONCE under feeder:'All Feeders' (see dispatchBulkMsg).
+//  2. The main form's Trip/Shutdown lets an operator select SEVERAL specific
+//     feeders in one dispatch — that logs ONCE with feeder as a comma-joined
+//     list, e.g. "Feeder A, Feeder B, Feeder C" (see getFields' feeder:
+//     feeders.join(', ')). This is NOT a bulk type and not 'All Feeders' —
+//     it needs its own membership check, checked for every type, since a
+//     multi-feeder selection is possible for a plain Trip/Shutdown too.
+// Without accounting for both, every feeder in either kind of group would
+// wrongly show "Log not found", even though the event genuinely was logged.
 // (DT_BULK_TYPES is declared near the top of the script alongside the other
 // DT_LOG constants, for the same TDZ-safety reason.)
 function dtClosestLogMatch(feeder, type, which, candidateIso, station){
@@ -6711,14 +6946,24 @@ function dtClosestLogMatch(feeder, type, which, candidateIso, station){
     if(logStation==='All Substations') return true;
     return logStation.split(',').map(s=>s.trim()).includes(station);
   }
+  // A Log row's feeder field covers this feeder if it's an exact match, OR
+  // the feeder appears as one member of a comma-joined multi-feeder list
+  // (main form's multi-select Trip/Shutdown), OR — for bulk types — the row
+  // says 'All Feeders' and the station lines up.
+  function feederCovers(logFeeder, logStation){
+    if(!logFeeder) return false;
+    if(logFeeder===feeder) return true;
+    if(isBulk && logFeeder==='All Feeders' && stationCovers(logStation)) return true;
+    if(logFeeder.includes(',') && logFeeder.split(',').map(s=>s.trim()).includes(feeder)) return true;
+    return false;
+  }
   let best=null, bestDiff=Infinity;
   LOG.forEach(r=>{
-    const feederMatches = r.feeder===feeder || (isBulk && r.feeder==='All Feeders' && stationCovers(r.station));
-    if(!feederMatches) return;
+    if(!feederCovers(r.feeder, r.station)) return;
     if(!labels.includes(r.condition)) return;
-    const rowDate = r.date ? new Date(r.date) : null;
-    if(!rowDate || isNaN(rowDate.getTime())) return;
-    const diff = Math.abs(rowDate.getTime()-target);
+    const rowEventIso = dtLogRowEventIso(r);
+    if(!rowEventIso) return;
+    const diff = Math.abs(new Date(rowEventIso).getTime()-target);
     if(diff<bestDiff){ bestDiff=diff; best=r; }
   });
   if(!best) return null;
@@ -6756,6 +7001,32 @@ function dtVerifyAgainstLog(ev, which, candidateIso){
 }
 
 
+// Propagates a corrected start/end time back into the actual Log row(s)
+// that back this event — so if an operator corrects a forgotten outage's
+// Charged time later, the Log itself shows that corrected time too, not
+// just the downtime report. Finds the matching row via the same logic
+// dtClosestLogMatch already uses (exact feeder, 'All Feeders', or a
+// comma-joined multi-feeder list all resolve to the same underlying row).
+function dtUpdateLogRowTime(ev, which, newIso, originalIso){
+  // Search using the ORIGINAL time (what this event looked like before the
+  // correction) — searching by the NEW time could match the wrong Log row
+  // entirely for a large correction, or silently patch an unrelated nearby
+  // entry. Falls back to newIso only if no original value was captured.
+  const searchIso = originalIso || newIso;
+  const match = dtClosestLogMatch(ev.feeder, ev.type, which, searchIso, ev.station);
+  if(!match || !match.entry) return false;
+  const row = match.entry;
+  // Capture BEFORE mutating — sbUpdateLogRowTime's content-fallback match
+  // (used when the row has no cloud id yet) needs the ORIGINAL ts, which is
+  // what's still sitting in Supabase; the row itself only tracks when it
+  // was recorded, never touched here — only the actual event time changes.
+  const originalTs = row.ts;
+  row.time = dtHMFromIso(newIso);
+  if($('page-log').classList.contains('active')) renderLogPage();
+  if(typeof sbUpdateLogRowTime==='function') sbUpdateLogRowTime(row, originalTs);
+  return true;
+}
+
 // Edit start/end DATE+TIME of an event — any duration allowed. For group
 // outages (System Gone / Incomer Failed / 33 KV / Trip All) that created the
 // same event on many feeders (same type + same start minute), the operator is
@@ -6787,12 +7058,15 @@ function dtEditWhen(id, which){
     if(!iso){ toast('Start date/time अवैध छ'); dtRenderSummary(); return; }
     if(!dtVerifyAgainstLog(ev,'start',iso)){ dtRenderSummary(); return; }   // mandatory Log cross-check
     targets.forEach(e=>{
+      const originalStart = e.start;   // find the Log row using the OLD value — searching by
+                                        // the new one could match the wrong row entirely
       e.start=iso; e.startHM=(timeVal.length===4?'0':'')+timeVal;
       if(e.end){
         if(new Date(e.end)<new Date(iso)){ e.end=iso; e.endHM=e.startHM; }
         e.durationMin=Math.max(0,Math.round((new Date(e.end)-new Date(e.start))/60000));
       }
       e.assumed=false; dtMarkDirty(e.id);
+      dtUpdateLogRowTime(e,'start',iso,originalStart);   // corrected time must also show on the Log
     });
   } else {
     if(!timeVal){   // cleared time → ongoing again
@@ -6802,11 +7076,13 @@ function dtEditWhen(id, which){
       if(!iso){ toast('End date/time अवैध छ'); dtRenderSummary(); return; }
       if(!dtVerifyAgainstLog(ev,'end',iso)){ dtRenderSummary(); return; }   // mandatory Log cross-check
       targets.forEach(e=>{
+        const originalEnd = e.end;   // find the Log row using the OLD value
         let end=iso;
         if(new Date(end)<new Date(e.start)) end=e.start;   // duration never negative
         e.end=end; e.endHM=(timeVal.length===4?'0':'')+timeVal;
         e.durationMin=Math.max(0,Math.round((new Date(e.end)-new Date(e.start))/60000));
         e.assumed=false; dtMarkDirty(e.id);
+        dtUpdateLogRowTime(e,'end',end,originalEnd);   // corrected time must also show on the Log
       });
     }
   }
@@ -7687,7 +7963,7 @@ async function fsEnsureFeederClearFor(name, newType){
     // Send the same Charged notice a normal charge would send, so receivers
     // still get told the old outage ended — nothing silently skipped.
     const guardStation = DATA.feeders.find(f=>f.name===name)?.station || $('station').value || '';
-    dispatchChargedMsg(name, `${name} of ${guardStation} charged at ${chargeTime}.`);
+    dispatchChargedMsg(name, `${name} of ${guardStation} charged at ${chargeTime}.`, chargeTime);
     toast(`✓ ${name} — पहिलेको ${oldLabel} चार्ज भयो। अब ${newLabel} थप्न सकिन्छ।`, 3000);
     return true;
   } finally {
@@ -8250,13 +8526,13 @@ async function markFeederCharged(feederName){
     sbPushOneFeedStatus(feederName,{status:'charged',time:t,ts:Date.now()});
     const chargeStation = DATA.feeders.find(f=>f.name===feederName)?.station || $('station').value || '';
     const msg=`${feederName} of ${chargeStation} charged at ${t}.`;
-    dispatchChargedMsg(feederName,msg);
+    dispatchChargedMsg(feederName,msg,t);
   } finally {
     feederOpLock[feederName]=false;
   }
 }
 
-async function dispatchChargedMsg(feederName,msg){
+async function dispatchChargedMsg(feederName,msg,chargedTime){
   // Duplicate/double-click guard — block an identical charged notice for the
   // same feeder within the window (synchronous, before any await).
   const _now = Date.now();
@@ -8268,7 +8544,11 @@ async function dispatchChargedMsg(feederName,msg){
   for(const k in recentDispatched){
     if(_now - recentDispatched[k] > DISPATCH_DEDUP_WINDOW) delete recentDispatched[k];
   }
-  const t=nowHM();
+  // Use the operator's confirmed time (from the "कति बजे Charged भयो?"
+  // prompt) when given — this is what actually matches the status,
+  // duration, and the message text itself, all of which already use it.
+  // Falls back to now() only if a caller genuinely has no specific time.
+  const t = (chargedTime && /^\d{1,2}:\d{2}$/.test(chargedTime)) ? chargedTime : nowHM();
   const station=DATA.feeders.find(f=>f.name===feederName)?.station||$('station').value||'';
   // Receiver mute check — Charged notices are ALSO blocked while muted
   if(receiversMuted){
@@ -8456,7 +8736,7 @@ async function applySystemGone(t, stations){
     toast('⛔ System Gone already active (set by another user) — logged here, no duplicate message sent.',3500);
     return;
   }
-  dispatchBulkMsg(msg,'System Gone', isAll?'All Substations':targets.join(', '));
+  dispatchBulkMsg(msg,'System Gone', isAll?'All Substations':targets.join(', '), time);
   toast(`⛔ System Gone — ${isAll?'all substations':targets.join(', ')} updated. Click "System Restored" on each affected substation to revert.`,3500);
 }
 
@@ -8513,7 +8793,7 @@ async function restoreSystemGoneFor(st, presetTime, suppressMsg){
     toast('✅ System already restored by another user — logged here, no duplicate message.',3000);
     return;
   }
-  dispatchBulkMsg(msg,'System Restored',st);
+  dispatchBulkMsg(msg,'System Restored',st,t);
   if(failedPush.length){
     toast('⚠ System Restored — notice sent, but '+failedPush.length+' feeder(s) did not sync to cloud: '+failedPush.join(', ')+'. They may still show as System Gone on other devices — reopen the substation to retry.',7000);
   } else {
@@ -8569,7 +8849,7 @@ async function restoreAllSystemGone(){
     toast('✅ Already restored by another user — logged here, no duplicate message.',3000);
     return;
   }
-  dispatchBulkMsg(msg,'System Restored', restoredStations.join(', '));
+  dispatchBulkMsg(msg,'System Restored', restoredStations.join(', '), t);
   toast('✅ Restore All Substations — one message sent.',3500);
 }
 
@@ -8609,7 +8889,7 @@ async function applyKv33Failed(t){
 
   const eta33 = ($('outageEta')?.value||'').trim();
   const msg=`33 KV Incomer of ${st} Failed at ${time}` + (eta33 ? ` (Est. restore: ${eta33})` : '') + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
-  dispatchBulkMsg(msg,'33KV Incomer Failed',st);
+  dispatchBulkMsg(msg,'33KV Incomer Failed',st,time);
   toast('⚡ 33 KV Incomer Failed — all feeders of '+st+' tripped. Click "33 KV Incomer Restored" to revert.',3500);
   } finally { delete outageOpLock[st]; }
 }
@@ -8643,7 +8923,7 @@ async function restoreKv33Failed(st){
   const failedPush = await pushFeederStatusBatch(all);
 
   const msg=`33 KV Incomer of ${st} Restored at ${t}`;
-  dispatchBulkMsg(msg,'33KV Incomer Restored',st);
+  dispatchBulkMsg(msg,'33KV Incomer Restored',st,t);
   if(failedPush.length){
     toast('⚠ 33 KV Incomer Restored — notice sent, but '+failedPush.length+' feeder(s) did not sync to cloud: '+failedPush.join(', ')+'. They may still show as 33 KV Incomer Failed on other devices — reopen the substation to retry.',7000);
   } else {
@@ -8720,7 +9000,7 @@ async function applyIncomerFailed(t){
     toast('🛑 11 KV Incomer Failed already active for this substation (set by another user) — logged here, no duplicate sent.',3500);
     return;
   }
-  dispatchBulkMsg(msg,'11KV Incomer Failed',st);
+  dispatchBulkMsg(msg,'11KV Incomer Failed',st,time);
   toast('🛑 11 KV Incomer Failed — all feeders of this substation updated. Click "11 KV Incomer Restored" to revert.',3500);
   } finally { delete outageOpLock[st]; }
 }
@@ -8774,7 +9054,7 @@ async function restoreFromIncomerFailed(){
     toast('✅ 11 KV Incomer already restored by another user — logged here, no duplicate message.',3000);
     return;
   }
-  dispatchBulkMsg(msg,'11KV Incomer Restored',st);
+  dispatchBulkMsg(msg,'11KV Incomer Restored',st,t);
   if(failedPush.length){
     toast('⚠ 11 KV Incomer Restored — notice sent, but '+failedPush.length+' feeder(s) did not sync to cloud: '+failedPush.join(', ')+'. They may still show as 11 KV Incomer Failed on other devices — reopen the substation to retry.',7000);
   } else {
@@ -8865,7 +9145,7 @@ function applyTripAll(st){
   sbPushFeederStatus();   // one bulk push
 
   // 3. Send exactly ONE message instantly (same msg shown in the confirmation)
-  dispatchBulkMsg(msg, 'Trip All', st);
+  dispatchBulkMsg(msg, 'Trip All', st, t);
   toast(`⚡ Trip All — all feeders tripped. Click "Restore All" banner to revert.`, 3500);
 }
 
@@ -8898,7 +9178,7 @@ function restoreTripAll(st){
   sbPushFeederStatus();   // one bulk push
 
   // 2. Send exactly ONE restore message (same msg shown in the confirmation)
-  dispatchBulkMsg(msg, 'Restore All', st);
+  dispatchBulkMsg(msg, 'Restore All', st, t);
   toast(`✅ Restore All — all feeders reverted to previous state.`, 3000);
 }
 
@@ -8940,7 +9220,7 @@ let lastBulkTime = 0;
 const EVENT_DEDUP_WINDOW = 25000; // 25 seconds
 const recentBulkEvents = {};
 
-async function dispatchBulkMsg(msg, label, station){
+async function dispatchBulkMsg(msg, label, station, actualTime){
   const now = Date.now();
   const key = msg.trim();
   // Block if this exact message was sent within the dedup window
@@ -8966,7 +9246,7 @@ async function dispatchBulkMsg(msg, label, station){
   recentBulkEvents[evtKey] = now;
   lastBulkMsg = key; lastBulkTime = now;
 
-  const t = nowHM();
+  const t = (actualTime && /^\d{1,2}:\d{2}$/.test(actualTime)) ? actualTime : nowHM();
 
   // Receiver mute check — log locally but skip actual send
   if(receiversMuted){
@@ -9610,6 +9890,30 @@ function updateSbSyncStatus(msg){
 }
 
 /* ── Push single log entry to Supabase (called after every dispatch) ── */
+// Pushes a corrected Log row time to Supabase, so a time correction made via
+// dtEditWhen (report editor) or the Log itself syncs to every device — not
+// just the one where the correction happened. Matches by the row's real
+// database id when available (rows already round-tripped through the
+// cloud); falls back to matching by content (station+feeder+condition+ts)
+// for a row corrected shortly after being created locally, before its own
+// first sync pulled back an id for it.
+async function sbUpdateLogRowTime(row, originalTs){
+  if(!sbReady()) return;
+  try{
+    const patchBody = { sent_at: row.time||'' };
+    if(row.id){
+      await sbFetch('message_log?id=eq.'+encodeURIComponent(row.id), 'PATCH', patchBody);
+    } else {
+      const q = 'message_log?station=eq.'+encodeURIComponent(row.station||'')
+              + '&feeder=eq.'+encodeURIComponent(row.feeder||'')
+              + '&condition=eq.'+encodeURIComponent(row.condition||'')
+              + '&ts=eq.'+encodeURIComponent(originalTs||row.ts||'');
+      await sbFetch(q, 'PATCH', patchBody);
+    }
+  }catch(e){
+    console.warn('Log row time update failed:', e.message);
+  }
+}
 async function sbInsertLog(entry){
   if(!sbReady()) return;
   try{
@@ -9673,17 +9977,21 @@ async function sbPullLog(){
     const existing=new Set(LOG.map(e=>e.id).filter(id=>id!=null));
     let added=0;
     rows.forEach(r=>{
+      if(r.id!=null && r.id>msgLogLastId) msgLogLastId = r.id;   // keep the watermark in sync with automatic polling too
       if(r.id!=null && !existing.has(r.id)){
-        LOG.push({
+        const row = {
           id:r.id,ts:r.ts,station:r.station,feeder:r.feeder,condition:r.condition,
           reason:r.reason,time:r.sent_at,recipients:r.recipients,status:r.status,msg:r.msg,
           device_code:r.device_code||'',
           operator_short:r.operator_short||'', operator_name:r.operator_name||'',
           date:new Date(r.created_at||Date.now())
-        });
+        };
+        LOG.push(row);
+        if(typeof dtDriveFromLogEntry==='function') dtDriveFromLogEntry(row);
         added++;
       }
     });
+    if(rows.length){ try{ localStorage.setItem('sms2_msglog_last_id', String(msgLogLastId)); }catch(e){} }
     // Re-sort by date desc
     LOG.sort((a,b)=>new Date(b.date)-new Date(a.date));
     renderLogPage();
@@ -11028,32 +11336,45 @@ async function syncFromCloud(){
 
   // ── Sync log (every call) ──
   try{
-    const logRows = await sbFetch('message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code,operator_name,operator_short&order=id.desc&limit=200');
-    // Diff by the DB row id — exact, no collisions. (Previously this used a
-    // ts+station+feeder string key, which collides whenever two different
-    // messages hit the same feeder in the same minute — e.g. a trip and a
-    // restore close together — silently dropping the second one. It was
-    // also gated on `logRows.length !== lastLogCount`, which permanently
-    // stalls once the log passes 200 total entries: the 200-row window
-    // stays full forever after that, one row rolls off for every one that's
-    // added, so the count never changes again and new messages would stop
-    // triggering notifications for good.)
+    // Fetch everything newer than the last row id this device has ever
+    // seen — NOT "most recent 200 overall". A global top-N fetch silently
+    // drops any station whose traffic is quieter than another station's,
+    // since a busy station's rows crowd the quiet one's out of that shared
+    // window on every single poll, forever (this was the actual cause of a
+    // quiet substation's messages appearing to just stop logging one day —
+    // they were still in Supabase the whole time, just never fetched).
+    // Fresh device (msgLogLastId still 0) bootstraps with the 500 most
+    // recent rows instead, so a brand-new login doesn't try to pull a
+    // station's entire multi-year history in one request; every poll after
+    // that is purely incremental and has no cap at all.
+    const logQuery = msgLogLastId>0
+      ? 'message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code,operator_name,operator_short&id=gt.'+msgLogLastId+'&order=id.asc&limit=1000'
+      : 'message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code,operator_name,operator_short&order=id.desc&limit=500';
+    const logRows = await sbFetch(logQuery);
+    // Diff by the DB row id — exact, no collisions (a ts+station+feeder
+    // string key would collide whenever two different messages hit the same
+    // feeder in the same minute, e.g. a trip and a restore close together,
+    // silently dropping the second one).
     const existingIds = new Set(LOG.map(e=>e.id).filter(id=>id!=null));
     let added = 0, newest = null;
     logRows.forEach(r=>{
+      if(r.id!=null && r.id>msgLogLastId) msgLogLastId = r.id;   // advance watermark regardless of dedup outcome
       if(r.id!=null && !existingIds.has(r.id)){
-        LOG.push({
+        const row = {
           id:r.id, ts:r.ts, station:r.station, feeder:r.feeder,
           condition:r.condition, reason:r.reason, time:r.sent_at,
           recipients:r.recipients, status:r.status, msg:r.msg,
           device_code:r.device_code||'',
           operator_short:r.operator_short||'', operator_name:r.operator_name||'',
           date:new Date(r.created_at||Date.now())
-        });
+        };
+        LOG.push(row);
+        if(typeof dtDriveFromLogEntry==='function') dtDriveFromLogEntry(row);
         added++;
         if(!newest || r.id>newest.id) newest=r;
       }
     });
+    if(logRows.length){ try{ localStorage.setItem('sms2_msglog_last_id', String(msgLogLastId)); }catch(e){} }
     if(added){
       LOG.sort((a,b)=>new Date(b.date)-new Date(a.date));
       if($('page-log').classList.contains('active')){
