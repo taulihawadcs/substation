@@ -1840,6 +1840,14 @@ gemini-1.5-flash</textarea>
               </div>
               <div style="font-size:9.5px;color:var(--dim2);margin-top:5px">Log मा छोटो रूपमा देखिन्छ: <b id="myNamePreview" style="font-family:monospace"></b></div>
             </div>
+            <div id="operatorColumnsBanner" style="display:none;border:1.5px solid #f59e0b;background:#fef3c7;border-radius:10px;padding:10px 12px;margin-bottom:12px">
+              <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:4px">⚠ Supabase database अपडेट गर्न बाँकी छ</div>
+              <div style="font-size:11.5px;color:#92400e;line-height:1.5">
+                यो डिभाइसले Operator नाम-सम्बन्धी नयाँ column (<code>operator_name</code>, <code>operator_short</code>) फेला पारेन —
+                Setup SQL यो Supabase project मा अझै चलाइएको छैन। यसले Log सिंक हुनबाट रोक्दैन (यो अपडेटले पुरानो structure मा फर्केर काम गर्छ),
+                तर operator नाम Log मा देखिँदैन जबसम्म SQL चलाइँदैन।
+              </div>
+            </div>
             <button class="btn btn-ghost btn-sm" style="margin-bottom:10px" onclick="renderDeviceRegistry()">⟳ Refresh Requests</button>
             <div id="deviceRegistryList"></div>
           </div>
@@ -2473,6 +2481,12 @@ let hiddenAt        = 0;   // when the tab was last hidden (visibilitychange)
 let initialPullDone = false;   // true once THIS session's first cloud pull has completed
 let feederPushFailures    = 0;   // count of failed feeder_status pushes this session
 let feederSyncProblemShown = 0;  // throttle timestamp for the sync-problem toast
+// True once a sync cycle has detected that operator_name/operator_short
+// don't exist yet on this Supabase project (the Setup SQL migration hasn't
+// been run). Surfaced as a visible Settings banner — see
+// updateOperatorColumnsBanner — rather than only a console.warn a
+// non-technical operator would never see.
+let operatorColumnsMissing = false;
 let DUTY_LOCKED        = false;   // Duty Chart read-only lock — Settings → Duty Chart Lock
 // Daily downtime report auto-send — OFF by default on every fresh setup.
 // Cloud-synced (app_config, same table/pattern as duty_locked) so every
@@ -2526,7 +2540,7 @@ const DT_LOG_END_TYPE_OF = {
 // How stale a report entry can be with no matching Log row before it's
 // flagged 'stale' rather than the more benign 'syncing' — see
 // dtLogSyncState() further down.
-const DT_SYNC_GRACE_MS = 45*1000;   // 3 poll cycles' worth of slack
+const DT_SYNC_GRACE_MS = 15*1000;   // 3 poll cycles' worth of slack (poll interval is 5s)
 // Bulk/station-wide event types are logged ONCE per dispatch under
 // feeder:'All Feeders' (see dispatchBulkMsg), not under each individual
 // feeder's name — see dtClosestLogMatch() further down for why this matters.
@@ -9916,23 +9930,35 @@ async function sbUpdateLogRowTime(row, originalTs){
 }
 async function sbInsertLog(entry){
   if(!sbReady()) return;
+  const basePayload = {
+    ts:         entry.ts||'',
+    station:    entry.station||'',
+    feeder:     entry.feeder||'',
+    condition:  entry.condition||'',
+    reason:     entry.reason||'',
+    sent_at:    entry.time||'',
+    recipients: entry.recipients||'',
+    status:     entry.status||'',
+    msg:        entry.msg||'',
+    device_code: getDeviceCode()
+  };
   try{
     await sbFetch('message_log', 'POST', {
-      ts:         entry.ts||'',
-      station:    entry.station||'',
-      feeder:     entry.feeder||'',
-      condition:  entry.condition||'',
-      reason:     entry.reason||'',
-      sent_at:    entry.time||'',
-      recipients: entry.recipients||'',
-      status:     entry.status||'',
-      msg:        entry.msg||'',
-      device_code: getDeviceCode(),
+      ...basePayload,
       operator_name:  typeof getOperatorName==='function' ? getOperatorName() : '',
       operator_short: entry.operator_short || (typeof getOperatorShortName==='function' ? getOperatorShortName() : '')
     });
   }catch(e){
-    console.warn('Supabase log insert failed:',e.message);
+    // If this failed specifically because operator_name/operator_short
+    // don't exist yet on this database (Setup SQL migration not run), the
+    // WHOLE insert gets rejected, not just those two fields — retry without
+    // them so this entry still reaches Supabase and syncs to other devices.
+    console.warn('Supabase log insert with operator fields failed — retrying without them:', e.message);
+    try{
+      await sbFetch('message_log', 'POST', basePayload);
+    }catch(e2){
+      console.warn('Supabase log insert failed:', e2.message);
+    }
   }
 }
 
@@ -9942,20 +9968,37 @@ async function sbPushLog(){
   if(!LOG.length){toast('Local log is empty');return;}
   const st=$('sbStatus'); st.style.color='var(--dim2)'; st.textContent='Pushing log…';
   try{
-    const rows=LOG.map(e=>({
+    const rowsWithOperator=LOG.map(e=>({
       ts:e.ts||'',station:e.station||'',feeder:e.feeder||'',
       condition:e.condition||'',reason:e.reason||'',sent_at:e.time||'',
       recipients:e.recipients||'',status:e.status||'',msg:e.msg||'',
       device_code:e.device_code||getDeviceCode(),
       operator_short:e.operator_short||'', operator_name:e.operator_name||''
     }));
+    const rowsBase=LOG.map(e=>({
+      ts:e.ts||'',station:e.station||'',feeder:e.feeder||'',
+      condition:e.condition||'',reason:e.reason||'',sent_at:e.time||'',
+      recipients:e.recipients||'',status:e.status||'',msg:e.msg||'',
+      device_code:e.device_code||getDeviceCode()
+    }));
     // Use upsert-style insert ignoring duplicates via Prefer header
     const url=getSbUrl()+'/rest/v1/message_log';
-    const res=await fetch(url,{
+    let res=await fetch(url,{
       method:'POST',
       headers:{...sbHeaders(),'Prefer':'resolution=ignore-duplicates,return=minimal'},
-      body:JSON.stringify(rows)
+      body:JSON.stringify(rowsWithOperator)
     });
+    let rows=rowsWithOperator;
+    if(!res.ok){
+      // Likely the operator_name/operator_short columns don't exist yet on
+      // this database (migration not run) — retry without them.
+      res=await fetch(url,{
+        method:'POST',
+        headers:{...sbHeaders(),'Prefer':'resolution=ignore-duplicates,return=minimal'},
+        body:JSON.stringify(rowsBase)
+      });
+      rows=rowsBase;
+    }
     if(!res.ok) throw new Error('HTTP '+res.status);
     st.style.color='var(--green)'; st.textContent=`✓ Pushed ${rows.length} entries to Supabase.`;
     updateSbSyncStatus(`Last push: ${rows.length} entries at ${nowHM()}`);
@@ -10913,6 +10956,15 @@ function populateMyNameField(){
   if(!input) return;
   if(document.activeElement!==input) input.value = typeof getOperatorName==='function' ? getOperatorName() : '';
   if(preview) preview.textContent = (typeof getOperatorShortName==='function' ? getOperatorShortName() : '') || '—';
+  updateOperatorColumnsBanner();
+}
+// Shows/hides the "Supabase database अपडेट गर्न बाँकी छ" banner in Settings
+// → Device Access, based on whether the last sync had to fall back because
+// operator_name/operator_short don't exist yet on this database.
+function updateOperatorColumnsBanner(){
+  const el=$('operatorColumnsBanner');
+  if(!el) return;
+  el.style.display = (typeof operatorColumnsMissing!=='undefined' && operatorColumnsMissing) ? 'block' : 'none';
 }
 // "Save" button in Settings → Device Access.
 function saveMyNameFromSettings(){
@@ -11277,10 +11329,25 @@ function reconcileOutageStateFromMap(){
   if(bannerChanged) renderFeederStatus();
 }
 
+let syncCycleInFlight = false;
 async function syncFromCloud(){
   if(!appUnlocked) return;
   if(receiversMuted) return;   // All Muted → no cloud sync at all
   if(deviceAuthStatus!=='approved' && deviceAuthStatus!=='legacy') return;   // device not approved
+  // Re-entrancy guard — without this, a cycle that's still running when the
+  // next interval fires (a slow/flaky mobile connection, a request right up
+  // against the 12s timeout) would start OVERLAPPING with itself: duplicate
+  // requests, duplicate re-renders, wasted battery and data. This is what
+  // makes a short poll interval safe rather than a liability.
+  if(syncCycleInFlight) return;
+  syncCycleInFlight = true;
+  try{
+    await _syncFromCloudInner();
+  } finally {
+    syncCycleInFlight = false;
+  }
+}
+async function _syncFromCloudInner(){
   const dot=$('syncDotIcon'), lbl=$('syncDotLabel');
   let anyError = false;
 
@@ -11347,10 +11414,30 @@ async function syncFromCloud(){
     // recent rows instead, so a brand-new login doesn't try to pull a
     // station's entire multi-year history in one request; every poll after
     // that is purely incremental and has no cap at all.
-    const logQuery = msgLogLastId>0
+    const logQueryBase = msgLogLastId>0
+      ? 'message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code&id=gt.'+msgLogLastId+'&order=id.asc&limit=1000'
+      : 'message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code&order=id.desc&limit=500';
+    const logQueryWithOperator = msgLogLastId>0
       ? 'message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code,operator_name,operator_short&id=gt.'+msgLogLastId+'&order=id.asc&limit=1000'
       : 'message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code,operator_name,operator_short&order=id.desc&limit=500';
-    const logRows = await sbFetch(logQuery);
+    // Try WITH operator_name/operator_short first (the normal case, once the
+    // Setup SQL has added those columns). If that request fails specifically
+    // because the columns don't exist yet on this database (the migration
+    // hasn't been run), PostgREST rejects the WHOLE request — not just those
+    // two fields — which would otherwise empty the Log completely on every
+    // sync until the SQL is run. Fall back to the base column set instead,
+    // so the Log still populates correctly (just without operator names)
+    // rather than silently disappearing.
+    let logRows;
+    try{
+      logRows = await sbFetch(logQueryWithOperator);
+      operatorColumnsMissing = false;
+    }catch(e){
+      console.warn('Log pull with operator columns failed (migration not run yet?) — falling back:', e.message);
+      operatorColumnsMissing = true;
+      logRows = await sbFetch(logQueryBase);
+    }
+    if(typeof updateOperatorColumnsBanner==='function') updateOperatorColumnsBanner();
     // Diff by the DB row id — exact, no collisions (a ts+station+feeder
     // string key would collide whenever two different messages hit the same
     // feeder in the same minute, e.g. a trip and a restore close together,
@@ -11443,7 +11530,7 @@ function startSync(){
   if(deviceAuthStatus==='unknown'){ checkDeviceAuth(); return; }
   if(deviceAuthStatus==='pending' || deviceAuthStatus==='blocked'){ updateDeviceAuthBanner(); return; }
   if(syncInterval) return;
-  syncInterval = setInterval(syncFromCloud, 15000); // every 15 seconds
+  syncInterval = setInterval(syncFromCloud, 5000); // every 5 seconds (safe due to the re-entrancy guard in syncFromCloud — a slow cycle just makes the next tick(s) no-op instead of overlapping)
   syncFromCloud(); // immediate first run
 }
 
