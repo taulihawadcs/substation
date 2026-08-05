@@ -5230,6 +5230,55 @@ function recordLogDirect({type, recipients, status, station, feeder, time, msg, 
   });
 }
 
+// ── Simple row-level duration for the Log page ──────────────────────────
+// An outage Log row tracks its OWN open/closed state and duration directly —
+// no separate store to keep in sync, no time-proximity matching, no
+// reconciliation. logOpenOutage maps feeder name → the actual open Log row
+// object (by reference, since LOG rows are plain objects); closing an
+// outage means finding that row and mutating it in place. This is
+// independent of DT_EVENTS/the downtime-report card, which are untouched.
+const logOutageStartLabels = new Set(['Trip','Trip All','Shutdown','System Gone','11KV Incomer Failed','33KV Incomer Failed']);
+const logOutageEndLabels   = new Set(['Charged','Restore All','System Restored','11KV Incomer Restored','33KV Incomer Restored']);
+let logOpenOutage = {};   // feeder name -> open LOG row
+
+function logResolveFeeders(row){
+  const rawFeeder = row.feeder || '';
+  if(rawFeeder==='All Feeders'){
+    const rawStation = row.station || '';
+    const stationNames = rawStation==='All Substations'
+      ? [...new Set(DATA.feeders.map(f=>f.station))]
+      : rawStation.split(',').map(s=>s.trim()).filter(Boolean);
+    return DATA.feeders.filter(f=>stationNames.includes(f.station)).map(f=>f.name);
+  }
+  return rawFeeder.split(',').map(s=>s.trim()).filter(Boolean);
+}
+
+function logTrackDuration(row){
+  if(!row || !row.condition) return;
+  const feeders = logResolveFeeders(row);
+  if(!feeders.length) return;
+
+  if(logOutageStartLabels.has(row.condition)){
+    row.duration_open = true;
+    row.duration_min = null;
+    feeders.forEach(f=>{ logOpenOutage[f] = row; });
+  } else if(logOutageEndLabels.has(row.condition)){
+    feeders.forEach(f=>{
+      const openRow = logOpenOutage[f];
+      if(!openRow || openRow===row) return;
+      const startIso = (typeof dtLogRowEventIso==='function' ? dtLogRowEventIso(openRow) : null) || (openRow.date ? new Date(openRow.date).toISOString() : null);
+      const endIso   = (typeof dtLogRowEventIso==='function' ? dtLogRowEventIso(row) : null) || new Date().toISOString();
+      const startMs = startIso ? new Date(startIso).getTime() : null;
+      const endMs   = new Date(endIso).getTime();
+      if(startMs!=null && endMs>=startMs){
+        openRow.duration_min = Math.round((endMs-startMs)/60000);
+      }
+      openRow.duration_open = false;
+      delete logOpenOutage[f];
+    });
+  }
+}
+
 function _pushToLog(entry){
   const row = {
     ts: new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',
@@ -5239,6 +5288,10 @@ function _pushToLog(entry){
     ...entry
   };
   LOG.unshift(row);
+  // Simple, row-level duration tracking for the Log page itself — see
+  // logTrackDuration above. Independent of DT_EVENTS/dtDriveFromLogEntry
+  // below, which continues to feed the separate downtime-report card.
+  if(typeof logTrackDuration==='function') logTrackDuration(row);
   // The Log row is now the authoritative trigger for duration tracking —
   // see dtDriveFromLogEntry for why this replaced the old feederStatusMap
   // diff-only approach.
@@ -5282,9 +5335,23 @@ function renderLogStationTabs(){
   });
 }
 
+// Log page shows only the last 24 hours by default — older entries stay
+// hidden until explicitly expanded, via logShowAll.
+let logShowAll = false;
 function filteredLog(){
-  if(logActiveStation==='__all__') return LOG;
-  return LOG.filter(r=>r.station===logActiveStation);
+  let rows = logActiveStation==='__all__' ? LOG : LOG.filter(r=>r.station===logActiveStation);
+  if(!logShowAll){
+    const cutoff = Date.now() - 24*60*60*1000;
+    rows = rows.filter(r=>{
+      const t = r.date ? new Date(r.date).getTime() : 0;
+      return t >= cutoff;
+    });
+  }
+  return rows;
+}
+function toggleLogShowAll(){
+  logShowAll = !logShowAll;
+  renderLogTable();
 }
 
 function renderLogSummary(){
@@ -5307,14 +5374,30 @@ function renderLogTable(){
   _renderedLogRows = rows;
   const wrap = $('logPageWrap');
   const canEdit = !(typeof monitorMode!=='undefined' && monitorMode);
+
+  const hiddenCount = logShowAll ? 0 : LOG.filter(r=>{
+    if(logActiveStation!=='__all__' && r.station!==logActiveStation) return false;
+    const t = r.date ? new Date(r.date).getTime() : 0;
+    return t < (Date.now() - 24*60*60*1000);
+  }).length;
+  const toggleBar = hiddenCount>0
+    ? `<div style="padding:8px 4px;text-align:center">
+         <button class="btn btn-ghost btn-sm" onclick="toggleLogShowAll()">⬇ Show ${hiddenCount} older entr${hiddenCount===1?'y':'ies'} (beyond last 24 hr)</button>
+       </div>`
+    : (logShowAll
+        ? `<div style="padding:8px 4px;text-align:center">
+             <button class="btn btn-ghost btn-sm" onclick="toggleLogShowAll()">⬆ Show only last 24 hr</button>
+           </div>`
+        : '');
+
   if(!rows.length){
-    wrap.innerHTML='<div class="log-empty-msg">No entries yet for this substation.</div>';
+    wrap.innerHTML = toggleBar + `<div class="log-empty-msg">${logShowAll ? 'No entries yet for this substation.' : 'No entries in the last 24 hours for this substation.'}</div>`;
     return;
   }
   let h=`<table class="log-tbl">
     <thead><tr>
       <th>#</th><th>Date &amp; Time</th><th>Substation</th><th>Feeder</th>
-      <th>Type</th><th>Reason</th><th>Sent At</th><th>Recipients</th><th>Status</th><th>Message</th>${canEdit?'<th></th>':''}
+      <th>Type</th><th>Duration</th><th>Reason</th><th>Sent At</th><th>Recipients</th><th>Status</th><th>Message</th>${canEdit?'<th></th>':''}
     </tr></thead><tbody>`;
   rows.forEach((r,i)=>{
     const stCls = /fail|error/i.test(r.status)?'fail':'ok';
@@ -5323,12 +5406,21 @@ function renderLogTable(){
     else if(/shutdown/i.test(r.condition)) typeBadge=`<span class="badge-sd">🔌 Shutdown</span>`;
     else if(/charged/i.test(r.condition))  typeBadge=`<span class="badge-chg">✓ Charged</span>`;
     else                                   typeBadge=`<span>${esc(r.condition)}</span>`;
+    let durCell='<span style="color:var(--dim2)">—</span>';
+    if(r.duration_open){
+      durCell='<span style="color:#b45309;font-weight:700;font-size:10.5px">⏳ ongoing</span>';
+    } else if(r.duration_min!=null){
+      const h_=Math.floor(r.duration_min/60), m_=r.duration_min%60;
+      const durText = h_>0 ? `${h_}h ${m_}m` : `${m_} min`;
+      durCell=`<span style="color:var(--red);font-weight:700;font-size:11px">${durText}</span>`;
+    }
     h+=`<tr>
       <td style="color:var(--dim2);font-size:10px">${rows.length-i}</td>
       <td class="log-ts">${esc(r.ts)}</td>
       <td style="font-size:11px;font-weight:600">${esc(r.station)}</td>
       <td style="font-size:11px">${esc(r.feeder)}</td>
       <td>${typeBadge}</td>
+      <td>${durCell}</td>
       <td style="font-size:11px;color:var(--dim)">${esc(r.reason||'—')}</td>
       <td class="log-ts">${esc(r.time||'—')}</td>
       <td style="font-size:11px">${esc(r.recipients)}</td>
@@ -5338,7 +5430,7 @@ function renderLogTable(){
     </tr>`;
   });
   h+='</tbody></table>';
-  wrap.innerHTML=h;
+  wrap.innerHTML = toggleBar + h;
 }
 
 // Delete one message-log entry (mistaken dispatch etc.). Removes it locally
@@ -5349,6 +5441,11 @@ function deleteLogEntry(i){
   const r=_renderedLogRows[i]; if(!r) return;
   if(!confirm(`Delete this log entry?\n\n${r.ts} — ${r.station||'—'} / ${r.feeder||'—'}\n"${(r.msg||'').substring(0,80)}"\n\nIt will also be removed from the cloud log.`)) return;
   const idx=LOG.indexOf(r); if(idx>=0) LOG.splice(idx,1);
+  // If this row was a still-open outage, clear any dangling reference so a
+  // later Charged/Restored can't try to close a row that no longer exists.
+  if(typeof logOpenOutage!=='undefined'){
+    Object.keys(logOpenOutage).forEach(f=>{ if(logOpenOutage[f]===r) delete logOpenOutage[f]; });
+  }
   renderLogPage();
   if(sbReady() && r.ts){
     let path='message_log?ts=eq.'+encodeURIComponent(r.ts);
@@ -5418,6 +5515,7 @@ function clearLogConfirmed(){
   if(!LOG.length){toast('Log already empty');return;}
   if(!confirm('Clear all log entries? This cannot be undone.')) return;
   LOG.length=0;
+  if(typeof logOpenOutage!=='undefined') logOpenOutage = {};
   renderLogPage();
   toast('Log cleared');
 }
@@ -10019,6 +10117,7 @@ async function sbPullLog(){
     // ts+station+feeder key silently drops legitimate messages)
     const existing=new Set(LOG.map(e=>e.id).filter(id=>id!=null));
     let added=0;
+    const newRows=[];
     rows.forEach(r=>{
       if(r.id!=null && r.id>msgLogLastId) msgLogLastId = r.id;   // keep the watermark in sync with automatic polling too
       if(r.id!=null && !existing.has(r.id)){
@@ -10030,10 +10129,17 @@ async function sbPullLog(){
           date:new Date(r.created_at||Date.now())
         };
         LOG.push(row);
+        newRows.push(row);
         if(typeof dtDriveFromLogEntry==='function') dtDriveFromLogEntry(row);
         added++;
       }
     });
+    // Duration tracking needs OLDEST-first order to correctly pair each
+    // outage with its own Charged/Restored — the fetch above is newest-first
+    // (order=id.desc), so run this pass separately, reversed.
+    if(typeof logTrackDuration==='function'){
+      [...newRows].sort((a,b)=>(a.id||0)-(b.id||0)).forEach(row=>logTrackDuration(row));
+    }
     if(rows.length){ try{ localStorage.setItem('sms2_msglog_last_id', String(msgLogLastId)); }catch(e){} }
     // Re-sort by date desc
     LOG.sort((a,b)=>new Date(b.date)-new Date(a.date));
@@ -11444,6 +11550,7 @@ async function _syncFromCloudInner(){
     // silently dropping the second one).
     const existingIds = new Set(LOG.map(e=>e.id).filter(id=>id!=null));
     let added = 0, newest = null;
+    const newRows = [];
     logRows.forEach(r=>{
       if(r.id!=null && r.id>msgLogLastId) msgLogLastId = r.id;   // advance watermark regardless of dedup outcome
       if(r.id!=null && !existingIds.has(r.id)){
@@ -11456,11 +11563,20 @@ async function _syncFromCloudInner(){
           date:new Date(r.created_at||Date.now())
         };
         LOG.push(row);
+        newRows.push(row);
         if(typeof dtDriveFromLogEntry==='function') dtDriveFromLogEntry(row);
         added++;
         if(!newest || r.id>newest.id) newest=r;
       }
     });
+    // Duration tracking needs OLDEST-first order to correctly pair each
+    // outage with its own Charged/Restored. The steady-state fetch above is
+    // already oldest-first (id.asc), but the very first bootstrap pull on a
+    // fresh device is newest-first (id.desc) — sort explicitly by id so both
+    // cases are handled correctly with no special-casing needed.
+    if(typeof logTrackDuration==='function'){
+      [...newRows].sort((a,b)=>(a.id||0)-(b.id||0)).forEach(row=>logTrackDuration(row));
+    }
     if(logRows.length){ try{ localStorage.setItem('sms2_msglog_last_id', String(msgLogLastId)); }catch(e){} }
     if(added){
       LOG.sort((a,b)=>new Date(b.date)-new Date(a.date));
