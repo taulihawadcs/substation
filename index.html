@@ -114,6 +114,93 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .log-tbl .badge-chg{background:#f0fdf4;color:#15803d;border:1px solid #22c55e;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;white-space:nowrap}
 .log-empty-msg{text-align:center;padding:40px 20px;color:var(--dim2);font-style:italic}
 .log-ts{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim2);white-space:nowrap}
+
+/* ══════════════════════════════════════════════════════════════════════
+   EVENT LOG v2 — paired outage/restore timeline, noon-to-noon day groups.
+   New, isolated class namespace (`.ev-*`) so nothing above is touched or
+   relied upon; the old `.log-tbl` / `.log-stat` rules stay exactly as-is
+   because the Downtime Report card further down this page still uses them.
+   ══════════════════════════════════════════════════════════════════════ */
+.ev-wrap{max-width:900px;margin:0 auto;padding:18px 16px 60px}
+.ev-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.ev-station-tabs{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
+.ev-stab{background:#fff;border:1.5px solid var(--line2);color:var(--dim);font-size:12px;font-weight:600;
+  padding:5px 13px;border-radius:20px;cursor:pointer;font-family:'Archivo',sans-serif;transition:border-color .15s,background .15s,color .15s;white-space:nowrap}
+.ev-stab:hover{border-color:var(--blue);color:var(--blue)}
+.ev-stab.active{background:var(--txt);border-color:var(--txt);color:#fff}
+.ev-actions{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap}
+
+.ev-live{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.ev-live-chip{display:flex;align-items:center;gap:7px;background:#fff7ed;border:1.5px solid #fdba74;
+  border-radius:10px;padding:7px 12px;font-size:12px;font-weight:600;color:#9a3412;cursor:default}
+.ev-live-dot{width:7px;height:7px;border-radius:50%;background:#ea580c;flex:none;animation:evPulse 1.6s ease-in-out infinite}
+@keyframes evPulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(234,88,12,.5)}50%{opacity:.55;box-shadow:0 0 0 5px rgba(234,88,12,0)}}
+.ev-live-empty{font-size:12px;color:var(--dim2);padding:8px 2px 14px}
+
+.ev-day{margin-bottom:10px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden;box-shadow:var(--shadow)}
+.ev-day-head{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+.ev-day-head:hover{background:#fafbfc}
+.ev-day-title{font-weight:700;font-size:13.5px;color:var(--txt);display:flex;align-items:center;gap:8px}
+.ev-day-today{background:var(--blue);color:#fff;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:20px;letter-spacing:.03em}
+.ev-day-range{font-size:10.5px;color:var(--dim2);font-weight:500;font-family:'JetBrains Mono',monospace}
+.ev-day-stats{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+.ev-day-pill{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.ev-day-pill.n{background:var(--bg);color:var(--dim)}
+.ev-day-pill.d{background:var(--red-lt);color:var(--red)}
+.ev-day-pill.o{background:#fff7ed;color:#9a3412}
+.ev-day-chev{font-size:11px;color:var(--dim2);transition:transform .18s;flex:none}
+.ev-day.open .ev-day-chev{transform:rotate(90deg)}
+.ev-day-body{display:none;border-top:1px solid var(--line)}
+.ev-day.open .ev-day-body{display:block}
+
+.ev-card{display:flex;gap:11px;padding:11px 16px;border-bottom:1px solid var(--line)}
+.ev-card:last-child{border-bottom:none}
+.ev-card.ongoing{background:#fffbf5}
+.ev-rail{width:3px;border-radius:3px;flex:none;align-self:stretch;min-height:34px}
+.ev-rail.trip{background:#f59e0b}
+.ev-rail.shutdown{background:var(--blue)}
+.ev-rail.system-gone{background:var(--red)}
+.ev-rail.incomer-failed{background:#a855f7}
+.ev-rail.kv33{background:#0891b2}
+.ev-body{flex:1;min-width:0}
+.ev-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px}
+.ev-type{font-size:11.5px;font-weight:700}
+.ev-type.trip{color:#92620a}
+.ev-type.shutdown{color:var(--blue-dk)}
+.ev-type.system-gone{color:var(--red)}
+.ev-type.incomer-failed{color:#7e22ce}
+.ev-type.kv33{color:#0e7490}
+.ev-feeder{font-size:13px;font-weight:700;color:var(--txt)}
+.ev-station{font-size:10.5px;color:var(--dim2);font-weight:500}
+.ev-dur{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--red);white-space:nowrap;font-family:'JetBrains Mono',monospace}
+.ev-dur.ongoing{color:#c2410c}
+.ev-times{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-bottom:3px;flex-wrap:wrap}
+.ev-arrow{color:var(--dim2)}
+.ev-ongoing-tag{background:#fff3cd;color:#92620a;font-size:9.5px;font-weight:700;padding:1px 7px;border-radius:20px;animation:evPulse 1.6s ease-in-out infinite}
+.ev-reason{font-size:11px;color:var(--dim);margin-top:1px}
+.ev-reason b{color:var(--dim2);font-weight:600}
+.ev-del{background:none;border:none;cursor:pointer;font-size:13px;opacity:.4;flex:none;align-self:flex-start;padding:2px 4px;transition:opacity .15s}
+.ev-del:hover{opacity:1}
+
+.ev-empty{text-align:center;padding:50px 20px;color:var(--dim2)}
+.ev-empty-ico{font-size:30px;margin-bottom:8px;opacity:.5}
+.ev-more-btn{display:block;width:100%;text-align:center;padding:10px;background:none;border:none;
+  border-top:1px dashed var(--line2);color:var(--blue);font-size:12px;font-weight:600;cursor:pointer;font-family:'Archivo',sans-serif}
+.ev-more-btn:hover{background:var(--blue-lt)}
+.ev-older-toggle{text-align:center;margin:6px 0 18px}
+.ev-older-toggle button{background:none;border:1.5px dashed var(--line2);color:var(--dim);font-size:12px;font-weight:600;
+  padding:8px 18px;border-radius:20px;cursor:pointer;font-family:'Archivo',sans-serif;transition:all .15s}
+.ev-older-toggle button:hover{border-color:var(--blue);color:var(--blue);border-style:solid}
+
+@media(max-width:640px){
+  .ev-wrap{padding:12px 10px 60px}
+  .ev-day-head{padding:11px 12px}
+  .ev-card{padding:9px 12px;gap:9px}
+  .ev-day-stats{gap:4px}
+  .ev-day-pill{padding:2px 7px;font-size:9.5px}
+  .ev-dur{margin-left:0}
+  .ev-top{gap:6px}
+}
 .rcv-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--line2);border-radius:9px;background:#fff;transition:border-color .15s,background .15s;margin-bottom:8px}
 .rcv-row.checked{border-color:var(--blue);background:var(--blue-lt)}
 .rcv-check{width:16px;height:16px;accent-color:var(--blue);cursor:pointer;flex:none}
@@ -1318,25 +1405,28 @@ body.duty-page-open #page-duty{
 
 <!-- ==================== PAGE: LOG ==================== -->
 <div class="page" id="page-log">
-  <div class="log-page-wrap">
+  <div class="ev-wrap">
 
-    <!-- Toolbar: station tabs + export buttons -->
-    <div class="log-toolbar">
-      <div class="log-station-tabs" id="logStationTabs">
-        <button class="log-stab all active" onclick="setLogStation('__all__')">All Substations</button>
+    <!-- Toolbar: station tabs + actions -->
+    <div class="ev-toolbar">
+      <div class="ev-station-tabs" id="logStationTabs">
+        <button class="ev-stab active" onclick="setLogStation('__all__')">All Substations</button>
       </div>
-      <div class="log-export-btns">
+      <div class="ev-actions">
         <button class="btn btn-ghost btn-sm" id="msgAlertTgl" onclick="toggleMsgAlert()" title="Play a chime + browser notification when a new message arrives from any device">🔔 Alert Tone: On</button>
         <button class="btn btn-ghost btn-sm" id="pushTgl" onclick="togglePush()" title="Receive alerts on this device even when the app is closed">📲 Push: Off</button>
-        <button class="btn btn-ghost btn-sm" onclick="sbPullLog()" title="Load log from Supabase">☁ Pull from Cloud</button>
-        <button class="btn btn-ghost btn-sm" onclick="exportLogCsvActive()">↓ Export Active CSV</button>
-        <button class="btn btn-ghost btn-sm" onclick="exportLogAllSheets()">↓ Export All (Multi-sheet)</button>
+        <button class="btn btn-ghost btn-sm" onclick="sbPullLog()" title="Load log from Supabase">☁ Sync</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportLogCsvActive()">↓ CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportLogAllSheets()">↓ All Sheets</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="clearLogFn()">🗑 Clear</button>
       </div>
     </div>
 
-    <!-- Summary stats -->
-    <div class="log-summary" id="logSummary"></div>
+    <!-- Currently-open outages, always visible regardless of day-group state -->
+    <div class="ev-live" id="evLiveWrap"></div>
+
+    <!-- Day-grouped event timeline (12→12, newest open, older collapsed) -->
+    <div id="evDaysWrap"></div>
 
     <!-- ── Daily Downtime Report (duration + counts + end-of-day Excel send) ── -->
     <div class="card" id="dtReportCard" style="margin-bottom:14px">
@@ -1376,11 +1466,6 @@ body.duty-page-open #page-duty{
           text summary only. <b>📎 Send with Excel</b> attaches the .xlsx file for WhatsApp receivers in addition to the text.
         </div>
       </div>
-    </div>
-
-    <!-- Log table -->
-    <div class="log-tbl-wrap">
-      <div id="logPageWrap"><div class="log-empty-msg">No messages sent yet.</div></div>
     </div>
 
   </div>
@@ -5230,16 +5315,37 @@ function recordLogDirect({type, recipients, status, station, feeder, time, msg, 
   });
 }
 
-// ── Simple row-level duration for the Log page ──────────────────────────
-// An outage Log row tracks its OWN open/closed state and duration directly —
-// no separate store to keep in sync, no time-proximity matching, no
-// reconciliation. logOpenOutage maps feeder name → the actual open Log row
-// object (by reference, since LOG rows are plain objects); closing an
-// outage means finding that row and mutating it in place. This is
-// independent of DT_EVENTS/the downtime-report card, which are untouched.
+// ══════════════════════════════════════════════════════════════════════
+// EVENT LOG v2 — paired outage/restore engine
+// ──────────────────────────────────────────────────────────────────────
+// Design: the raw dispatch log (LOG[]) is unordered noise — a Trip and its
+// Charged are two separate rows with no relationship. Every other page of
+// this app (CSV export, cloud sync, Downtime Report) reads LOG[] directly,
+// so it is left completely alone. This section builds a derived, in-memory
+// EVENT list on top of it: one object per outage, holding BOTH its start
+// row and its end row, with duration computed from that pair. A feeder can
+// only have one open event per condition type at a time — a second start
+// for an already-open feeder+type is treated as a duplicate and ignored
+// (not logged as a new event), which is what keeps "one log per condition"
+// true even if an operator double-taps a dispatch button. An event only
+// counts as a real log entry once BOTH sides exist; a start with no end
+// yet is "live" (shown separately, up top) rather than appearing as a
+// half-finished row in the day-by-day history.
+// ══════════════════════════════════════════════════════════════════════
 const logOutageStartLabels = new Set(['Trip','Trip All','Shutdown','System Gone','11KV Incomer Failed','33KV Incomer Failed']);
 const logOutageEndLabels   = new Set(['Charged','Restore All','System Restored','11KV Incomer Restored','33KV Incomer Restored']);
-let logOpenOutage = {};   // feeder name -> open LOG row
+// condition label -> event "type" key, used for color-coding + grouping
+const EV_TYPE_OF = {
+  'Trip':'trip','Trip All':'trip',
+  'Shutdown':'shutdown',
+  'System Gone':'system-gone',
+  '11KV Incomer Failed':'incomer-failed',
+  '33KV Incomer Failed':'kv33'
+};
+const EV_TYPE_LABEL = {'trip':'Trip','shutdown':'Shutdown','system-gone':'System Gone','incomer-failed':'11 KV Incomer Failed','kv33':'33 KV Incomer Failed'};
+const EV_TYPE_ICON  = {'trip':'⚡','shutdown':'🔌','system-gone':'🌐','incomer-failed':'🔻','kv33':'🔺'};
+
+let logOpenOutage = {};   // "feeder|type" -> open LOG row (kept for backward compat with any external reference)
 
 function logResolveFeeders(row){
   const rawFeeder = row.feeder || '';
@@ -5253,28 +5359,76 @@ function logResolveFeeders(row){
   return rawFeeder.split(',').map(s=>s.trim()).filter(Boolean);
 }
 
-function logTrackDuration(row){
+function evRowIso(row){
+  return (typeof dtLogRowEventIso==='function' ? dtLogRowEventIso(row) : null)
+    || (row.date ? new Date(row.date).toISOString() : null);
+}
+
+// Kept for compatibility with any other code path that still calls this
+// name directly — delegates to the real engine below.
+function logTrackDuration(row){ evIngestRow(row); }
+
+// The single source of truth: walks LOG oldest→newest and produces one
+// EVENT per real outage/restore pair. Cheap to rebuild (LOG stays small —
+// thousands of rows at most) and removes any risk of the derived state
+// drifting from the raw log after a delete, cloud pull, or edit.
+let EVENTS = [];          // closed + open events, oldest first
+let EV_OPEN = {};         // "feeder|type" -> open EVENT, for O(1) pairing
+
+function evRebuildAll(){
+  EVENTS = [];
+  EV_OPEN = {};
+  logOpenOutage = {};
+  const ordered = [...LOG].sort((a,b)=> new Date(a.date||0) - new Date(b.date||0));
+  ordered.forEach(row=>evIngestRow(row));
+}
+
+function evIngestRow(row){
   if(!row || !row.condition) return;
+  const type = EV_TYPE_OF[row.condition];
   const feeders = logResolveFeeders(row);
   if(!feeders.length) return;
 
-  if(logOutageStartLabels.has(row.condition)){
-    row.duration_open = true;
-    row.duration_min = null;
-    feeders.forEach(f=>{ logOpenOutage[f] = row; });
-  } else if(logOutageEndLabels.has(row.condition)){
+  if(logOutageStartLabels.has(row.condition) && type){
     feeders.forEach(f=>{
-      const openRow = logOpenOutage[f];
-      if(!openRow || openRow===row) return;
-      const startIso = (typeof dtLogRowEventIso==='function' ? dtLogRowEventIso(openRow) : null) || (openRow.date ? new Date(openRow.date).toISOString() : null);
-      const endIso   = (typeof dtLogRowEventIso==='function' ? dtLogRowEventIso(row) : null) || new Date().toISOString();
-      const startMs = startIso ? new Date(startIso).getTime() : null;
-      const endMs   = new Date(endIso).getTime();
-      if(startMs!=null && endMs>=startMs){
-        openRow.duration_min = Math.round((endMs-startMs)/60000);
+      const key = f+'|'+type;
+      if(EV_OPEN[key]){
+        // A start already open for this exact feeder+type — this is a
+        // duplicate dispatch, not a second event. Ignore it so the log
+        // never carries two open entries for the same condition.
+        row._duplicate = true;
+        return;
       }
-      openRow.duration_open = false;
-      delete logOpenOutage[f];
+      const ev = {
+        id: f+'|'+type+'|'+(row.id!=null?row.id:row.ts),
+        feeder:f, station:row.station||'', type,
+        startRow:row, endRow:null,
+        startMs: (()=>{ const iso=evRowIso(row); return iso?new Date(iso).getTime():Date.now(); })(),
+        endMs:null, reason:row.reason||''
+      };
+      EV_OPEN[key] = ev;
+      logOpenOutage[key] = row;
+      EVENTS.push(ev);
+    });
+  } else if(logOutageEndLabels.has(row.condition)){
+    // 'Charged' closes either trip OR shutdown for a feeder — resolve by
+    // checking which is actually open, preferring trip (matches existing
+    // DT_LOG_END_TYPE_OF convention elsewhere in the app).
+    feeders.forEach(f=>{
+      let closeType = type;
+      if(!closeType){
+        closeType = EV_OPEN[f+'|trip'] ? 'trip' : (EV_OPEN[f+'|shutdown'] ? 'shutdown' : null);
+      }
+      if(!closeType) return;
+      const key = f+'|'+closeType;
+      const ev = EV_OPEN[key];
+      if(!ev) return;   // no matching open start — nothing to pair, ignore
+      const iso = evRowIso(row);
+      ev.endRow = row;
+      ev.endMs = iso ? new Date(iso).getTime() : Date.now();
+      if(ev.endMs < ev.startMs) ev.endMs = ev.startMs;
+      delete EV_OPEN[key];
+      delete logOpenOutage[key];
     });
   }
 }
@@ -5288,13 +5442,11 @@ function _pushToLog(entry){
     ...entry
   };
   LOG.unshift(row);
-  // Simple, row-level duration tracking for the Log page itself — see
-  // logTrackDuration above. Independent of DT_EVENTS/dtDriveFromLogEntry
-  // below, which continues to feed the separate downtime-report card.
-  if(typeof logTrackDuration==='function') logTrackDuration(row);
+  // Feed the paired-event engine for the redesigned Log page.
+  evIngestRow(row);
   // The Log row is now the authoritative trigger for duration tracking —
   // see dtDriveFromLogEntry for why this replaced the old feederStatusMap
-  // diff-only approach.
+  // diff-only approach. Independent of EVENTS above; untouched.
   if(typeof dtDriveFromLogEntry==='function') dtDriveFromLogEntry(row);
   if($('page-log').classList.contains('active')) renderLogPage();
   // 🔔 Fire the same chime + browser notification for entries created on
@@ -5306,19 +5458,20 @@ function _pushToLog(entry){
 }
 
 function renderLogPage(){
+  evRebuildAll();
   renderLogStationTabs();
-  renderLogSummary();
-  renderLogTable();
+  renderEvLive();
+  renderEvDays();
   if(typeof dtRenderSummary==='function') dtRenderSummary();
 }
 
 function setLogStation(st){
   logActiveStation = st;
-  document.querySelectorAll('.log-stab').forEach(b=>{
+  document.querySelectorAll('.ev-stab').forEach(b=>{
     b.classList.toggle('active', b.dataset.st === st);
   });
-  renderLogSummary();
-  renderLogTable();
+  renderEvLive();
+  renderEvDays();
 }
 
 function renderLogStationTabs(){
@@ -5328,140 +5481,163 @@ function renderLogStationTabs(){
   // creating a duplicate "All Substations" pill next to the real one.
   const stations = [...new Set(LOG.map(r=>r.station).filter(Boolean))]
     .filter(st=>st!=='All Substations' && st!=='__all__');
-  tabs.innerHTML = `<button class="log-stab all${logActiveStation==='__all__'?' active':''}" data-st="__all__" onclick="setLogStation('__all__')">All Substations</button>`;
+  tabs.innerHTML = `<button class="ev-stab${logActiveStation==='__all__'?' active':''}" data-st="__all__" onclick="setLogStation('__all__')">All Substations</button>`;
   stations.forEach(st=>{
     const active = logActiveStation===st?' active':'';
-    tabs.innerHTML += `<button class="log-stab${active}" data-st="${esc(st)}" onclick="setLogStation('${esc(st)}')">${esc(st)}</button>`;
+    tabs.innerHTML += `<button class="ev-stab${active}" data-st="${esc(st)}" onclick="setLogStation('${esc(st)}')">${esc(st)}</button>`;
   });
 }
 
-// Log page shows only the last 24 hours by default — older entries stay
-// hidden until explicitly expanded, via logShowAll.
-let logShowAll = false;
-function filteredLog(){
-  let rows = logActiveStation==='__all__' ? LOG : LOG.filter(r=>r.station===logActiveStation);
-  if(!logShowAll){
-    const cutoff = Date.now() - 24*60*60*1000;
-    rows = rows.filter(r=>{
-      const t = r.date ? new Date(r.date).getTime() : 0;
-      return t >= cutoff;
-    });
-  }
-  return rows;
-}
-function toggleLogShowAll(){
-  logShowAll = !logShowAll;
-  renderLogTable();
+function evFilteredEvents(){
+  return logActiveStation==='__all__' ? EVENTS : EVENTS.filter(e=>e.station===logActiveStation);
 }
 
-function renderLogSummary(){
-  const rows = filteredLog();
-  const trips    = rows.filter(r=>/trip/i.test(r.condition)).length;
-  const shutdowns= rows.filter(r=>/shutdown/i.test(r.condition)).length;
-  const charged  = rows.filter(r=>/charged/i.test(r.condition)).length;
-  const failed   = rows.filter(r=>/fail|error/i.test(r.status)).length;
-  $('logSummary').innerHTML=`
-    <div class="log-stat"><b>${rows.length}</b>Total</div>
-    <div class="log-stat"><b style="color:#856404">${trips}</b>Trips</div>
-    <div class="log-stat"><b style="color:var(--blue-dk)">${shutdowns}</b>Shutdowns</div>
-    <div class="log-stat"><b style="color:#15803d">${charged}</b>Charged</div>
-    ${failed?`<div class="log-stat"><b style="color:var(--red)">${failed}</b>Failed</div>`:''}`;
+// ── Live strip: outages currently open (no matching Charged/Restored yet).
+// Always visible at the top regardless of which day is expanded — an
+// operator needs to see "what's down right now" without hunting through
+// day groups. This is also where an "incomplete pair" actually lives until
+// it closes; it never appears as a dangling row in the history below.
+function renderEvLive(){
+  const wrap = $('evLiveWrap'); if(!wrap) return;
+  const open = evFilteredEvents().filter(e=>!e.endRow).sort((a,b)=>a.startMs-b.startMs);
+  if(!open.length){ wrap.innerHTML=''; return; }
+  wrap.innerHTML = open.map(e=>{
+    const mins = Math.round((Date.now()-e.startMs)/60000);
+    return `<div class="ev-live-chip" title="${esc(EV_TYPE_LABEL[e.type])} since ${esc(hmFromMs(e.startMs))}">
+      <span class="ev-live-dot"></span>
+      <span>${EV_TYPE_ICON[e.type]} <b>${esc(e.feeder)}</b> — ${esc(EV_TYPE_LABEL[e.type])} · ${fmtDur(mins)}</span>
+    </div>`;
+  }).join('');
 }
 
-let _renderedLogRows=[];
-function renderLogTable(){
-  const rows = filteredLog();
-  _renderedLogRows = rows;
-  const wrap = $('logPageWrap');
+function hmFromMs(ms){
+  const d = new Date(ms);
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+
+// ── 12→12 day buckets ────────────────────────────────────────────────
+// A "log day" runs from 12:00 (noon) to the next day's 12:00, per the
+// requested "12 to next 12" window. An event belongs to the bucket its
+// START falls into. Buckets are sorted newest-first; only the newest is
+// expanded by default, everything older starts collapsed until the user
+// taps it open.
+function evDayBucketStart(ms){
+  const d = new Date(ms);
+  const noon = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
+  if(d.getTime() < noon.getTime()) noon.setDate(noon.getDate()-1);
+  return noon.getTime();
+}
+function evDayLabel(bucketStartMs){
+  const d = new Date(bucketStartMs);
+  const todayBucket = evDayBucketStart(Date.now());
+  const isToday = bucketStartMs===todayBucket;
+  const isYesterday = bucketStartMs===(todayBucket-86400000);
+  const dateStr = d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+  const label = isToday ? 'Today' : (isYesterday ? 'Yesterday' : dateStr);
+  const end = new Date(bucketStartMs+86400000);
+  const range = `${dateStr}, 12:00 → ${end.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})}, 12:00`;
+  return {label, range, isToday};
+}
+
+let evOpenDayBucket = null;   // which bucket's body is expanded; null = default (newest)
+function evToggleDay(bucketMs){
+  evOpenDayBucket = (evOpenDayBucket===bucketMs) ? -1 : bucketMs;   // -1 = explicitly none open
+  renderEvDays();
+}
+
+let _evRenderedEvents = [];   // flat list for delete-by-index lookups
+function renderEvDays(){
+  const wrap = $('evDaysWrap'); if(!wrap) return;
   const canEdit = !(typeof monitorMode!=='undefined' && monitorMode);
+  // Only fully-paired (closed) events form the history — open ones live in
+  // the Live strip above, so an "incomplete pair" never shows here.
+  const closed = evFilteredEvents().filter(e=>e.endRow);
+  _evRenderedEvents = closed;
 
-  const hiddenCount = logShowAll ? 0 : LOG.filter(r=>{
-    if(logActiveStation!=='__all__' && r.station!==logActiveStation) return false;
-    const t = r.date ? new Date(r.date).getTime() : 0;
-    return t < (Date.now() - 24*60*60*1000);
-  }).length;
-  const toggleBar = hiddenCount>0
-    ? `<div style="padding:8px 4px;text-align:center">
-         <button class="btn btn-ghost btn-sm" onclick="toggleLogShowAll()">⬇ Show ${hiddenCount} older entr${hiddenCount===1?'y':'ies'} (beyond last 24 hr)</button>
-       </div>`
-    : (logShowAll
-        ? `<div style="padding:8px 4px;text-align:center">
-             <button class="btn btn-ghost btn-sm" onclick="toggleLogShowAll()">⬆ Show only last 24 hr</button>
-           </div>`
-        : '');
-
-  if(!rows.length){
-    wrap.innerHTML = toggleBar + `<div class="log-empty-msg">${logShowAll ? 'No entries yet for this substation.' : 'No entries in the last 24 hours for this substation.'}</div>`;
+  if(!closed.length){
+    wrap.innerHTML = `<div class="ev-empty"><div class="ev-empty-ico">📋</div>No completed outage/restore events yet.<br>Live outages, if any, appear above.</div>`;
     return;
   }
-  let h=`<table class="log-tbl">
-    <thead><tr>
-      <th>#</th><th>Date &amp; Time</th><th>Substation</th><th>Feeder</th>
-      <th>Type</th><th>Duration</th><th>Reason</th><th>Sent At</th><th>Recipients</th><th>Status</th><th>Message</th>${canEdit?'<th></th>':''}
-    </tr></thead><tbody>`;
-  rows.forEach((r,i)=>{
-    const stCls = /fail|error/i.test(r.status)?'fail':'ok';
-    let typeBadge='';
-    if(/trip/i.test(r.condition))         typeBadge=`<span class="badge-trip">⚡ Trip</span>`;
-    else if(/shutdown/i.test(r.condition)) typeBadge=`<span class="badge-sd">🔌 Shutdown</span>`;
-    else if(/charged/i.test(r.condition))  typeBadge=`<span class="badge-chg">✓ Charged</span>`;
-    else                                   typeBadge=`<span>${esc(r.condition)}</span>`;
-    let durCell='<span style="color:var(--dim2)">—</span>';
-    if(r.duration_open){
-      durCell='<span style="color:#b45309;font-weight:700;font-size:10.5px">⏳ ongoing</span>';
-    } else if(r.duration_min!=null){
-      const h_=Math.floor(r.duration_min/60), m_=r.duration_min%60;
-      const durText = h_>0 ? `${h_}h ${m_}m` : `${m_} min`;
-      durCell=`<span style="color:var(--red);font-weight:700;font-size:11px">${durText}</span>`;
-    }
-    h+=`<tr>
-      <td style="color:var(--dim2);font-size:10px">${rows.length-i}</td>
-      <td class="log-ts">${esc(r.ts)}</td>
-      <td style="font-size:11px;font-weight:600">${esc(r.station)}</td>
-      <td style="font-size:11px">${esc(r.feeder)}</td>
-      <td>${typeBadge}</td>
-      <td>${durCell}</td>
-      <td style="font-size:11px;color:var(--dim)">${esc(r.reason||'—')}</td>
-      <td class="log-ts">${esc(r.time||'—')}</td>
-      <td style="font-size:11px">${esc(r.recipients)}</td>
-      <td class="${stCls}">${esc(r.status)}${(r.operator_short||r.device_code)?`<div style="font-size:9.5px;color:var(--dim2);font-family:monospace;margin-top:2px;letter-spacing:.02em" title="${r.operator_name?('Sent by '+esc(r.operator_name)):(r.device_code?('Sent from device '+esc(r.device_code)):'')}">${esc(r.operator_short||r.device_code)}</div>`:''}</td>
-      <td class="msgcell">${esc((r.msg||'').substring(0,120)+(r.msg&&r.msg.length>120?'…':''))}</td>
-      ${canEdit?`<td><button onclick="deleteLogEntry(${i})" title="Delete this log entry" style="background:none;border:none;cursor:pointer;font-size:14px;opacity:.65">🗑</button></td>`:''}
-    </tr>`;
+
+  const buckets = new Map();   // bucketStartMs -> events[]
+  closed.forEach(e=>{
+    const b = evDayBucketStart(e.startMs);
+    if(!buckets.has(b)) buckets.set(b, []);
+    buckets.get(b).push(e);
   });
-  h+='</tbody></table>';
-  wrap.innerHTML = toggleBar + h;
+  const bucketKeys = [...buckets.keys()].sort((a,b)=>b-a);   // newest first
+  const defaultOpenBucket = bucketKeys[0];
+
+  wrap.innerHTML = bucketKeys.map(bucketMs=>{
+    const evs = buckets.get(bucketMs).sort((a,b)=>b.startMs-a.startMs);
+    const {label, range, isToday} = evDayLabel(bucketMs);
+    const isOpen = evOpenDayBucket===null ? (bucketMs===defaultOpenBucket) : (evOpenDayBucket===bucketMs);
+    const totalMin = evs.reduce((s,e)=>s+Math.round((e.endMs-e.startMs)/60000),0);
+
+    const cards = evs.map(e=>{
+      const idx = _evRenderedEvents.indexOf(e);
+      const durMin = Math.round((e.endMs-e.startMs)/60000);
+      const startHM = hmFromMs(e.startMs), endHM = hmFromMs(e.endMs);
+      const reason = e.reason ? `<div class="ev-reason"><b>Reason:</b> ${esc(e.reason)}</div>` : '';
+      return `<div class="ev-card">
+        <div class="ev-rail ${e.type}"></div>
+        <div class="ev-body">
+          <div class="ev-top">
+            <span class="ev-type ${e.type}">${EV_TYPE_ICON[e.type]} ${esc(EV_TYPE_LABEL[e.type])}</span>
+            <span class="ev-feeder">${esc(e.feeder)}</span>
+            <span class="ev-station">${esc(e.station)}</span>
+            <span class="ev-dur">${fmtDur(durMin)}</span>
+          </div>
+          <div class="ev-times"><span>${startHM}</span><span class="ev-arrow">→</span><span>${endHM}</span></div>
+          ${reason}
+        </div>
+        ${canEdit?`<button class="ev-del" onclick="deleteEvEntry(${idx})" title="Delete this event (removes both the outage and restore log rows)">🗑</button>`:''}
+      </div>`;
+    }).join('');
+
+    return `<div class="ev-day${isOpen?' open':''}">
+      <div class="ev-day-head" onclick="evToggleDay(${bucketMs})">
+        <div class="ev-day-title">${isToday?`<span class="ev-day-today">TODAY</span>`:''}${esc(label)}<span class="ev-day-range">${esc(range)}</span></div>
+        <div class="ev-day-stats">
+          <span class="ev-day-pill n">${evs.length} event${evs.length===1?'':'s'}</span>
+          <span class="ev-day-pill d">${fmtDur(totalMin)} down</span>
+        </div>
+        <span class="ev-day-chev">▶</span>
+      </div>
+      <div class="ev-day-body">${cards}</div>
+    </div>`;
+  }).join('');
 }
 
-// Delete one message-log entry (mistaken dispatch etc.). Removes it locally
-// and, when Supabase is configured, also from the cloud log so it does not
-// reappear on this or other devices at the next pull.
-function deleteLogEntry(i){
+// Delete one paired event — removes BOTH its start and end rows from the
+// raw log (and cloud), since showing "half" of a deleted pair would just
+// recreate the incomplete-pair problem this redesign removes.
+function deleteEvEntry(i){
   if(typeof monitorMode!=='undefined' && monitorMode){ toast('Monitoring access is view-only'); return; }
-  const r=_renderedLogRows[i]; if(!r) return;
-  if(!confirm(`Delete this log entry?\n\n${r.ts} — ${r.station||'—'} / ${r.feeder||'—'}\n"${(r.msg||'').substring(0,80)}"\n\nIt will also be removed from the cloud log.`)) return;
-  const idx=LOG.indexOf(r); if(idx>=0) LOG.splice(idx,1);
-  // If this row was a still-open outage, clear any dangling reference so a
-  // later Charged/Restored can't try to close a row that no longer exists.
-  if(typeof logOpenOutage!=='undefined'){
-    Object.keys(logOpenOutage).forEach(f=>{ if(logOpenOutage[f]===r) delete logOpenOutage[f]; });
-  }
+  const e=_evRenderedEvents[i]; if(!e) return;
+  if(!confirm(`Delete this event?\n\n${e.feeder} — ${EV_TYPE_LABEL[e.type]}\n${hmFromMs(e.startMs)} → ${hmFromMs(e.endMs)} (${fmtDur(Math.round((e.endMs-e.startMs)/60000))})\n\nThis removes both the outage and restore log rows, locally and from the cloud.`)) return;
+  [e.startRow, e.endRow].filter(Boolean).forEach(r=>{
+    const idx=LOG.indexOf(r); if(idx>=0) LOG.splice(idx,1);
+    if(sbReady() && r.ts){
+      let path='message_log?ts=eq.'+encodeURIComponent(r.ts);
+      if(r.station) path+='&station=eq.'+encodeURIComponent(r.station);
+      if(r.feeder)  path+='&feeder=eq.'+encodeURIComponent(r.feeder);
+      sbFetch(path,'DELETE').catch(e2=>console.warn('cloud delete failed:',e2.message));
+    }
+  });
   renderLogPage();
-  if(sbReady() && r.ts){
-    let path='message_log?ts=eq.'+encodeURIComponent(r.ts);
-    if(r.station) path+='&station=eq.'+encodeURIComponent(r.station);
-    if(r.feeder)  path+='&feeder=eq.'+encodeURIComponent(r.feeder);
-    sbFetch(path,'DELETE')
-      .then(()=>toast('🗑 Log entry deleted (local + cloud)'))
-      .catch(e=>toast('Deleted locally — cloud delete failed: '+e.message,4200));
-  } else {
-    toast('🗑 Log entry deleted');
-  }
+  toast('🗑 Event deleted (local + cloud)');
 }
 
-// Export CSV for currently active station (or all)
+// Legacy alias kept because a handful of other call sites (delete button on
+// older code paths, etc.) may still reference the previous name.
+function deleteLogEntry(i){ deleteEvEntry(i); }
+
+// Export CSV for currently active station (or all) — exports the raw
+// dispatch log rows (both sides of every pair), same data source as
+// before; only the on-page rendering above changed.
 function exportLogCsvActive(){
-  const rows=filteredLog();
+  const rows = logActiveStation==='__all__' ? LOG : LOG.filter(r=>r.station===logActiveStation);
   if(!rows.length){toast('No entries to export');return;}
   const label = logActiveStation==='__all__'?'all':logActiveStation.replace(/[^a-zA-Z0-9\u0900-\u097F]/g,'_').substring(0,30);
   downloadCsv(rows, `shutdown_log_${label}.csv`);
