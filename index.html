@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -156,6 +157,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .ev-card{display:flex;gap:11px;padding:11px 16px;border-bottom:1px solid var(--line)}
 .ev-card:last-child{border-bottom:none}
 .ev-card.ongoing{background:#fffbf5}
+.ev-card.ev-pending{background:#f8fafc;opacity:.85}
 .ev-rail{width:3px;border-radius:3px;flex:none;align-self:stretch;min-height:34px}
 .ev-rail.trip{background:#f59e0b}
 .ev-rail.shutdown{background:var(--blue)}
@@ -1418,7 +1420,8 @@ body.duty-page-open #page-duty{
         <button class="btn btn-ghost btn-sm" onclick="sbPullLog()" title="Load log from Supabase">☁ Sync</button>
         <button class="btn btn-ghost btn-sm" onclick="exportLogCsvActive()">↓ CSV</button>
         <button class="btn btn-ghost btn-sm" onclick="exportLogAllSheets()">↓ All Sheets</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="clearLogFn()">🗑 Clear</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="clearLogFn()" title="Clears the log on THIS device's screen only — does not touch Supabase or other devices">🗑 Clear (this device)</button>
+        <button class="btn btn-ghost btn-sm" style="color:#fff;background:var(--red);border-color:var(--red)" onclick="purgeOldDataFn()" title="Permanently deletes everything before today from Supabase — every other device clears automatically within seconds">⚠ Delete Old Data (All Devices)</button>
       </div>
     </div>
 
@@ -2127,6 +2130,19 @@ gemini-1.5-flash</textarea>
     <button onclick="pushPromptDismiss()" style="width:100%;padding:10px;border:none;background:transparent;color:var(--dim2);font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;cursor:pointer">पछि (Not now)</button>
   </div>
 </div>
+
+<!-- SYNC-BLOCKING OVERLAY — shown while a log/dispatch action is being
+     confirmed by Supabase, so a second tap can never fire while the first
+     one is still in flight (see syncBlockShow/syncBlockHide). Sits above
+     every other overlay including the password modal. -->
+<div id="syncBlockOverlay" style="display:none;position:fixed;inset:0;background:rgba(20,24,31,.35);backdrop-filter:blur(1px);z-index:9500;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:22px 30px;min-width:200px;box-shadow:0 10px 44px rgba(0,0,0,.28);text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px">
+    <div style="width:30px;height:30px;border:3px solid #e2e6ea;border-top-color:var(--blue);border-radius:50%;animation:syncBlockSpin .7s linear infinite"></div>
+    <div id="syncBlockLabel" style="font-size:13px;font-weight:700;color:var(--txt)">Saving…</div>
+    <div style="font-size:11px;color:var(--dim2)">Please wait — do not tap again</div>
+  </div>
+</div>
+<style>@keyframes syncBlockSpin{to{transform:rotate(360deg)}}</style>
 
 <!-- OLD SETTINGS PASSWORD MODAL (kept for settings re-auth) -->
 <div id="pwOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center">
@@ -3056,6 +3072,12 @@ async function checkPw(){
       pwModalPurpose='settings';
       closePwModal();
       clearLogConfirmed();
+      return;
+    }
+    if(pwModalPurpose==='purgeOldData'){
+      pwModalPurpose='settings';
+      closePwModal();
+      purgeOldDataConfirmed();
       return;
     }
     if(pwModalPurpose==='dailyReportAuto'){
@@ -5439,6 +5461,7 @@ function _pushToLog(entry){
           hour:'2-digit',minute:'2-digit',second:'2-digit'}),
     date: new Date(),
     operator_short: typeof getOperatorShortName==='function' ? getOperatorShortName() : '',
+    _pending: true,   // true until sbInsertLog() confirms this against Supabase
     ...entry
   };
   LOG.unshift(row);
@@ -5455,6 +5478,7 @@ function _pushToLog(entry){
   if(typeof msgAlertFirstSync!=='undefined' && !msgAlertFirstSync){
     try{ notifyNewMessages(1, row); }catch(e){}
   }
+  return row;
 }
 
 function renderLogPage(){
@@ -5503,9 +5527,10 @@ function renderEvLive(){
   if(!open.length){ wrap.innerHTML=''; return; }
   wrap.innerHTML = open.map(e=>{
     const mins = Math.round((Date.now()-e.startMs)/60000);
-    return `<div class="ev-live-chip" title="${esc(EV_TYPE_LABEL[e.type])} since ${esc(hmFromMs(e.startMs))}">
+    const isPending = !!(e.startRow?._pending);
+    return `<div class="ev-live-chip" title="${esc(EV_TYPE_LABEL[e.type])} since ${esc(hmFromMs(e.startMs))}${isPending?' — saving…':''}">
       <span class="ev-live-dot"></span>
-      <span>${EV_TYPE_ICON[e.type]} <b>${esc(e.feeder)}</b> — ${esc(EV_TYPE_LABEL[e.type])} · ${fmtDur(mins)}</span>
+      <span>${EV_TYPE_ICON[e.type]} <b>${esc(e.feeder)}</b> — ${esc(EV_TYPE_LABEL[e.type])} · ${fmtDur(mins)}${isPending?' · ⏳':''}</span>
     </div>`;
   }).join('');
 }
@@ -5555,7 +5580,10 @@ function renderEvDays(){
   _evRenderedEvents = closed;
 
   if(!closed.length){
-    wrap.innerHTML = `<div class="ev-empty"><div class="ev-empty-ico">📋</div>No completed outage/restore events yet.<br>Live outages, if any, appear above.</div>`;
+    const stillLoading = typeof logNeedsBootstrap!=='undefined' && logNeedsBootstrap && sbReady();
+    wrap.innerHTML = stillLoading
+      ? `<div class="ev-empty"><div class="ev-empty-ico" style="animation:syncBlockSpin 1s linear infinite;display:inline-block">⏳</div>Loading log from Supabase…<br><span style="font-size:11px">This page reflects the cloud database, not this device's memory — please wait for the first sync.</span></div>`
+      : `<div class="ev-empty"><div class="ev-empty-ico">📋</div>No completed outage/restore events yet.<br>Live outages, if any, appear above.</div>`;
     return;
   }
 
@@ -5579,13 +5607,16 @@ function renderEvDays(){
       const durMin = Math.round((e.endMs-e.startMs)/60000);
       const startHM = hmFromMs(e.startMs), endHM = hmFromMs(e.endMs);
       const reason = e.reason ? `<div class="ev-reason"><b>Reason:</b> ${esc(e.reason)}</div>` : '';
-      return `<div class="ev-card">
+      const isPending = !!(e.startRow?._pending || e.endRow?._pending);
+      const pendingTag = isPending ? ` <span style="font-size:9px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:1px 6px;color:#1d4ed8;font-weight:700">⏳ saving…</span>` : '';
+      return `<div class="ev-card${isPending?' ev-pending':''}">
         <div class="ev-rail ${e.type}"></div>
         <div class="ev-body">
           <div class="ev-top">
             <span class="ev-type ${e.type}">${EV_TYPE_ICON[e.type]} ${esc(EV_TYPE_LABEL[e.type])}</span>
             <span class="ev-feeder">${esc(e.feeder)}</span>
             <span class="ev-station">${esc(e.station)}</span>
+            ${pendingTag}
             <span class="ev-dur">${fmtDur(durMin)}</span>
           </div>
           <div class="ev-times"><span>${startHM}</span><span class="ev-arrow">→</span><span>${endHM}</span></div>
@@ -5612,21 +5643,37 @@ function renderEvDays(){
 // Delete one paired event — removes BOTH its start and end rows from the
 // raw log (and cloud), since showing "half" of a deleted pair would just
 // recreate the incomplete-pair problem this redesign removes.
-function deleteEvEntry(i){
+async function deleteEvEntry(i){
   if(typeof monitorMode!=='undefined' && monitorMode){ toast('Monitoring access is view-only'); return; }
   const e=_evRenderedEvents[i]; if(!e) return;
   if(!confirm(`Delete this event?\n\n${e.feeder} — ${EV_TYPE_LABEL[e.type]}\n${hmFromMs(e.startMs)} → ${hmFromMs(e.endMs)} (${fmtDur(Math.round((e.endMs-e.startMs)/60000))})\n\nThis removes both the outage and restore log rows, locally and from the cloud.`)) return;
-  [e.startRow, e.endRow].filter(Boolean).forEach(r=>{
-    const idx=LOG.indexOf(r); if(idx>=0) LOG.splice(idx,1);
-    if(sbReady() && r.ts){
-      let path='message_log?ts=eq.'+encodeURIComponent(r.ts);
-      if(r.station) path+='&station=eq.'+encodeURIComponent(r.station);
-      if(r.feeder)  path+='&feeder=eq.'+encodeURIComponent(r.feeder);
-      sbFetch(path,'DELETE').catch(e2=>console.warn('cloud delete failed:',e2.message));
+
+  syncBlockShow('Deleting…');
+  try{
+    const rowsToDelete = [e.startRow, e.endRow].filter(Boolean);
+    // Delete from Supabase FIRST and wait for confirmation — the local
+    // rows are only removed once the cloud has actually agreed they're
+    // gone, so a failed/offline delete can never look like it worked.
+    if(sbReady()){
+      for(const r of rowsToDelete){
+        if(!r.ts) continue;
+        let path='message_log?ts=eq.'+encodeURIComponent(r.ts);
+        if(r.station) path+='&station=eq.'+encodeURIComponent(r.station);
+        if(r.feeder)  path+='&feeder=eq.'+encodeURIComponent(r.feeder);
+        await sbFetch(path,'DELETE');   // throws on failure — caught below
+      }
     }
-  });
-  renderLogPage();
-  toast('🗑 Event deleted (local + cloud)');
+    rowsToDelete.forEach(r=>{
+      const idx=LOG.indexOf(r); if(idx>=0) LOG.splice(idx,1);
+    });
+    renderLogPage();
+    toast(sbReady() ? '🗑 Event deleted (confirmed in Supabase)' : '🗑 Event deleted (this device — no Supabase configured)');
+  }catch(err){
+    console.warn('Event delete failed:', err.message);
+    toast('⚠ Delete failed — nothing was removed. Check your connection and try again. ('+err.message+')', 6000);
+  }finally{
+    syncBlockHide();
+  }
 }
 
 // Legacy alias kept because a handful of other call sites (delete button on
@@ -5637,6 +5684,10 @@ function deleteLogEntry(i){ deleteEvEntry(i); }
 // dispatch log rows (both sides of every pair), same data source as
 // before; only the on-page rendering above changed.
 function exportLogCsvActive(){
+  if(typeof logNeedsBootstrap!=='undefined' && logNeedsBootstrap && sbReady()){
+    toast('⏳ Still loading the log from Supabase — please wait a moment and try again, so the export is complete.', 4500);
+    return;
+  }
   const rows = logActiveStation==='__all__' ? LOG : LOG.filter(r=>r.station===logActiveStation);
   if(!rows.length){toast('No entries to export');return;}
   const label = logActiveStation==='__all__'?'all':logActiveStation.replace(/[^a-zA-Z0-9\u0900-\u097F]/g,'_').substring(0,30);
@@ -5647,6 +5698,10 @@ function exportLogCsvActive(){
 // Export ALL stations as separate CSV files downloaded sequentially
 // (Google Sheets: open the CSV and it goes into one sheet; repeat per station)
 function exportLogAllSheets(){
+  if(typeof logNeedsBootstrap!=='undefined' && logNeedsBootstrap && sbReady()){
+    toast('⏳ Still loading the log from Supabase — please wait a moment and try again, so the export is complete.', 4500);
+    return;
+  }
   if(!LOG.length){toast('Log is empty');return;}
   const stations=[...(new Set(LOG.map(r=>r.station).filter(Boolean)))];
   if(!stations.length){toast('No station data in log');return;}
@@ -5694,6 +5749,142 @@ function clearLogConfirmed(){
   if(typeof logOpenOutage!=='undefined') logOpenOutage = {};
   renderLogPage();
   toast('Log cleared');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// PURGE OLD DATA — one-time cleanup, everywhere
+// ──────────────────────────────────────────────────────────────────────
+// Unlike "🗑 Clear" above (which only wipes THIS device's in-memory LOG,
+// nothing else), this deletes everything older than today from every
+// place old data lives:
+//   1. Supabase `message_log` — the shared cloud table every device pulls
+//      from, deleted server-side so it's gone for good, not just hidden.
+//   2. This device's local LOG[] and DT_EVENTS (downtime report history).
+//   3. A `data_purge_before` marker written to `app_config` (the same
+//      small shared-settings table `duty_locked` already uses) — every
+//      OTHER device reads this on its next sync cycle (every ~5s, see
+//      _syncFromCloudInner) and trims its own local LOG/DT_EVENTS to
+//      match, so the cleanup reaches every device without needing anyone
+//      to press anything a second time.
+// "Today" = local midnight → now, so a fresh, clean slate starting at the
+// beginning of the current day survives; everything before it is gone.
+function purgeOldDataStartOfToday(){
+  const d=new Date(); d.setHours(0,0,0,0); return d;
+}
+
+function purgeOldDataFn(){
+  if(typeof monitorMode!=='undefined' && monitorMode){ toast('Monitoring access is view-only'); return; }
+  if(!settingsPwExists){ toast('पहिले ⚙ Settings बाट Settings password सेट गर्नुहोस्।', 3500); return; }
+  pwModalPurpose='purgeOldData';
+  const overlay=$('pwOverlay');
+  overlay.style.display='flex';
+  $('pwInput').value=''; $('pwError').textContent='';
+  const nr=$('pwFirstRunNotice'), cr=$('pwConfirmRow');
+  if(nr) nr.style.display='none';
+  if(cr) cr.style.display='none';
+  $('pwModalTitle').textContent='Delete Old Data (All Devices) — Settings Password';
+  setTimeout(()=>$('pwInput').focus(),80);
+}
+
+// Called by checkPw() only after the Settings password has verified.
+async function purgeOldDataConfirmed(){
+  const cutoff = purgeOldDataStartOfToday();
+  const cutoffIso = cutoff.toISOString();
+  const cutoffLabel = cutoff.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+  if(!confirm(
+    `Delete ALL log and downtime history before today (${cutoffLabel})?\n\n`+
+    `This removes it from:\n`+
+    `• Supabase (shared — permanent, cannot be undone)\n`+
+    `• This device\n`+
+    `• Every other connected device, automatically on its next sync\n\n`+
+    `Today's entries are kept. This cannot be undone — continue?`
+  )) return;
+
+  syncBlockShow('Deleting old data…');
+  try{
+    if(!sbReady()){
+      // No Supabase configured — this device's local copy is the only
+      // record that exists, so purging it locally is the whole action.
+      applyLocalDataPurge(cutoffIso);
+      toast('✓ Cleared on this device (no Supabase configured, so nothing to delete in the cloud).', 5000);
+      return;
+    }
+    // Cloud delete must succeed BEFORE anything is touched locally — the
+    // Log is Supabase-dependent now, so this device should never show
+    // less data than the cloud actually has. A failed cloud delete means
+    // the purge did not happen, full stop; retrying is safe either way
+    // since the DELETE filter is idempotent (already-gone rows just
+    // match zero rows the second time).
+    await sbFetch('message_log?created_at=lt.'+encodeURIComponent(cutoffIso), 'DELETE');
+    // Broadcast the cutoff so every other device self-purges on its own
+    // next sync cycle.
+    try{
+      const url=getSbUrl()+'/rest/v1/app_config?on_conflict=key';
+      await fetch(url,{
+        method:'POST',
+        headers:{...sbHeaders(),'Prefer':'resolution=merge-duplicates,return=minimal'},
+        body:JSON.stringify({key:'data_purge_before', value:cutoffIso, updated_at:new Date().toISOString()})
+      });
+    }catch(e){ console.warn('purge marker push failed:', e.message); }
+
+    applyLocalDataPurge(cutoffIso);
+    toast('✓ Old data deleted — cleared from Supabase and this device. Other devices will clear automatically within a few seconds of their next sync.', 6000);
+  }catch(e){
+    console.warn('cloud purge failed:', e.message);
+    toast('⚠ Delete failed — nothing was removed, on this device or in Supabase. Check your connection and try again. ('+e.message+')', 6500);
+  }finally{
+    syncBlockHide();
+  }
+}
+
+// Trims LOG[] and DT_EVENTS to keep only entries at/after cutoffIso — used
+// both by the device that initiated the purge, and by every other device
+// that picks up the data_purge_before marker on its next sync.
+let lastAppliedPurgeMarker = localStorage.getItem('sms2_last_purge_marker') || '';
+function applyLocalDataPurge(cutoffIso){
+  const cutoffMs = new Date(cutoffIso).getTime();
+
+  const beforeLog = LOG.length;
+  for(let i=LOG.length-1;i>=0;i--){
+    const t = LOG[i].date ? new Date(LOG[i].date).getTime() : 0;
+    if(t < cutoffMs) LOG.splice(i,1);
+  }
+  if(typeof logOpenOutage!=='undefined') logOpenOutage = {};
+
+  if(typeof DT_EVENTS!=='undefined'){
+    const beforeDt = DT_EVENTS.length;
+    DT_EVENTS = DT_EVENTS.filter(e=>new Date(e.start).getTime() >= cutoffMs);
+    if(typeof dtSave==='function') dtSave();
+    console.log(`Purge: DT_EVENTS ${beforeDt} → ${DT_EVENTS.length}`);
+  }
+  console.log(`Purge: LOG ${beforeLog} → ${LOG.length}`);
+
+  // This device has now fully applied this cutoff — remember it so the
+  // periodic sync check below doesn't redundantly re-apply the same purge
+  // (or, worse, re-trim against a marker this device already honored
+  // while the operator is actively adding fresh entries).
+  lastAppliedPurgeMarker = cutoffIso;
+  try{ localStorage.setItem('sms2_last_purge_marker', cutoffIso); }catch(e){}
+
+  // A purge invalidates any "resume from where we left off" state tied to
+  // the OLD, now-deleted rows — force the next sync to re-bootstrap LOG
+  // from Supabase fresh rather than trying to fetch "everything after
+  // row #X" when row #X itself may no longer exist.
+  if(typeof logNeedsBootstrap!=='undefined') logNeedsBootstrap = true;
+
+  if($('page-log') && $('page-log').classList.contains('active')) renderLogPage();
+  if(typeof dtRenderSummary==='function') dtRenderSummary();
+}
+
+// Checked once per sync cycle (see _syncFromCloudInner) — if another
+// device has purged more recently than this device has applied, catch up
+// automatically. Cheap: just a string compare against a value already
+// fetched alongside the other app_config keys.
+function checkRemoteDataPurge(remoteMarker){
+  if(!remoteMarker) return;
+  if(remoteMarker === lastAppliedPurgeMarker) return;
+  if(new Date(remoteMarker).getTime() <= new Date(lastAppliedPurgeMarker||0).getTime()) return;
+  applyLocalDataPurge(remoteMarker);
 }
 
 // Keep old renderLog alias so existing references don't break
@@ -10218,8 +10409,58 @@ async function sbUpdateLogRowTime(row, originalTs){
     console.warn('Log row time update failed:', e.message);
   }
 }
+// ══════════════════════════════════════════════════════════════════════
+// SYNC-BLOCKING OVERLAY — one reference counter, so overlapping in-flight
+// inserts (e.g. a bulk dispatch touching several feeders) don't hide the
+// overlay after the FIRST one finishes while others are still pending.
+// ══════════════════════════════════════════════════════════════════════
+let syncBlockCount = 0;
+function syncBlockShow(label){
+  syncBlockCount++;
+  const ov=$('syncBlockOverlay'), lbl=$('syncBlockLabel');
+  if(lbl) lbl.textContent = label || 'Saving…';
+  if(ov) ov.style.display='flex';
+}
+function syncBlockHide(){
+  syncBlockCount = Math.max(0, syncBlockCount-1);
+  if(syncBlockCount===0){
+    const ov=$('syncBlockOverlay');
+    if(ov) ov.style.display='none';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// sbInsertLog — the single funnel every dispatch action already calls
+// right after _pushToLog()/recordLogDirect(). The Log page is now
+// Supabase-dependent, not device-dependent: a row only counts as really
+// logged once Supabase has confirmed it, so this function:
+//   1. Blocks the whole UI the instant it's called (before any network
+//      request) — nobody can tap another action while this one is still
+//      unconfirmed, so a slow connection can never look like "nothing
+//      happened" and invite a duplicate/retry tap.
+//   2. Inserts with return=representation so Supabase hands back the REAL
+//      row (its own id + created_at) instead of trusting this device's
+//      locally-generated placeholder.
+//   3. On success, swaps the optimistic row _pushToLog() just added for
+//      that confirmed row — same object identity in LOG so any in-flight
+//      reference (e.g. onFeederStatusAction's `loggedRow`) still points
+//      at a live, now-confirmed entry — then re-renders.
+//   4. On failure, the optimistic row is REMOVED — a dispatch that never
+//      reached Supabase must not sit in the Log looking saved — and a
+//      clear, un-missable retry prompt is shown instead of a console-only
+//      warning.
+//   5. Always unblocks the UI in `finally`, success or failure.
 async function sbInsertLog(entry){
-  if(!sbReady()) return;
+  if(!sbReady()){
+    // No Supabase configured at all — nothing to confirm against, so the
+    // optimistic row IS the only record there will ever be. Leave it in
+    // place rather than deleting data with nowhere else to live.
+    return;
+  }
+  syncBlockShow('Saving to cloud…');
+  // The optimistic row _pushToLog()/recordLogDirect() already added,
+  // identified by reference (not by id — it has none yet).
+  const optimisticRow = LOG.find(r=>r===entry) || entry;
   const basePayload = {
     ts:         entry.ts||'',
     station:    entry.station||'',
@@ -10232,23 +10473,66 @@ async function sbInsertLog(entry){
     msg:        entry.msg||'',
     device_code: getDeviceCode()
   };
-  try{
-    await sbFetch('message_log', 'POST', {
-      ...basePayload,
-      operator_name:  typeof getOperatorName==='function' ? getOperatorName() : '',
-      operator_short: entry.operator_short || (typeof getOperatorShortName==='function' ? getOperatorShortName() : '')
+  const withOperator = {
+    ...basePayload,
+    operator_name:  typeof getOperatorName==='function' ? getOperatorName() : '',
+    operator_short: entry.operator_short || (typeof getOperatorShortName==='function' ? getOperatorShortName() : '')
+  };
+  async function insertReturningRow(payload){
+    const url=getSbUrl()+'/rest/v1/message_log';
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{...sbHeaders(),'Prefer':'return=representation'},
+      body:JSON.stringify(payload)
     });
-  }catch(e){
-    // If this failed specifically because operator_name/operator_short
-    // don't exist yet on this database (Setup SQL migration not run), the
-    // WHOLE insert gets rejected, not just those two fields — retry without
-    // them so this entry still reaches Supabase and syncs to other devices.
-    console.warn('Supabase log insert with operator fields failed — retrying without them:', e.message);
-    try{
-      await sbFetch('message_log', 'POST', basePayload);
-    }catch(e2){
-      console.warn('Supabase log insert failed:', e2.message);
+    if(!res.ok){
+      let err=''; try{const d=await res.json(); err=d?.message||d?.hint||d?.error||res.status;}catch{err=res.status;}
+      throw new Error(String(err));
     }
+    const rows = await res.json();
+    return rows && rows[0];
+  }
+  try{
+    let confirmed;
+    try{
+      confirmed = await insertReturningRow(withOperator);
+    }catch(e){
+      // If this failed specifically because operator_name/operator_short
+      // don't exist yet on this database (Setup SQL migration not run),
+      // the WHOLE insert gets rejected, not just those two fields — retry
+      // without them so this entry still reaches Supabase.
+      console.warn('Supabase log insert with operator fields failed — retrying without them:', e.message);
+      confirmed = await insertReturningRow(basePayload);
+    }
+    if(confirmed){
+      // Replace the optimistic placeholder's contents in place with the
+      // Supabase-confirmed row, so every existing reference to this same
+      // object (loggedRow in onFeederStatusAction, etc.) sees it flip
+      // from "pending" to "confirmed" rather than needing to be re-found.
+      Object.assign(optimisticRow, {
+        id: confirmed.id,
+        date: new Date(confirmed.created_at || Date.now()),
+        _pending: false
+      });
+    } else {
+      optimisticRow._pending = false;
+    }
+  }catch(e){
+    console.warn('Supabase log insert failed:', e.message);
+    // The action was never actually confirmed — do not leave a row in the
+    // Log that only exists on this device. Removing it also makes the
+    // failure impossible to miss: the entry the operator just made simply
+    // is not there, which is the honest state, backed by a loud toast.
+    const idx = LOG.indexOf(optimisticRow);
+    if(idx>=0) LOG.splice(idx,1);
+    if(typeof logOpenOutage!=='undefined'){
+      Object.keys(logOpenOutage).forEach(k=>{ if(logOpenOutage[k]===optimisticRow) delete logOpenOutage[k]; });
+    }
+    toast('⚠ Save failed — not recorded. Check your connection and try the action again. ('+e.message+')', 6000);
+  }finally{
+    syncBlockHide();
+    if($('page-log') && $('page-log').classList.contains('active')) renderLogPage();
+    if(typeof dtRenderSummary==='function') dtRenderSummary();
   }
 }
 
@@ -10303,6 +10587,7 @@ async function sbPushLog(){
 async function sbPullLog(){
   if(!sbReady()){toast('Configure Supabase credentials first');return;}
   const st=$('sbStatus'); st.style.color='var(--dim2)'; st.textContent='Pulling log…';
+  syncBlockShow('Syncing log…');
   try{
     const rows=await sbFetch('message_log?order=id.desc&limit=500');
     // A manual pull always fetches a full recent snapshot (same shape as the
@@ -10346,6 +10631,8 @@ async function sbPullLog(){
   }catch(e){
     st.style.color='var(--red)'; st.textContent='Pull failed: '+e.message;
     toast('Supabase pull failed: '+e.message);
+  }finally{
+    syncBlockHide();
   }
 }
 
@@ -11781,20 +12068,25 @@ async function _syncFromCloudInner(){
     if(logRows.length){ try{ localStorage.setItem('sms2_msglog_last_id', String(msgLogLastId)); }catch(e){} }
     if(added){
       LOG.sort((a,b)=>new Date(b.date)-new Date(a.date));
-      if($('page-log').classList.contains('active')){
-        renderLogPage();
-        // New Log rows may be exactly what closes the gap behind a "⏳
-        // syncing" tag in the downtime report — re-render so it clears
-        // itself the moment the matching row actually arrives, instead of
-        // sitting there until some unrelated action happens to redraw it.
-        if(typeof dtRenderSummary==='function') dtRenderSummary();
-      }
       if(monitorMode) renderMonitorRecent();
       // 🔔 Alert tone + notification for messages sent from other devices —
       // fires once per poll even if several messages landed at once, and
       // now fires for every single new row, not just the ones that happened
       // to change the total count.
       if(!msgAlertFirstSync) notifyNewMessages(added, newest);
+    }
+    // Re-render whenever this was the bootstrap pull, even with zero rows —
+    // otherwise a genuinely-empty database (fresh install, or right after
+    // "Delete Old Data") would leave the Log page stuck on its "Loading
+    // from Supabase…" state forever, since that only ever clears via a
+    // fresh render.
+    if((added || doBootstrap) && $('page-log').classList.contains('active')){
+      renderLogPage();
+      // New Log rows may be exactly what closes the gap behind a "⏳
+      // syncing" tag in the downtime report — re-render so it clears
+      // itself the moment the matching row actually arrives, instead of
+      // sitting there until some unrelated action happens to redraw it.
+      if(typeof dtRenderSummary==='function') dtRenderSummary();
     }
     msgAlertFirstSync = false;   // initial log load done — alert from now on
     updateSbSyncStatus(`Last sync: ${nowHM()} — ${logRows.length} log entries`);
@@ -11821,6 +12113,17 @@ async function _syncFromCloudInner(){
       }
     }catch(e){
       console.warn('Settings sync check error:',e.message);
+    }
+    // Same ~30s cadence — pick up a "delete old data" purge run from any
+    // OTHER device (see purgeOldDataConfirmed) and mirror it here, so a
+    // one-time cleanup started on one device reaches every device without
+    // anyone needing to repeat the action.
+    try{
+      const purgeRows = await sbFetch('app_config?key=eq.data_purge_before&select=value');
+      const remoteMarker = purgeRows?.[0]?.value || '';
+      if(typeof checkRemoteDataPurge==='function') checkRemoteDataPurge(remoteMarker);
+    }catch(e){
+      console.warn('Purge marker check error:', e.message);
     }
   }
 
