@@ -140,6 +140,10 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .ev-live-close{background:#fff;border:1px solid #fdba74;color:#9a3412;font-size:10.5px;font-weight:700;
   padding:3px 9px;border-radius:20px;cursor:pointer;font-family:'Archivo',sans-serif;flex:none;margin-left:2px;transition:background .15s}
 .ev-live-close:hover{background:#fed7aa}
+.ev-live-chip.ev-live-stuck{background:var(--red-lt);border-color:var(--red);color:var(--red)}
+.ev-live-chip.ev-live-stuck .ev-live-dot{background:var(--red);animation:none}
+.ev-live-chip.ev-live-stuck .ev-live-close{border-color:var(--red);color:var(--red)}
+.ev-live-chip.ev-live-stuck .ev-live-close:hover{background:#fff}
 
 .ev-day{margin-bottom:10px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden;box-shadow:var(--shadow)}
 .ev-day-head{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
@@ -1417,6 +1421,7 @@ body.duty-page-open #page-duty{
       <div class="ev-station-tabs" id="logStationTabs">
         <button class="ev-stab active" onclick="setLogStation('__all__')">All Substations</button>
       </div>
+      <span id="evStuckBadge" style="display:none;margin-right:4px;background:#fff7ed;border:1px solid #f97316;color:#c2410c;border-radius:8px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap" onclick="scrollToEvLive()" title="These outages have been open far longer than normal — their Charged/Restored notice likely never got logged. Click to jump to them."></span>
       <div class="ev-actions">
         <button class="btn btn-ghost btn-sm" id="msgAlertTgl" onclick="toggleMsgAlert()" title="Play a chime + browser notification when a new message arrives from any device">🔔 Alert Tone: On</button>
         <button class="btn btn-ghost btn-sm" id="pushTgl" onclick="togglePush()" title="Receive alerts on this device even when the app is closed">📲 Push: Off</button>
@@ -5377,6 +5382,26 @@ const EV_TYPE_ICON  = {'trip':'⚡','shutdown':'🔌','system-gone':'🌐','inco
 const EV_TYPE_CLOSE_CONDITION = {'trip':'Charged','shutdown':'Charged','system-gone':'System Restored','incomer-failed':'11KV Incomer Restored','kv33':'33KV Incomer Restored'};
 
 let logOpenOutage = {};   // "feeder|type" -> open LOG row (kept for backward compat with any external reference)
+// How old a still-open event can get before a NEW trip on the same feeder
+// stops treating it as "the same ongoing outage" and instead assumes its
+// real Charged/Restored row was lost (see evIngestRow).
+//
+// This can be short, not "hours", because feederStatusMap (which is what
+// actually BLOCKS a same-type re-trip — see the localBlocked/cloudBlocked
+// guard in dispatchToAll, and feederStatusMap[name]={status:'charged',...}
+// in dispatchChargedMsg) is updated independently of, and unconditionally
+// before, the Log write. So a feeder's status can already read "charged" —
+// legitimately allowing a brand-new trip dispatch through — while its OLD
+// trip's LOG event is still open, if that old Charged row's sbInsertLog()
+// never confirmed (sync paused, failed insert, etc. — see sbInsertLog).
+// In other words: by the time a same-feeder same-type Trip is even able to
+// be dispatched again at all, the previous one is, by definition, over —
+// so any still-open event for that feeder+type at that point is already
+// known-stale, not "possibly still ongoing". A short buffer (covers a
+// same dispatch double-tap / accidental resend within the existing
+// DISPATCH_DEDUP_WINDOW, which is 60s) is enough; it does not need to
+// guess at how long a real outage might run.
+const EV_STALE_OPEN_MS = 5*60*1000;
 
 function logResolveFeeders(row){
   const rawFeeder = row.feeder || '';
@@ -5423,19 +5448,36 @@ function evIngestRow(row){
   if(logOutageStartLabels.has(row.condition) && type){
     feeders.forEach(f=>{
       const key = f+'|'+type;
+      const startMs = (()=>{ const iso=evRowIso(row); return iso?new Date(iso).getTime():Date.now(); })();
       if(EV_OPEN[key]){
-        // A start already open for this exact feeder+type — this is a
-        // duplicate dispatch, not a second event. Ignore it so the log
-        // never carries two open entries for the same condition.
-        row._duplicate = true;
-        return;
+        // A start already open for this exact feeder+type. Normally this is
+        // a duplicate dispatch (double-tap, resend) — ignore it, same as
+        // before. BUT if the still-open event is implausibly old (its own
+        // matching Charged/Restored row was lost — e.g. a sync-pause or
+        // failed cloud insert silently dropped it — see sbInsertLog), it is
+        // effectively abandoned, not a duplicate of THIS new trip. Pairing
+        // a future Charged to that stale open event would silently borrow
+        // its end time and misreport a wrong, inflated duration on an
+        // unrelated event (the exact corruption this guard prevents).
+        // EV_STALE_OPEN_MS below controls how old "abandoned" means.
+        const staleMs = startMs - EV_OPEN[key].startMs;
+        if(staleMs > EV_STALE_OPEN_MS){
+          // Leave the old open event exactly as-is (still unresolved, still
+          // visible in the Live strip with its existing "✕ Close" action —
+          // no behavior change there). Just stop it from being the pairing
+          // target for anything new: give THIS trip its own key so a later
+          // Charged for this feeder pairs to the right, current event.
+          EV_OPEN[key]._staleOrphan = true;
+        } else {
+          row._duplicate = true;
+          return;
+        }
       }
       const ev = {
         id: f+'|'+type+'|'+(row.id!=null?row.id:row.ts),
         feeder:f, station:row.station||'', type,
         startRow:row, endRow:null,
-        startMs: (()=>{ const iso=evRowIso(row); return iso?new Date(iso).getTime():Date.now(); })(),
-        endMs:null, reason:row.reason||''
+        startMs, endMs:null, reason:row.reason||''
       };
       EV_OPEN[key] = ev;
       logOpenOutage[key] = row;
@@ -5544,19 +5586,48 @@ function renderEvLive(){
   const open = evFilteredEvents().filter(e=>!e.endRow).sort((a,b)=>a.startMs-b.startMs);
   _evLiveList = open;
   const canEdit = !(typeof monitorMode!=='undefined' && monitorMode);
+  updateEvStuckBadge();
   if(!open.length){ wrap.innerHTML=''; return; }
   wrap.innerHTML = open.map((e,i)=>{
     const mins = Math.round((Date.now()-e.startMs)/60000);
     const isPending = !!(e.startRow?._pending);
+    const isStuck = (Date.now()-e.startMs) > EV_STALE_OPEN_MS;
     const closeBtn = (canEdit && !isPending)
       ? `<button class="ev-live-close" onclick="event.stopPropagation();closeStuckOutage(${i})" title="Mark this as resolved — logs a matching Restored/Charged entry so it pairs and closes properly">✕ Close</button>`
       : '';
-    return `<div class="ev-live-chip" title="${esc(EV_TYPE_LABEL[e.type])} since ${esc(hmFromMs(e.startMs))}${isPending?' — saving…':''}">
+    return `<div class="ev-live-chip${isStuck?' ev-live-stuck':''}" title="${esc(EV_TYPE_LABEL[e.type])} since ${esc(hmFromMs(e.startMs))}${isPending?' — saving…':''}${isStuck?' — open unusually long; its Charged/Restored notice was likely never logged':''}">
       <span class="ev-live-dot"></span>
-      <span>${EV_TYPE_ICON[e.type]} <b>${esc(e.feeder)}</b> — ${esc(EV_TYPE_LABEL[e.type])} · ${fmtDur(mins)}${isPending?' · ⏳':''}</span>
+      <span>${isStuck?'⚠ ':''}${EV_TYPE_ICON[e.type]} <b>${esc(e.feeder)}</b> — ${esc(EV_TYPE_LABEL[e.type])} · ${fmtDur(mins)}${isPending?' · ⏳':''}</span>
       ${closeBtn}
     </div>`;
   }).join('');
+}
+
+// Small toolbar badge = count of open events that have been sitting for
+// longer than EV_STALE_OPEN_MS (same threshold evIngestRow uses to decide
+// a re-trip is NOT the same event — see the comment there). An event this
+// old almost certainly has a lost Charged/Restored row rather than a real
+// still-running outage, so it's surfaced here instead of only becoming
+// visible later, indirectly, as a corrupted duration on some other event.
+// Deliberately counts across ALL stations (ignores the active station tab
+// filter) — a stuck outage on a station the operator isn't currently
+// looking at must not silently disappear from this count.
+function updateEvStuckBadge(){
+  const badge = $('evStuckBadge'); if(!badge) return;
+  const stuck = EVENTS.filter(e => !e.endRow && (Date.now()-e.startMs) > EV_STALE_OPEN_MS);
+  if(!stuck.length){ badge.style.display='none'; return; }
+  badge.style.display='inline-block';
+  badge.textContent = `⚠ ${stuck.length} stuck outage${stuck.length===1?'':'s'} — needs closing`;
+}
+
+// Jumps to the Live strip AND clears any station filter first — the badge
+// counts stuck outages across every station, so if the operator is
+// currently viewing one station's tab, a stuck outage on a different
+// station wouldn't be visible after scrolling without this.
+function scrollToEvLive(){
+  if(typeof logActiveStation!=='undefined' && logActiveStation!=='__all__') setLogStation('__all__');
+  const wrap = $('evLiveWrap'); if(!wrap) return;
+  wrap.scrollIntoView({behavior:'smooth', block:'center'});
 }
 
 // Manually close a live outage that's stuck open — no matching Restored/
@@ -10515,9 +10586,18 @@ function syncBlockHide(){
 //   5. Always unblocks the UI in `finally`, success or failure.
 async function sbInsertLog(entry){
   if(!sbReady()){
-    // No Supabase configured at all — nothing to confirm against, so the
-    // optimistic row IS the only record there will ever be. Leave it in
-    // place rather than deleting data with nowhere else to live.
+    // Sync is paused (see supabasePaused / the fresh-device-lock in the
+    // Device Authorization section) — nothing to confirm this row against.
+    // The optimistic row _pushToLog() already added stays in LOG so it's
+    // still visible on THIS device for now, but LOG is in-memory only (a
+    // reload starts empty — see the note near dtLastPull), so this entry
+    // has nowhere durable to live until sync resumes. Previously this
+    // returned silently, so a paused device could dispatch real messages
+    // (the WhatsApp send itself doesn't check sbReady()) whose log entries
+    // then quietly vanished on the next reload — invisible to every other
+    // device the whole time. Warn every time this happens, not just once,
+    // since a missed warning here is a missed/incorrect log entry.
+    toast('⚠ Not synced — sync is paused on this device, so this entry is NOT saved to the shared log yet. Tap "⏸ SYNC OFF" in the top bar to resume.', 7000);
     return;
   }
   syncBlockShow('Saving to cloud…');
