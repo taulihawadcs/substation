@@ -137,6 +137,9 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .ev-live-dot{width:7px;height:7px;border-radius:50%;background:#ea580c;flex:none;animation:evPulse 1.6s ease-in-out infinite}
 @keyframes evPulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(234,88,12,.5)}50%{opacity:.55;box-shadow:0 0 0 5px rgba(234,88,12,0)}}
 .ev-live-empty{font-size:12px;color:var(--dim2);padding:8px 2px 14px}
+.ev-live-close{background:#fff;border:1px solid #fdba74;color:#9a3412;font-size:10.5px;font-weight:700;
+  padding:3px 9px;border-radius:20px;cursor:pointer;font-family:'Archivo',sans-serif;flex:none;margin-left:2px;transition:background .15s}
+.ev-live-close:hover{background:#fed7aa}
 
 .ev-day{margin-bottom:10px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden;box-shadow:var(--shadow)}
 .ev-day-head{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
@@ -5366,6 +5369,12 @@ const EV_TYPE_OF = {
 };
 const EV_TYPE_LABEL = {'trip':'Trip','shutdown':'Shutdown','system-gone':'System Gone','incomer-failed':'11 KV Incomer Failed','kv33':'33 KV Incomer Failed'};
 const EV_TYPE_ICON  = {'trip':'⚡','shutdown':'🔌','system-gone':'🌐','incomer-failed':'🔻','kv33':'🔺'};
+// type -> the exact condition string that CLOSES it — used by the manual
+// "close stuck outage" action below, which writes a real end row through
+// the same confirmed sbInsertLog() path a genuine dispatch uses, so a
+// manually-closed event is indistinguishable from one closed normally
+// (same pairing logic, same Supabase row, visible to every other device).
+const EV_TYPE_CLOSE_CONDITION = {'trip':'Charged','shutdown':'Charged','system-gone':'System Restored','incomer-failed':'11KV Incomer Restored','kv33':'33KV Incomer Restored'};
 
 let logOpenOutage = {};   // "feeder|type" -> open LOG row (kept for backward compat with any external reference)
 
@@ -5435,9 +5444,17 @@ function evIngestRow(row){
   } else if(logOutageEndLabels.has(row.condition)){
     // 'Charged' closes either trip OR shutdown for a feeder — resolve by
     // checking which is actually open, preferring trip (matches existing
-    // DT_LOG_END_TYPE_OF convention elsewhere in the app).
+    // DT_LOG_END_TYPE_OF convention elsewhere in the app). Every OTHER end
+    // label (System Restored, 11KV/33KV Incomer Restored, Restore All) is
+    // UNAMBIGUOUS — it always closes exactly one specific type — so those
+    // must be resolved via DT_LOG_END_TYPE_OF, not the trip/shutdown-only
+    // fallback below. Without this, System Gone / 11KV / 33KV events could
+    // never be closed by their own matching Restored row at all, since
+    // EV_TYPE_OF (a START-only map) has no entry for any end label and
+    // would silently fall through to checking only 'trip'/'shutdown'.
+    const endType = (typeof DT_LOG_END_TYPE_OF!=='undefined' && DT_LOG_END_TYPE_OF[row.condition]) || undefined;
     feeders.forEach(f=>{
-      let closeType = type;
+      let closeType = endType;
       if(!closeType){
         closeType = EV_OPEN[f+'|trip'] ? 'trip' : (EV_OPEN[f+'|shutdown'] ? 'shutdown' : null);
       }
@@ -5521,18 +5538,64 @@ function evFilteredEvents(){
 // operator needs to see "what's down right now" without hunting through
 // day groups. This is also where an "incomplete pair" actually lives until
 // it closes; it never appears as a dangling row in the history below.
+let _evLiveList = [];   // flat list for close-by-index lookups, mirrors _evRenderedEvents
 function renderEvLive(){
   const wrap = $('evLiveWrap'); if(!wrap) return;
   const open = evFilteredEvents().filter(e=>!e.endRow).sort((a,b)=>a.startMs-b.startMs);
+  _evLiveList = open;
+  const canEdit = !(typeof monitorMode!=='undefined' && monitorMode);
   if(!open.length){ wrap.innerHTML=''; return; }
-  wrap.innerHTML = open.map(e=>{
+  wrap.innerHTML = open.map((e,i)=>{
     const mins = Math.round((Date.now()-e.startMs)/60000);
     const isPending = !!(e.startRow?._pending);
+    const closeBtn = (canEdit && !isPending)
+      ? `<button class="ev-live-close" onclick="event.stopPropagation();closeStuckOutage(${i})" title="Mark this as resolved — logs a matching Restored/Charged entry so it pairs and closes properly">✕ Close</button>`
+      : '';
     return `<div class="ev-live-chip" title="${esc(EV_TYPE_LABEL[e.type])} since ${esc(hmFromMs(e.startMs))}${isPending?' — saving…':''}">
       <span class="ev-live-dot"></span>
       <span>${EV_TYPE_ICON[e.type]} <b>${esc(e.feeder)}</b> — ${esc(EV_TYPE_LABEL[e.type])} · ${fmtDur(mins)}${isPending?' · ⏳':''}</span>
+      ${closeBtn}
     </div>`;
   }).join('');
+}
+
+// Manually close a live outage that's stuck open — no matching Restored/
+// Charged row exists (or ever will), usually because it predates the
+// pairing-engine fix above, or a restore genuinely never got dispatched.
+// This does NOT edit/delete anything — it logs a real, new closing entry
+// through the exact same confirmed path (_pushToLog -> sbInsertLog) any
+// dispatch button uses, so the result is indistinguishable from a normal
+// close: same Supabase row, same pairing logic, visible to every device.
+async function closeStuckOutage(i){
+  if(typeof monitorMode!=='undefined' && monitorMode){ toast('Monitoring access is view-only'); return; }
+  const e = _evLiveList[i]; if(!e) return;
+  const closeCondition = EV_TYPE_CLOSE_CONDITION[e.type];
+  if(!closeCondition){ toast('Unknown event type — cannot close'); return; }
+
+  const nowLabel = nowHM();
+  const endTime = prompt(
+    `Close this outage?\n\n${e.feeder} — ${EV_TYPE_LABEL[e.type]}\nStarted ${hmFromMs(e.startMs)} (${fmtDur(Math.round((Date.now()-e.startMs)/60000))} ago)\n\n`+
+    `This logs a "${closeCondition}" entry so it pairs and closes normally — visible on every device, same as a real dispatch.\n\n`+
+    `End time (24hr HH:MM), or leave as-is for now (${nowLabel}):`,
+    nowLabel
+  );
+  if(endTime===null) return;   // cancelled
+  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(endTime.trim());
+  if(!m){ toast('Invalid time — use 24hr HH:MM, e.g. 14:30'); return; }
+  const finalTime = m[1].padStart(2,'0')+':'+m[2];
+
+  recordLogDirect({
+    type: closeCondition,
+    recipients: '—',
+    status: 'manually closed — outage marked resolved',
+    station: e.station, feeder: e.feeder,
+    time: finalTime,
+    msg: `Manually closed: ${EV_TYPE_LABEL[e.type]} on ${e.feeder} (started ${hmFromMs(e.startMs)}) marked resolved at ${finalTime}.`,
+    reason: 'Manually closed — matching Restored/Charged was never logged'
+  });
+  const loggedRow = LOG[0];
+  sbInsertLog(loggedRow);
+  toast('Closing outage…', 2000);
 }
 
 function hmFromMs(ms){
