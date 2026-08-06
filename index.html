@@ -6749,6 +6749,22 @@ var dtLastPull = localStorage.getItem('sms2_dt_last_pull') || '1970-01-01T00:00:
 // fetch of "everything newer than the last id I've seen" has no such limit
 // and can never leave a station permanently behind.
 var msgLogLastId = parseInt(localStorage.getItem('sms2_msglog_last_id')||'0', 10) || 0;
+// msgLogLastId is persisted across reloads (so a returning device never
+// re-downloads its whole history), but LOG itself is intentionally kept
+// in-memory only — every reload starts with LOG=[]. Left alone, that
+// combination is a bug: the first poll after a reload asks Supabase for
+// "id=gt.<lastId>" (i.e. only rows newer than what was already seen before
+// the reload), so everything that happened before this session's reload
+// never comes back into LOG at all — even though the watermark claims it
+// was "seen". This showed up as real, already-logged events (a genuine
+// Trip, an already-Charged System Gone) being invisible in the Log page
+// and flagged "⚠ Log not found" in the Downtime Report, until enough NEW
+// activity happened to make it look coincidentally fixed.
+// logNeedsBootstrap forces exactly one full-history pull per page load —
+// on the first successful log sync of this session, regardless of what
+// msgLogLastId says — so LOG always starts complete rather than only
+// containing whatever arrives after the reload.
+var logNeedsBootstrap = true;
 var dtSyncBusy=false;
 
 async function dtSyncPush(){
@@ -8317,7 +8333,7 @@ function renderMonitorRecent(){
     .slice()
     .sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))
     .slice(0,20);
-  if(!items.length){ box.innerHTML='<div style="font-size:11px;color:var(--dim2)">No messages sent yet.</div>'; return; }
+  if(!items.length){ box.innerHTML='<div style="font-size:11px;color:var(--dim2)">No new message</div>'; return; }
   box.innerHTML = '<div class="mr-chat">' + items.map(r=>{
     const when=(r.ts||'').toString();
     const full=(r.msg||'').replace(/\r\n/g,'\n').trim();
@@ -10289,6 +10305,10 @@ async function sbPullLog(){
   const st=$('sbStatus'); st.style.color='var(--dim2)'; st.textContent='Pulling log…';
   try{
     const rows=await sbFetch('message_log?order=id.desc&limit=500');
+    // A manual pull always fetches a full recent snapshot (same shape as the
+    // automatic bootstrap below), so it satisfies the same requirement —
+    // no need for the next automatic poll to force another one.
+    logNeedsBootstrap = false;
     // Merge into LOG — dedup by row id (see syncFromCloud for why a
     // ts+station+feeder key silently drops legitimate messages)
     const existing=new Set(LOG.map(e=>e.id).filter(id=>id!=null));
@@ -11696,10 +11716,11 @@ async function _syncFromCloudInner(){
     // recent rows instead, so a brand-new login doesn't try to pull a
     // station's entire multi-year history in one request; every poll after
     // that is purely incremental and has no cap at all.
-    const logQueryBase = msgLogLastId>0
+    const doBootstrap = logNeedsBootstrap || msgLogLastId<=0;
+    const logQueryBase = !doBootstrap
       ? 'message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code&id=gt.'+msgLogLastId+'&order=id.asc&limit=1000'
       : 'message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code&order=id.desc&limit=500';
-    const logQueryWithOperator = msgLogLastId>0
+    const logQueryWithOperator = !doBootstrap
       ? 'message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code,operator_name,operator_short&id=gt.'+msgLogLastId+'&order=id.asc&limit=1000'
       : 'message_log?select=id,created_at,ts,station,feeder,condition,reason,sent_at,recipients,status,msg,device_code,operator_name,operator_short&order=id.desc&limit=500';
     // Try WITH operator_name/operator_short first (the normal case, once the
@@ -11720,6 +11741,10 @@ async function _syncFromCloudInner(){
       logRows = await sbFetch(logQueryBase);
     }
     if(typeof updateOperatorColumnsBanner==='function') updateOperatorColumnsBanner();
+    // The bootstrap query above just succeeded — LOG is about to receive a
+    // full recent snapshot rather than only "what's new since msgLogLastId",
+    // so this session no longer needs the forced full pull on the next poll.
+    if(doBootstrap) logNeedsBootstrap = false;
     // Diff by the DB row id — exact, no collisions (a ts+station+feeder
     // string key would collide whenever two different messages hit the same
     // feeder in the same minute, e.g. a trip and a restore close together,
