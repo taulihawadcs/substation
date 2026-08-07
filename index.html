@@ -329,6 +329,11 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 
 /* ── Feeder Status Panel ──────────────────────────────── */
 .feeder-status-panel{display:flex;flex-direction:column;gap:6px}
+.fs-panel-overlay{display:none;position:absolute;inset:0;background:rgba(20,24,31,.35);backdrop-filter:blur(1px);z-index:400;align-items:center;justify-content:center;border-radius:10px}
+.fs-panel-overlay.show{display:flex}
+.fs-panel-overlay-card{background:#fff;border-radius:14px;padding:18px 24px;min-width:180px;box-shadow:0 10px 44px rgba(0,0,0,.28);text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px}
+.fs-panel-overlay-spin{width:26px;height:26px;border:3px solid #e2e6ea;border-top-color:var(--blue);border-radius:50%;animation:syncBlockSpin .7s linear infinite}
+.fs-panel-overlay-label{font-size:12.5px;font-weight:700;color:var(--txt)}
 
 .fs-row{
   display:flex;align-items:center;gap:8px;
@@ -1328,7 +1333,7 @@ body.duty-page-open #page-duty{
         <button data-lang="en" onclick="setLang('en')">English</button>
       </div>
     </div>
-    <div class="card-body">
+    <div class="card-body" style="position:relative">
       <!-- Trip All / Restore All toggle -->
       <div class="ta-bar" id="tripAllBar">
         <button class="ta-btn" id="taTrip" onclick="onTripAllToggle('trip')">
@@ -1350,6 +1355,19 @@ body.duty-page-open #page-duty{
       </div>
       <div class="feeder-status-panel" id="feederStatusPanel">
         <div class="fs-empty">Select a substation to see feeder statuses.</div>
+      </div>
+      <!-- Bulk-restore loading overlay — covers the WHOLE panel (toggle bar +
+           feeder rows), not just feederStatusPanel, since that inner div's
+           innerHTML gets fully replaced on every renderFeederStatus() call
+           (which restore functions call repeatedly while this overlay must
+           stay visible) — living here, one level up, as a sibling instead
+           of a child, means it's never wiped out mid-restore. -->
+      <div class="fs-panel-overlay" id="fsPanelOverlay">
+        <div class="fs-panel-overlay-card">
+          <div class="fs-panel-overlay-spin"></div>
+          <div class="fs-panel-overlay-label" id="fsPanelOverlayLabel">Restoring…</div>
+          <div style="font-size:10.5px;color:var(--dim2)">Saving to cloud — please wait</div>
+        </div>
       </div>
     </div>
   </div>
@@ -6002,9 +6020,11 @@ function applyLocalDataPurge(cutoffIso){
 
   // A purge invalidates any "resume from where we left off" state tied to
   // the OLD, now-deleted rows — force the next sync to re-bootstrap LOG
-  // from Supabase fresh rather than trying to fetch "everything after
-  // row #X" when row #X itself may no longer exist.
+  // (and DT_EVENTS, same reasoning) from Supabase fresh rather than trying
+  // to fetch "everything after row #X" when row #X itself may no longer
+  // exist.
   if(typeof logNeedsBootstrap!=='undefined') logNeedsBootstrap = true;
+  if(typeof dtNeedsBootstrap!=='undefined') dtNeedsBootstrap = true;
 
   if($('page-log') && $('page-log').classList.contains('active')) renderLogPage();
   if(typeof dtRenderSummary==='function') dtRenderSummary();
@@ -6535,11 +6555,28 @@ setTopbarH();
    ============================================================ */
 var DT_OUTAGE_TYPES = ['system-gone','incomer-failed','kv33','trip','shutdown'];
 var DT_TYPE_LABEL   = {'system-gone':'System Gone','incomer-failed':'11 KV Incomer Failed','kv33':'33 KV Incomer Failed','trip':'Trip','shutdown':'Shutdown'};
-var DT_EVENTS       = ld('sms2_dt_events', []);   // persisted across reloads
+// DT_EVENTS is in-memory only, deliberately — a reload always starts from
+// DT_EVENTS=[] and rebuilds fresh from Supabase (see dtNeedsBootstrap /
+// dtSyncPull), exactly like LOG. This used to be persisted to
+// localStorage ('sms2_dt_events'), but that meant a device's OWN stale
+// local copy from a previous session could sit there and get reused
+// indefinitely — including any locally-stuck-open event whose real close
+// never made it to this device (see the "feeder charged days ago can
+// still show up today with an inflated, ever-changing duration" case
+// dtReconcileOpenEvents() was written to patch around). Rebuilding fresh
+// from the shared cloud copy on every load removes that whole class of
+// bug at the source rather than reconciling around it after the fact —
+// the same tradeoff already made for LOG: no offline durability for a
+// not-yet-synced local edit, in exchange for never trusting a stale local
+// copy over the shared truth.
+var DT_EVENTS       = [];
 var dtSendInFlight  = false;                       // hard re-entrancy lock for report send
 var dtReminderShownFor = '';
 
-function dtSave(){ sv('sms2_dt_events', DT_EVENTS); }
+// No-op localStorage write kept as a function (rather than deleted) so
+// none of dtSave()'s many existing call sites need to change — DT_EVENTS
+// is in-memory only now, so there is nothing durable to write.
+function dtSave(){}
 function dtStationOf(feeder){ const f=DATA.feeders.find(x=>x.name===feeder); return f?f.station:''; }
 function dtOpenEventFor(feeder){
   for(let i=DT_EVENTS.length-1;i>=0;i--){ const e=DT_EVENTS[i]; if(!e.deleted && e.feeder===feeder && !e.end) return e; }
@@ -6570,11 +6607,17 @@ function dtAskTime(labelNe, def){
 // so the downtime tracker closes events at that time instead of "now".
 var dtCloseTimeOverride=null;
 
-/* ── Cloud sync dirty-tracking ── */
-var dtDirty = new Set(ld('sms2_dt_dirty', []));
+/* ── Cloud sync dirty-tracking ──
+   In-memory only, same reasoning as DT_EVENTS above: an id sitting in a
+   persisted dirty-set with no matching DT_EVENTS entry after a reload
+   (since DT_EVENTS no longer persists) would just be dead weight at best,
+   or reference a since-diverged local id at worst. Any edit not yet
+   pushed by the time this device closes/reloads is lost — the same
+   tradeoff LOG already makes for a not-yet-synced dispatch. */
+var dtDirty = new Set();
 var _dtPushTimer=null;
 function dtMarkDirty(id){
-  dtDirty.add(id); sv('sms2_dt_dirty',[...dtDirty]);
+  dtDirty.add(id);
   clearTimeout(_dtPushTimer);
   _dtPushTimer=setTimeout(()=>{ dtSyncPush().catch(()=>{}); }, 3000);
 }
@@ -7067,6 +7110,16 @@ function dtAggregate(dateStr){
    propagate as tombstones (deleted=true).
    ============================================================ */
 var dtLastPull = localStorage.getItem('sms2_dt_last_pull') || '1970-01-01T00:00:00Z';
+// dtNeedsBootstrap forces exactly one full-history pull per page load,
+// ignoring dtLastPull's incremental filter — same reasoning, and same
+// fix, as logNeedsBootstrap just above for LOG/message_log. DT_EVENTS is
+// now in-memory only (see the note at its declaration below): every
+// reload starts from DT_EVENTS=[], but dtLastPull is still a PERSISTED
+// watermark, so without this flag the first pull after any reload would
+// ask Supabase for only "updated_at gt.<dtLastPull>" — silently omitting
+// every real downtime event that existed before this session's reload,
+// even though the watermark claims they were already seen.
+var dtNeedsBootstrap = true;
 // Highest message_log row id this device has ever pulled. Used instead of
 // "fetch the most recent 200 rows" — a global top-N fetch silently starves
 // out any quieter substation once a busier one's traffic fills that window,
@@ -7108,13 +7161,27 @@ async function dtSyncPush(){
     });
     if(!res.ok){ const t=await res.text().catch(()=>String(res.status)); throw new Error('downtime push failed: '+t); }
   }
-  dtDirty.clear(); sv('sms2_dt_dirty',[]);
+  dtDirty.clear();
 }
 
 async function dtSyncPull(){
   if(!sbReady()) return 0;
-  const rows=await sbFetch('downtime_events?updated_at=gt.'+encodeURIComponent(dtLastPull)
-    +'&order=updated_at.asc&limit=1000');
+  // On the first pull of this session, ignore dtLastPull's incremental
+  // filter entirely and fetch a bounded set of the most recent rows
+  // instead — same reasoning as LOG's doBootstrap/logNeedsBootstrap:
+  // DT_EVENTS starts empty every reload now, so an incremental-only fetch
+  // would silently omit everything that happened before this reload. An
+  // unbounded "everything since the beginning of time" fetch on every
+  // single reload would also just get slower and heavier forever as
+  // history grows, so this pulls the most recent 1000 rows on bootstrap
+  // (comfortably more than a busy day's worth of outage events across all
+  // stations) rather than the entire lifetime history.
+  const doBootstrap = dtNeedsBootstrap;
+  const rows = doBootstrap
+    ? await sbFetch('downtime_events?select=id,station,feeder,type,start_ts,start_hm,end_ts,end_hm,duration_min,deleted,locked,updated_at&order=updated_at.desc&limit=1000')
+    : await sbFetch('downtime_events?updated_at=gt.'+encodeURIComponent(dtLastPull)
+        +'&order=updated_at.asc&limit=1000');
+  if(doBootstrap) dtNeedsBootstrap = false;
   let changed=0;
   (rows||[]).forEach(r=>{
     if(r.updated_at && r.updated_at>dtLastPull) dtLastPull=r.updated_at;
@@ -7138,6 +7205,12 @@ async function dtSyncPull(){
   if(changed){
     DT_EVENTS.sort((a,b)=>new Date(a.start)-new Date(b.start));
     dtSave();
+  }
+  // Re-render whenever something changed, OR this was the bootstrap pull —
+  // even a bootstrap that finds zero rows (a brand-new deployment with no
+  // downtime history yet) must still clear the "⏳ Loading…" banner in
+  // dtRenderSummary(), which only checks dtNeedsBootstrap, not `changed`.
+  if(changed || doBootstrap){
     const pg=$('page-log'); if(pg && pg.classList.contains('active')) dtRenderSummary();
   }
   return changed;
@@ -7328,7 +7401,13 @@ function dtRenderSummary(){
   const date=dtSelectedDate();
   const rng=dtRangeFor(dtPeriod(), date);
   const a=dtAggregateRange(rng.startMs, rng.endMs);
+  // DT_EVENTS is in-memory only and starts empty every load (see its
+  // declaration) — while the first cloud pull is still in flight, say so
+  // explicitly rather than silently showing "0 events", which would look
+  // like a real (and alarming) all-clear rather than "not loaded yet".
+  const dtStillLoading = typeof dtNeedsBootstrap!=='undefined' && dtNeedsBootstrap && sbReady();
   chips.innerHTML =
+    (dtStillLoading ? `<div class="log-stat" style="border-color:#f97316"><b style="color:#c2410c">⏳ Loading…</b>Pulling this report's data from Supabase — numbers below will update in a few seconds</div>` : '') +
     `<div class="log-stat"><b style="font-size:12px">🗓 ${esc(rng.label)}</b>${esc(rng.name)} Report</div>`+
     `<div class="log-stat"><b>${fmtPairC(a.mainTotalCount,a.totalCount)}</b>Outage Events <span style="font-size:9px;color:var(--dim2)">main / feeder</span></div>`+
     `<div class="log-stat"><b style="color:var(--red)">${fmtPairD(a.mainTotalDur,a.totalDur)}</b>Total Downtime <span style="font-size:9px;color:var(--dim2)">main / feeder</span></div>`+
@@ -8691,6 +8770,30 @@ function fsOutageCountToday(feederName){
   }catch(err){ return 0; }   // never let a counting glitch break the status panel
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// FEEDER STATUS PANEL — bulk-restore loading overlay. Shown while a
+// single-banner bulk restore (System Restored / 11KV Incomer Restored /
+// 33KV Incomer Restored / Restore All) is pushing the reverted feeder
+// statuses to Supabase, so the operator can't act on this panel (e.g.
+// charge an individual feeder) against a status that hasn't actually
+// landed in the cloud yet. Reference-counted like syncBlockShow/Hide,
+// in case two restores are ever in flight close together.
+// ══════════════════════════════════════════════════════════════════════
+let fsPanelBlockCount = 0;
+function fsPanelBlockShow(label){
+  fsPanelBlockCount++;
+  const ov=$('fsPanelOverlay'), lbl=$('fsPanelOverlayLabel');
+  if(lbl) lbl.textContent = label || 'Restoring…';
+  if(ov) ov.classList.add('show');
+}
+function fsPanelBlockHide(){
+  fsPanelBlockCount = Math.max(0, fsPanelBlockCount-1);
+  if(fsPanelBlockCount===0){
+    const ov=$('fsPanelOverlay');
+    if(ov) ov.classList.remove('show');
+  }
+}
+
 function renderFeederStatus(){
   expireChargedFeeders();
   if(monitorMode) renderMonitorRecent();
@@ -9147,6 +9250,25 @@ async function markFeederCharged(feederName){
       }
       return;
     }
+    // Only Trip or Shutdown are actually closed by a Charged message (see
+    // evIngestRow's EV_OPEN[f+'|trip']/EV_OPEN[f+'|shutdown'] check — a
+    // Charged row never closes system-gone/incomer-failed/kv33). If a bulk
+    // restore (System Restored / 11KV / 33KV Incomer Restored / Restore
+    // All) already reverted this feeder to 'normal' — or another device
+    // already charged it — dispatching Charged here would send a real
+    // WhatsApp message for nothing: there is no open trip/shutdown for it
+    // to close, so it would just confuse recipients with a redundant
+    // "charged" notice for a feeder that was never itself individually
+    // tripped. Block it here, against the live cloud status, rather than
+    // after the message has already gone out.
+    if(live.status!=='trip' && live.status!=='shutdown'){
+      toast(`⚠ ${feederName} is not in Trip/Shutdown (currently: ${FS_BADGE[live.status]?.label||live.status||'Normal'}) — nothing to charge.`, 4000);
+      if((feederStatusMap[feederName]||{}).status!==live.status){
+        feederStatusMap[feederName]={status:live.status,time:live.time,ts:Date.now()};
+        renderFeederStatus();
+      }
+      return;
+    }
     dtCloseTimeOverride=t;
     try{
       feederStatusMap[feederName]={status:'charged',time:t,ts:Date.now()};
@@ -9401,7 +9523,15 @@ async function restoreSystemGoneFor(st, presetTime, suppressMsg){
     });
   } finally { dtCloseTimeOverride=null; }
   renderFeederStatus();
-  const failedPush = await pushFeederStatusBatch(stFeeders);
+  // Block the whole panel until every feeder's reverted status is actually
+  // confirmed in Supabase — otherwise an operator could charge an
+  // individual feeder against a status that only exists locally so far
+  // (see markFeederCharged's trip/shutdown check, which reads live cloud
+  // status and would see the OLD, not-yet-restored value during this gap).
+  fsPanelBlockShow('System of '+st+' — Restoring…');
+  let failedPush;
+  try{ failedPush = await pushFeederStatusBatch(stFeeders); }
+  finally{ fsPanelBlockHide(); }
 
   if(suppressMsg){
     if(failedPush.length) toast('⚠ '+failedPush.length+' feeder(s) did not sync to cloud: '+failedPush.join(', ')+'. They may still show as System Gone on other devices — reopen the substation to retry.',7000);
@@ -9549,7 +9679,10 @@ async function restoreKv33Failed(st){
     });
   } finally { dtCloseTimeOverride=null; }
   renderFeederStatus();
-  const failedPush = await pushFeederStatusBatch(all);
+  fsPanelBlockShow('33 KV Incomer of '+st+' — Restoring…');
+  let failedPush;
+  try{ failedPush = await pushFeederStatusBatch(all); }
+  finally{ fsPanelBlockHide(); }
 
   const msg=`33 KV Incomer of ${st} Restored at ${t}`;
   dispatchBulkMsg(msg,'33KV Incomer Restored',st,t);
@@ -9667,7 +9800,10 @@ async function restoreFromIncomerFailed(){
     });
   } finally { dtCloseTimeOverride=null; }
   renderFeederStatus();
-  const failedPush = await pushFeederStatusBatch(all);
+  fsPanelBlockShow('11 KV Incomer of '+st+' — Restoring…');
+  let failedPush;
+  try{ failedPush = await pushFeederStatusBatch(all); }
+  finally{ fsPanelBlockHide(); }
 
   const msg=`11 KV Incomer of ${st} Restored at ${t}`;
   if(!anyStillFailedInCloud){
@@ -9778,7 +9914,7 @@ function applyTripAll(st){
   toast(`⚡ Trip All — all feeders tripped. Click "Restore All" banner to revert.`, 3500);
 }
 
-function restoreTripAll(st){
+async function restoreTripAll(st){
   const rec = tripAllMap[st];
   if(!rec) return;
   const t   = dtAskTime('✅ Restore All — '+st+' का फिडरहरू कति बजे पुनर्स्थापना भए?');
@@ -9804,7 +9940,9 @@ function restoreTripAll(st){
   delete tripAllMap[st];
   renderFeederStatus();
   updateTripAllToggleUI();
-  sbPushFeederStatus();   // one bulk push
+  fsPanelBlockShow('Restore All — '+st+' — Restoring…');
+  try{ await sbPushFeederStatus(); }   // one bulk push — now awaited so the panel stays blocked until it's actually done
+  finally{ fsPanelBlockHide(); }
 
   // 2. Send exactly ONE restore message (same msg shown in the confirmation)
   dispatchBulkMsg(msg, 'Restore All', st, t);
