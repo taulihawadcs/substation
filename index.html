@@ -117,7 +117,8 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .log-ts{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim2);white-space:nowrap}
 
 /* ══════════════════════════════════════════════════════════════════════
-   EVENT LOG v2 — paired outage/restore timeline, noon-to-noon day groups.
+   EVENT LOG v2 — paired outage/restore timeline, midnight-to-midnight day
+   groups (real calendar days — see evDayBucketStart below).
    New, isolated class namespace (`.ev-*`) so nothing above is touched or
    relied upon; the old `.log-tbl` / `.log-stat` rules stay exactly as-is
    because the Downtime Report card further down this page still uses them.
@@ -1454,7 +1455,7 @@ body.duty-page-open #page-duty{
     <!-- Currently-open outages, always visible regardless of day-group state -->
     <div class="ev-live" id="evLiveWrap"></div>
 
-    <!-- Day-grouped event timeline (12→12, newest open, older collapsed) -->
+    <!-- Day-grouped event timeline (00:00→00:00 calendar days, newest open, older collapsed) -->
     <div id="evDaysWrap"></div>
 
     <!-- ── Daily Downtime Report (duration + counts + end-of-day Excel send) ── -->
@@ -5692,17 +5693,21 @@ function hmFromMs(ms){
   return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
 }
 
-// ── 12→12 day buckets ────────────────────────────────────────────────
-// A "log day" runs from 12:00 (noon) to the next day's 12:00, per the
-// requested "12 to next 12" window. An event belongs to the bucket its
-// START falls into. Buckets are sorted newest-first; only the newest is
-// expanded by default, everything older starts collapsed until the user
-// taps it open.
+// ── Midnight-to-midnight day buckets ────────────────────────────────────
+// A "log day" runs from 00:00 to the next day's 00:00 — the real calendar
+// date, local time. An event belongs to the bucket its START falls into.
+// Buckets are sorted newest-first; only the newest is expanded by default,
+// everything older starts collapsed until the user taps it open.
+// Groups Log-page events by real calendar day: 00:00 → 23:59:59 local time.
+// (Previously bucketed noon-to-noon — an event before 12:00 fell into the
+// PREVIOUS day's group, which didn't match either the actual calendar date
+// or the Downtime Report's own day boundary, itself a separate configurable
+// send-time. This now uses true midnight, matching the calendar date shown
+// everywhere else in the app.)
 function evDayBucketStart(ms){
   const d = new Date(ms);
-  const noon = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
-  if(d.getTime() < noon.getTime()) noon.setDate(noon.getDate()-1);
-  return noon.getTime();
+  const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  return midnight.getTime();
 }
 function evDayLabel(bucketStartMs){
   const d = new Date(bucketStartMs);
@@ -5711,8 +5716,7 @@ function evDayLabel(bucketStartMs){
   const isYesterday = bucketStartMs===(todayBucket-86400000);
   const dateStr = d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
   const label = isToday ? 'Today' : (isYesterday ? 'Yesterday' : dateStr);
-  const end = new Date(bucketStartMs+86400000);
-  const range = `${dateStr}, 12:00 → ${end.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})}, 12:00`;
+  const range = `${dateStr}, 00:00 → 23:59`;
   return {label, range, isToday};
 }
 
