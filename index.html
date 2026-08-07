@@ -6767,8 +6767,22 @@ function dtDriveFromLogEntry(entry){
           openEv.assumed=false; openEv.locked=true;
           dtMarkDirty(openEv.id); changed=true;
         }
-        // Don't open a duplicate if one of this exact type is already open.
-        if(dtOpenEventFor(feeder)?.type===startType) return;
+        // Don't open a duplicate if one of this exact type is already open —
+        // but if it was opened moments ago (by this SAME status change, via
+        // dtOnStatusChange's Proxy trap, using dtCloseTimeOverride/Date.now()
+        // as an estimate rather than this Log row's exact time), correct its
+        // start time to match the Log exactly rather than leaving the
+        // estimate in place. Same reasoning as the close-side correction
+        // below.
+        const stillOpenSameType = dtOpenEventFor(feeder);
+        if(stillOpenSameType?.type===startType){
+          if(!stillOpenSameType.locked && stillOpenSameType.start!==whenIso
+             && (Date.now()-new Date(stillOpenSameType.start).getTime()) < 10000){
+            stillOpenSameType.start=whenIso; stillOpenSameType.startHM=timeHM;
+            dtMarkDirty(stillOpenSameType.id); changed=true;
+          }
+          return;
+        }
         const id=dtEventId(feeder, startType, whenIso);
         if(!DT_EVENTS.find(e=>e.id===id)){
           DT_EVENTS.push({
@@ -6783,12 +6797,34 @@ function dtDriveFromLogEntry(entry){
       // Close side. 'Charged' is ambiguous between trip/shutdown — resolve
       // per feeder by checking which type is actually open right now.
       feederNames.forEach(feeder=>{
-        const openEv = dtOpenEventFor(feeder);
-        if(!openEv) return;   // nothing open for this feeder — nothing to close
+        let openEv = dtOpenEventFor(feeder);
+        let correcting = false;
+        if(!openEv){
+          // Nothing currently open — but dtOnStatusChange (fired a moment
+          // earlier by the SAME feederStatusMap write that produced this
+          // very Log row, via the Proxy at feederStatusMap's declaration)
+          // may already have closed it, using dtCloseTimeOverride/Date.now()
+          // as an estimate rather than this Log row's own exact time. This
+          // Log row is the authoritative record of when it really happened
+          // (dtLogRowEventIso, computed above into whenIso) — the same
+          // function and the same row the Log page itself reads — so if the
+          // most recently closed event for this feeder was closed within
+          // the last few seconds (i.e. by that same status-change, not some
+          // unrelated earlier event), correct its end time to match the Log
+          // exactly instead of leaving the Proxy's estimate in place.
+          const recent = DT_EVENTS.filter(e=>!e.deleted && e.feeder===feeder && e.end)
+            .sort((a,b)=>new Date(b.end)-new Date(a.end))[0];
+          if(recent && (Date.now()-new Date(recent.end).getTime()) < 10000){
+            openEv = recent; correcting = true;
+          } else {
+            return;   // nothing open, and nothing recently closed to correct — genuinely nothing to do
+          }
+        }
         const explicitType = DT_LOG_END_TYPE_OF[entry.condition];
         if(explicitType && openEv.type!==explicitType) return;   // this Log row doesn't close THIS type
         if(!explicitType && entry.condition!=='Charged') return;  // unrecognized close label — leave alone
         if(new Date(whenIso) < new Date(openEv.start)) return;    // guard against clock skew
+        if(correcting && openEv.end===whenIso) return;             // already exactly right — nothing to change
         openEv.end=whenIso; openEv.endHM=timeHM;
         openEv.durationMin=Math.max(0,Math.round((new Date(openEv.end)-new Date(openEv.start))/60000));
         openEv.assumed=false; openEv.locked=true;
