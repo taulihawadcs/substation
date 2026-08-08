@@ -7945,6 +7945,16 @@ function renderMonitorRecent(){
 // the COUNT rule in dtAggregateRange), including one still ongoing. Reads
 // EVENTS (the Log's own array) directly — see dtAggregateRange's header
 // comment for why this replaced DT_EVENTS as the source everywhere.
+//
+// EVENTS is only rebuilt by evRebuildAll(), which — until now — only ran
+// from inside renderLogPage(). An operator who opens the app and stays on
+// the feeder status panel (the main dispatch screen) without ever visiting
+// the Log page would never trigger that rebuild, so EVENTS would sit at its
+// initial [] forever and every feeder's count would silently read 0 — not
+// because nothing happened, but because nothing had rebuilt the array yet.
+// Fixed by having renderFeederStatus() (this function's only caller's
+// caller) rebuild EVENTS once per render, before looping over feeders —
+// see the comment there. This function itself just reads EVENTS as-is.
 function fsOutageCountToday(feederName){
   try{
     const [ds, de] = dtDayBounds(dtCurrentWindowStart());
@@ -7989,6 +7999,14 @@ function renderFeederStatus(){
   if(!panel) return;
   updateTripAllToggleUI();
   const st=$('station').value;
+  // Rebuild EVENTS from LOG once, up front — this render's per-feeder
+  // outage-count badges (fsOutageCountToday, called once per feeder further
+  // down) all read EVENTS, which otherwise only gets rebuilt by visiting
+  // the Log page (see evRebuildAll's other, and only, caller). Doing it
+  // once here — rather than inside fsOutageCountToday itself — keeps this
+  // correct on whichever page the operator opens first, without redoing
+  // the same rebuild once per feeder in the loop below.
+  if(typeof evRebuildAll==='function') evRebuildAll();
 
   // ── Global "Restore All Substations" shortcut — only shown when 2+
   // substations are simultaneously in System Gone, since a single active
@@ -11551,6 +11569,21 @@ async function _syncFromCloudInner(){
       // sitting there until some unrelated action happens to redraw it.
       if(typeof dtRenderSummary==='function') dtRenderSummary();
     }
+    // The feeder status panel's per-feeder outage-count badges
+    // (fsOutageCountToday) read EVENTS, which is rebuilt from LOG — so
+    // they need a refresh here too, same as the Log page above, whenever
+    // new rows just landed. This is NOT gated on which page is active
+    // (unlike the Log page refresh above): the status panel is the app's
+    // main/default screen, so its badges are exactly what's most likely
+    // to be on screen — and stuck at their pre-sync value — the moment
+    // this very first bootstrap pull completes. Before this, the initial
+    // pre-lock renderFeederStatus() call ran with LOG still empty (line
+    // ~11645), and nothing ever told the panel to recompute once real
+    // data arrived unless a feeder's STATUS also happened to change at
+    // the same time — which is why switching the station dropdown (which
+    // calls renderFeederStatus() itself) appeared to "activate" the count,
+    // when really it was just the first re-render to happen after sync.
+    if(added || doBootstrap) renderFeederStatus();
     msgAlertFirstSync = false;   // initial log load done — alert from now on
     updateSbSyncStatus(`Last sync: ${nowHM()} — ${logRows.length} log entries`);
   }catch(e){
