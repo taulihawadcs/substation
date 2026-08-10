@@ -124,13 +124,29 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
    because the Downtime Report card further down this page still uses them.
    ══════════════════════════════════════════════════════════════════════ */
 .ev-wrap{max-width:900px;margin:0 auto;padding:18px 16px 60px}
-.ev-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.ev-station-tabs{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
+/* .ev-toolbar stacks the station tabs and action buttons as two separate
+   full-width rows (column direction), rather than placing them side by
+   side as two flex-row items that each wrap internally. The row layout
+   looked reasonable in isolation, but station names in this app are long
+   ("तौलिहवा सबस्टेशन ३३/११ के.भी."), so .ev-station-tabs almost always
+   needs several of its own wrapped lines — and CSS flexbox does not
+   coordinate wrapped-line heights between sibling flex items, so
+   .ev-actions (to its right) could end up vertically straddling those
+   wrapped tab lines instead of sitting cleanly below or beside them,
+   producing a visible overlap between the buttons and a station tab. This
+   happened on desktop specifically — there was plenty of horizontal room,
+   which is exactly what let both groups sit "side by side" in a way that
+   exposed the mismatched wrapping, whereas a narrow screen forced them
+   apart by width alone. Column layout removes the ambiguity entirely: each
+   group gets its own guaranteed rows, at every viewport width. */
+.ev-toolbar{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-bottom:12px}
+.ev-toolbar>.ev-station-tabs,.ev-toolbar>.ev-actions{width:100%}
+.ev-station-tabs{display:flex;gap:6px;flex-wrap:wrap;min-width:0}
 .ev-stab{background:#fff;border:1.5px solid var(--line2);color:var(--dim);font-size:12px;font-weight:600;
   padding:5px 13px;border-radius:20px;cursor:pointer;font-family:'Archivo',sans-serif;transition:border-color .15s,background .15s,color .15s;white-space:nowrap}
 .ev-stab:hover{border-color:var(--blue);color:var(--blue)}
 .ev-stab.active{background:var(--txt);border-color:var(--txt);color:#fff}
-.ev-actions{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap}
+.ev-actions{display:flex;gap:6px;flex-wrap:wrap}
 
 .ev-live{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
 .ev-live-chip{display:flex;align-items:center;gap:7px;background:#fff7ed;border:1.5px solid #fdba74;
@@ -210,6 +226,11 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   .ev-day-pill{padding:2px 7px;font-size:9.5px}
   .ev-dur{margin-left:0}
   .ev-top{gap:6px}
+  /* Smaller action buttons on a phone screen — the column-stacked
+     .ev-toolbar layout (base rule above, applies at every width) already
+     keeps the station tabs and action buttons from overlapping; this just
+     keeps the button row from feeling oversized on a narrow screen. */
+  .ev-actions .btn{padding:6px 9px;font-size:11px}
 }
 .rcv-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--line2);border-radius:9px;background:#fff;transition:border-color .15s,background .15s;margin-bottom:8px}
 .rcv-row.checked{border-color:var(--blue);background:var(--blue-lt)}
@@ -522,6 +543,25 @@ select.big option,
 .sg-banner-left{display:flex;flex-direction:column;gap:2px}
 .sg-banner-label{font-size:13px;font-weight:800;color:#86198f;display:flex;align-items:center;gap:6px}
 .sg-banner-sub{font-size:10px;color:#a21caf;font-family:'JetBrains Mono',monospace}
+/* Demoted per-station System Gone banner — used when the "Restore All
+   Substations" shortcut is already showing at the top (2+ stations
+   simultaneously down, which is how System Gone is declared the large
+   majority of the time — see renderFeederStatus). In that situation the
+   operator should be nudged toward the one bulk action rather than given
+   an equally-prominent single-station option that only fixes 1/N
+   stations and leaves the rest still down. Kept genuinely clickable
+   (same restore function, same outcome) — just visually de-emphasized:
+   small text, muted color, sits after the feeder rows instead of before
+   them, for the rarer case a station needs restoring individually
+   (e.g. it recovered before the others). */
+.sg-banner-demoted{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  background:none;border:1px dashed var(--line2);border-radius:8px;
+  padding:6px 10px;margin-top:10px;box-shadow:none;
+}
+.sg-banner-demoted .sg-banner-label{font-size:10.5px;font-weight:700;color:var(--dim2)}
+.sg-banner-demoted .sg-banner-sub{font-size:9px;color:var(--dim2)}
+.sg-banner-demoted .sg-restore-btn{font-size:10px;padding:4px 9px;box-shadow:none}
 
 /* THE BIG RESTORE BUTTON */
 .sg-restore-btn{
@@ -5465,7 +5505,32 @@ function evRebuildAll(){
   EVENTS = [];
   EV_OPEN = {};
   logOpenOutage = {};
-  const ordered = [...LOG].sort((a,b)=> new Date(a.date||0) - new Date(b.date||0));
+  // Sort by EFFECTIVE event time (evRowIso — the operator's typed HH:MM,
+  // anchored to the row's date), not raw row.date (when the row was
+  // CREATED/synced). These are usually the same moment, but not always:
+  // a row pulled in from Supabase, or written a beat late by a slow
+  // device, can have a row.date slightly out of step with its own typed
+  // time relative to another row's. If a close (e.g. "System Restored")
+  // and the NEXT open of the same feeder+type (e.g. a later "System Gone")
+  // ever sort in the wrong relative order because of that, the close gets
+  // matched to the wrong instance — or never reaches the one it was meant
+  // for at all — leaving a real, already-restored event stuck open
+  // forever (surfaced as a false "stuck outage" once a later same-type
+  // event opens and the staleness guard in evIngestRow, correctly but for
+  // the wrong underlying reason, refuses to let it re-claim that stale
+  // entry). Sorting by the same effective time every OTHER part of this
+  // engine already uses removes that ambiguity at the source.
+  const ordered = [...LOG].sort((a,b)=>{
+    const ai = evRowIso(a), bi = evRowIso(b);
+    const at = ai ? new Date(ai).getTime() : new Date(a.date||0).getTime();
+    const bt = bi ? new Date(bi).getTime() : new Date(b.date||0).getTime();
+    if(at!==bt) return at-bt;
+    // Exact same effective minute (two rows can legitimately share one,
+    // e.g. a start and its own same-minute close) — fall back to creation
+    // order so ties are still resolved deterministically rather than left
+    // to sort() implementation details.
+    return new Date(a.date||0) - new Date(b.date||0);
+  });
   ordered.forEach(row=>evIngestRow(row));
 }
 
@@ -5505,7 +5570,12 @@ function evIngestRow(row){
       }
       const ev = {
         id: f+'|'+type+'|'+(row.id!=null?row.id:row.ts),
-        feeder:f, station:row.station||'', type,
+        // Resolve THIS feeder's real station, not row.station verbatim —
+        // row.station can be an aggregate label ('All Substations', or a
+        // comma-joined list from a multi-station restore) that doesn't
+        // name any single station. Falls back to row.station only if the
+        // feeder isn't found in DATA.feeders (shouldn't normally happen).
+        feeder:f, station: dtStationOf(f) || row.station || '', type,
         startRow:row, endRow:null,
         startMs, endMs:null, reason:row.reason||''
       };
@@ -7822,6 +7892,29 @@ async function fsEnsureFeederClearFor(name, newType){
     // handled by the callers themselves) — nothing for this guard to do.
     if(!FS_OUTAGE_STATUSES.includes(live.status) || live.status===newType) return true;
 
+    // System Gone / 11KV Incomer Failed / 33KV Incomer Failed are STATION-WIDE
+    // overrides, not per-feeder conditions — every feeder at that station was
+    // put into this status by ONE station-level action, and must come out of
+    // it the same way, via that station's own Restored banner. A plain
+    // "Charged" message (which is what the code below this point sends) can
+    // only ever close a trip/shutdown EVENT (see evIngestRow's
+    // DT_LOG_END_TYPE_OF handling — 'Charged' has no mapping for
+    // system-gone/incomer-failed/kv33, deliberately, since it's ambiguous
+    // which of many feeders it would apply to). Letting this guard "charge
+    // away" one feeder's station-wide status would flip that ONE feeder back
+    // to normal/charged (so a new Trip/Shutdown on it can proceed) while its
+    // system-gone/incomer-failed/kv33 EVENT stays open forever — exactly the
+    // stuck-outage case a single feeder charged without restoring System Gone
+    // produces. Block it here and point the operator at the real fix instead.
+    if(live.status==='system-gone' || live.status==='incomer-failed' || live.status==='kv33'){
+      const oldLabel = FS_BADGE[live.status]?.label || live.status;
+      const st = DATA.feeders.find(f=>f.name===name)?.station || $('station').value || '';
+      const restoreLabel = live.status==='system-gone' ? 'System Restored'
+        : live.status==='incomer-failed' ? '11 KV Incomer Restored' : '33 KV Incomer Restored';
+      toast(`⚠ ${name} is under ${oldLabel} for the whole substation — restore it via "${restoreLabel}" for ${st} first, not by charging this one feeder.`, 5500);
+      return false;
+    }
+
     // A DIFFERENT outage type is open on this feeder — must be charged first.
     const oldLabel = FS_BADGE[live.status]?.label || live.status;
     const newLabel = FS_BADGE[newType]?.label || newType;
@@ -8041,7 +8134,7 @@ function renderFeederStatus(){
       head.textContent=s.name;
       panel.appendChild(head);
       const feeders=DATA.feeders.filter(f=>f.station===s.name).map(f=>f.name);
-      renderFeederStatusBlock(s.name, feeders, panel);
+      renderFeederStatusBlock(s.name, feeders, panel, sgActiveStations.length>1);
     });
     return;
   }
@@ -8052,19 +8145,37 @@ function renderFeederStatus(){
     return;
   }
   panel.innerHTML=restoreAllBannerHtml;
-  renderFeederStatusBlock(st, feeders, panel);
+  renderFeederStatusBlock(st, feeders, panel, sgActiveStations.length>1);
 }
 
 // Renders the outage banners + feeder rows for ONE substation, appended into
 // `panel`. Shared by the single-substation view and the monitor "All
 // Substations" grouped view above.
-function renderFeederStatusBlock(st, feeders, panel){
+//
+// `demoteSg` — true whenever the "Restore All Substations" shortcut is
+// ALSO showing (2+ stations simultaneously in System Gone — see
+// renderFeederStatus). System Gone is declared for every substation at
+// once the large majority of the time, so when it IS a multi-station
+// event, restoring one station individually is almost always the wrong
+// action for the operator to reach for first — it only fixes 1 of N
+// stations, sends a separate message, and leaves the rest still down.
+// When true, this station's own System Gone banner renders small and
+// AFTER the feeder rows (see the bottom of this function) instead of
+// prominently before them, so the bulk action reads as the obvious
+// choice and the single-station one is still there, just not competing
+// for attention. When only ONE station is down (demoteSg false), there
+// is no bulk action to prefer, so the banner stays exactly as before:
+// prominent, at the top.
+function renderFeederStatusBlock(st, feeders, panel, demoteSg){
   const incomerActive = isIncomerFailedActive(st);
   const sgActive      = isSystemGoneActive(st);
   const kv33Active    = isKv33Active(st);
 
   // ── System Gone banner (PER-STATION) with prominent Restore button ──
-  if(sgActive){
+  // Skipped here (top position) when demoteSg is true — appended in its
+  // small, bottom-of-panel form after the feeder rows instead. See the
+  // demoteSg comment above this function for why.
+  if(sgActive && !demoteSg){
     const sgTime=systemGoneMap[st].time||'';
     const banner=document.createElement('div');
     banner.className='sg-banner';
@@ -8180,6 +8291,26 @@ function renderFeederStatusBlock(st, feeders, panel){
       </span>`;
     panel.appendChild(row);
   });
+
+  // Demoted System Gone banner — small, after the feeder rows. Same
+  // restore action as the full-size banner above; just visually
+  // de-emphasized so "Restore All Substations" (already showing at the
+  // top of the panel — see renderFeederStatus) reads as the obvious
+  // choice when 2+ stations are down at once.
+  if(sgActive && demoteSg){
+    const sgTime=systemGoneMap[st].time||'';
+    const banner=document.createElement('div');
+    banner.className='sg-banner sg-banner-demoted';
+    banner.innerHTML=`
+      <div class="sg-banner-left">
+        <div class="sg-banner-label">⛔ System Gone (this substation only)</div>
+        <div class="sg-banner-sub">${sgTime?'Since '+sgTime:''}</div>
+      </div>
+      <button class="sg-restore-btn" onclick="restoreSystemGoneFor('${esc(st)}')">
+        System Restored
+      </button>`;
+    panel.appendChild(banner);
+  }
 }
 
 // ── Reason picker modal for panel Trip/Shutdown ──────────────────────────
@@ -11448,12 +11579,27 @@ async function _syncFromCloudInner(){
         // Use it to close any open downtime event for this feeder, so a
         // "Charged at 07:47" reported by another device closes the Shutdown/
         // Trip event at 07:47, not at whenever THIS device's poll cycle ran.
+        //
+        // newTs anchors the 12-hour "Charged" auto-expiry (expireChargedFeeders,
+        // CHARGED_TTL_MS) to when this status was ACTUALLY written in Supabase
+        // (cloudTs / r.updated_at), not to whenever this device happens to be
+        // polling. Without this, every reload — feederLocalWriteAt is a plain
+        // in-memory object, so it's empty again after every reload — re-enters
+        // this branch (cur is undefined) with no ts of its own, and
+        // expireChargedFeeders() would stamp a FRESH ts="now" on a feeder that
+        // was actually charged 11 hours ago, silently restarting its 12-hour
+        // countdown from zero. That is exactly why the countdown was never
+        // reaching 12h in practice: any reload (or a second device syncing
+        // in) reset it. Using the row's own updated_at makes the expiry
+        // timer survive reloads and match every device consistently, since
+        // it's derived from the same durable cloud value everywhere.
+        const newTs = cloudTs ? new Date(cloudTs).getTime() : Date.now();
         if(newTime){
           dtCloseTimeOverride=newTime;
-          try{ feederStatusMap[r.feeder_name]={status:newStatus, time:newTime}; }
+          try{ feederStatusMap[r.feeder_name]={status:newStatus, time:newTime, ts:newTs}; }
           finally{ dtCloseTimeOverride=null; }
         } else {
-          feederStatusMap[r.feeder_name]={status:newStatus, time:newTime};
+          feederStatusMap[r.feeder_name]={status:newStatus, time:newTime, ts:newTs};
         }
         // Update our local-write record to match the cloud timestamp so we
         // don't keep re-accepting this same row on every poll cycle
