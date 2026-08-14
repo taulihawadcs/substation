@@ -2618,7 +2618,7 @@ body.tlr-page-open #page-tlr{
       <div class="snav-item" onclick="showSection('sec-supabase')">☁ Supabase (Sync)</div>
       <div class="snav-item" onclick="showSection('sec-devices');renderDeviceRegistry()">🔐 Device Access</div>
       <div class="snav-item" onclick="showSection('sec-changepw')">🔑 Change Password</div>
-      <div class="snav-item" onclick="showSection('sec-dutylock');dutyRenderLockSettingsRow();headerLogoRenderSettingsRow();renderCustomStripMsgFields()">🔒 Duty Chart Lock</div>
+      <div class="snav-item" onclick="showSection('sec-dutylock');dutyRenderLockSettingsRow();headerLogoRenderSettingsRow();renderCustomStripMsgFields();renderHeaderContentFields()">🔒 Duty Chart Lock</div>
     </div>
 
     <div class="settings-content">
@@ -3103,10 +3103,34 @@ gemini-1.5-flash</textarea>
           <div class="card-head"><span class="card-title">🖼️ Header Logo</span></div>
           <div class="card-body">
             <p class="hint" style="margin-bottom:16px;line-height:1.6">
-              हेडरमाथिको गोलो लोगोमा Tap गरेर आफ्नो लोगो (जस्तै स्क्यान गरिएको कार्यालय छाप) अपलोड गर्न सकिन्छ। अपलोड गरिएको custom लोगो हटाएर default NEA emblem मा फर्कन तलको बटन प्रयोग गर्नुहोस्।
+              हेडरमाथिको गोलो लोगोमा Tap गरेर आफ्नो लोगो (जस्तै स्क्यान गरिएको कार्यालय छाप) अपलोड गर्न सकिन्छ। अपलोड गरेको लोगो अब <strong>सबै device मा</strong> तुरुन्तै देखिन्छ (cloud-synced)। अपलोड गरिएको custom लोगो हटाएर default NEA emblem मा फर्कन तलको बटन प्रयोग गर्नुहोस् — त्यो पनि सबै device मा लागू हुन्छ।
             </p>
             <div id="logoRemoveStatus" style="font-size:13px;font-weight:700;margin-bottom:14px"></div>
             <div id="logoRemoveAction"></div>
+          </div>
+        </div>
+
+        <!-- HEADER CONTENT (Title / Subtitle / Tagline) -->
+        <div class="card">
+          <div class="card-head"><span class="card-title">🏷️ Header Content</span></div>
+          <div class="card-body">
+            <p class="hint" style="margin-bottom:16px;line-height:1.6">
+              माथिको main header (Title/Subtitle/Tagline) यहाँबाट बदल्न सकिन्छ — जस्तै "NEA SUBSTATION MANAGEMENT" लाई अर्को नाममा। भरिएको छ भने त्यही text <strong>सबै device मा</strong> तुरुन्तै देखिन्छ; खाली छोडे हालको default (DCS अनुसार auto-बन्ने Subtitle सहित) जस्तै चल्छ।
+            </p>
+            <div class="field">
+              <label>Title (main app name)</label>
+              <input type="text" id="headerCfgTitle" placeholder="NEA SUBSTATION MANAGEMENT">
+            </div>
+            <div class="field">
+              <label>Subtitle</label>
+              <input type="text" id="headerCfgSubtitle" placeholder="Nepal Electricity Authority • [Active DCS] DCS">
+            </div>
+            <div class="field">
+              <label>Tagline</label>
+              <input type="text" id="headerCfgTagline" placeholder="विश्वसनीय सेवा, उज्यालो भविष्य">
+            </div>
+            <div id="headerCfgStatus" style="font-size:13px;font-weight:700;margin:6px 0 14px"></div>
+            <button class="btn btn-blue btn-sm" onclick="saveHeaderContent()">💾 Save / Update Header</button>
           </div>
         </div>
 
@@ -5214,6 +5238,27 @@ let DAILY_REPORT_SEND_TIME = '00:00';
 // applied without touching their existing automatic-message logic.
 let CUSTOM_STRIP_MSG = { hdrTicker:'', tripAlert:'', emergency:'' };
 
+// Main app-header content override (topbar Title / Subtitle / Tagline) —
+// cloud-synced (app_config, same table/pattern as CUSTOM_STRIP_MSG right
+// above) so every device shows the same header text. Empty string for a
+// field means "no override — keep the existing default text for that
+// line exactly as before" (Title defaults to 'NEA SUBSTATION MANAGEMENT',
+// Subtitle to 'Nepal Electricity Authority • <DCS> DCS', Tagline to the
+// Nepali motto). Populated by fetchPasswordHashes() (extended below) and
+// by customStripMsgPoll() (extended below); applied by
+// headerBrandRender() — see that function for how the override lays
+// over the topbar without touching the DCS-driven subtitle logic.
+let CUSTOM_HEADER = { title:'', subtitle:'', tagline:'' };
+
+// Header LOGO override — same cloud-synced app_config pattern, key
+// 'header_logo'. Value is a base64 data URL (resized to maxDim 300 by
+// headerLogoHandleFile) or '' for "no custom logo, show default NEA
+// emblem". This replaces the old localStorage-only HEADER_LOGO_KEY
+// approach, which kept the logo per-device — see headerLogoApply(),
+// sbPushHeaderLogo(), and headerLogoPollApply() further down for the
+// sync path.
+let CUSTOM_HEADER_LOGO = '';
+
 // DT event type → Log 'condition' string(s), for cross-checking a downtime
 // report entry against the main Log (see dtVerifyAgainstLog / dtLogSyncState
 // further down). Declared early because dtRenderSummary — defined earlier in
@@ -5290,7 +5335,7 @@ function hasValidMonitorSession(){
 
 async function fetchPasswordHashes(){
   try{
-    const rows=await sbFetch('app_config?key=in.("app_password","settings_password","pages_password","duty_locked","daily_report_auto_enabled","daily_report_send_time","custom_msg_hdr_ticker","custom_msg_trip_alert","custom_msg_emergency")&select=key,value');
+    const rows=await sbFetch('app_config?key=in.("app_password","settings_password","pages_password","duty_locked","daily_report_auto_enabled","daily_report_send_time","custom_msg_hdr_ticker","custom_msg_trip_alert","custom_msg_emergency","header_title","header_subtitle","header_tagline")&select=key,value');
     rows.forEach(r=>{
       if(r.key==='app_password')      cachedEntryHash    = r.value;
       if(r.key==='settings_password') cachedSettingsHash = r.value;
@@ -5301,6 +5346,9 @@ async function fetchPasswordHashes(){
       if(r.key==='custom_msg_hdr_ticker')  CUSTOM_STRIP_MSG.hdrTicker  = r.value||'';
       if(r.key==='custom_msg_trip_alert')  CUSTOM_STRIP_MSG.tripAlert  = r.value||'';
       if(r.key==='custom_msg_emergency')   CUSTOM_STRIP_MSG.emergency  = r.value||'';
+      if(r.key==='header_title')    CUSTOM_HEADER.title    = r.value||'';
+      if(r.key==='header_subtitle') CUSTOM_HEADER.subtitle = r.value||'';
+      if(r.key==='header_tagline')  CUSTOM_HEADER.tagline  = r.value||'';
     });
     settingsPwExists = !!cachedSettingsHash;
     pagesPwExists    = !!cachedPagesHash;
@@ -5421,6 +5469,102 @@ function renderCustomStripMsgFields(){
   if(elEmg)  elEmg.value  = CUSTOM_STRIP_MSG.emergency || '';
 }
 
+// Pushes one main-header content field (title/subtitle/tagline) to
+// app_config — same table/pattern as sbPushCustomStripMsg above, so
+// it's cloud-synced and shared across every device. An empty string is
+// still pushed (clears any previous override so that line's default
+// text resumes everywhere).
+async function sbPushHeaderField(key, value){
+  const url=getSbUrl()+'/rest/v1/app_config?on_conflict=key';
+  const res=await fetch(url,{
+    method:'POST',
+    headers:{...sbHeaders(),'Prefer':'resolution=merge-duplicates,return=minimal'},
+    body:JSON.stringify({key, value: value||'', updated_at:new Date().toISOString()})
+  });
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  return true;
+}
+
+// Save/Update action for the Header Content fields (Settings → Duty
+// Chart Lock section, "🏷️ Header Content" card). Pushes all three to
+// app_config, updates the shared CUSTOM_HEADER cache immediately so this
+// device's topbar reflects the change right away, and re-renders the
+// topbar via headerBrandRender() — no change to the DCS-driven subtitle
+// logic itself, it just now checks the override first.
+async function saveHeaderContent(){
+  const elTitle = $('headerCfgTitle'), elSub = $('headerCfgSubtitle'), elTag = $('headerCfgTagline');
+  const st = $('headerCfgStatus');
+  if(!elTitle || !elSub || !elTag) return;
+  const vTitle = elTitle.value.trim(), vSub = elSub.value.trim(), vTag = elTag.value.trim();
+  if(st){ st.style.color='var(--dim2)'; st.textContent='Saving…'; }
+  try{
+    await Promise.all([
+      sbPushHeaderField('header_title', vTitle),
+      sbPushHeaderField('header_subtitle', vSub),
+      sbPushHeaderField('header_tagline', vTag)
+    ]);
+    CUSTOM_HEADER.title    = vTitle;
+    CUSTOM_HEADER.subtitle = vSub;
+    CUSTOM_HEADER.tagline  = vTag;
+    if(typeof headerBrandRender==='function') headerBrandRender();
+    if(st){ st.style.color='var(--green)'; st.textContent='✓ Saved — now live for all users.'; }
+  }catch(e){
+    if(st){ st.style.color='var(--red)'; st.textContent='✖ Save failed: '+e.message; }
+  }
+}
+
+// Reflects the current cached CUSTOM_HEADER values into the Settings
+// input fields whenever that section becomes visible/refreshed. Fields
+// are left empty (showing their placeholder = the live default text)
+// when there's no override, same convention as the yellow-strip fields.
+function renderHeaderContentFields(){
+  const elTitle = $('headerCfgTitle'), elSub = $('headerCfgSubtitle'), elTag = $('headerCfgTagline');
+  if(elTitle) elTitle.value = CUSTOM_HEADER.title    || '';
+  if(elSub)   elSub.value   = CUSTOM_HEADER.subtitle || '';
+  if(elTag)   elTag.value   = CUSTOM_HEADER.tagline  || '';
+}
+
+// Applies CUSTOM_HEADER onto the topbar's three text lines. Called on
+// load, after saveHeaderContent(), and from customStripMsgPoll() so a
+// change made on one device shows up on every other device without a
+// reload. Falls back to each line's existing default exactly as before
+// when that field has no override — the Subtitle default still tracks
+// the active DCS's short name via .js-dcs-shortname untouched.
+function headerBrandRender(){
+  const elTitle = document.querySelector('.topbar-brand');
+  const elTag   = document.querySelector('.topbar-tagline');
+  if(elTitle) elTitle.textContent = CUSTOM_HEADER.title || 'NEA SUBSTATION MANAGEMENT';
+  if(elTag)   elTag.textContent   = CUSTOM_HEADER.tagline || 'विश्वसनीय सेवा, उज्यालो भविष्य';
+  const elSubWrap = document.querySelector('.topbar-subtitle');
+  if(elSubWrap){
+    if(CUSTOM_HEADER.subtitle){
+      elSubWrap.textContent = CUSTOM_HEADER.subtitle;
+    } else {
+      // Restore the default markup (with the live DCS-shortname span)
+      // exactly as it exists in the original HTML.
+      const dcsName = (typeof currentDcs==='function' && currentDcs().shortName) || 'Taulihawa';
+      elSubWrap.innerHTML = 'Nepal Electricity Authority &nbsp;•&nbsp; <span class="js-dcs-shortname">'+dcsName+'</span> DCS';
+    }
+  }
+}
+window.headerBrandRender = headerBrandRender;
+
+// ── Header logo — now cloud-synced (app_config, key 'header_logo') so an
+// uploaded logo shows on every device instead of just the one it was
+// uploaded from. localStorage is kept ONLY as an instant-paint cache for
+// this device (avoids a blank/default flash before the first cloud pull
+// completes) — the source of truth is always Supabase from here on.
+async function sbPushHeaderLogo(dataUrl){
+  const url=getSbUrl()+'/rest/v1/app_config?on_conflict=key';
+  const res=await fetch(url,{
+    method:'POST',
+    headers:{...sbHeaders(),'Prefer':'resolution=merge-duplicates,return=minimal'},
+    body:JSON.stringify({key:'header_logo', value: dataUrl||'', updated_at:new Date().toISOString()})
+  });
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  return true;
+}
+
 // Periodically re-pulls the custom-message keys plus the daily-report
 // auto-send toggle/time so another device's change takes effect here
 // without needing a full page reload — same 30s cadence the strips' own
@@ -5429,13 +5573,16 @@ function renderCustomStripMsgFields(){
 let _customStripMsgPollInterval = null;
 async function customStripMsgPoll(){
   try{
-    const rows=await sbFetch('app_config?key=in.("custom_msg_hdr_ticker","custom_msg_trip_alert","custom_msg_emergency","daily_report_auto_enabled","daily_report_send_time")&select=key,value');
+    const rows=await sbFetch('app_config?key=in.("custom_msg_hdr_ticker","custom_msg_trip_alert","custom_msg_emergency","daily_report_auto_enabled","daily_report_send_time","header_title","header_subtitle","header_tagline")&select=key,value');
     rows.forEach(r=>{
       if(r.key==='custom_msg_hdr_ticker')  CUSTOM_STRIP_MSG.hdrTicker  = r.value||'';
       if(r.key==='custom_msg_trip_alert')  CUSTOM_STRIP_MSG.tripAlert  = r.value||'';
       if(r.key==='custom_msg_emergency')   CUSTOM_STRIP_MSG.emergency  = r.value||'';
       if(r.key==='daily_report_auto_enabled') DAILY_REPORT_AUTO_ENABLED = (r.value==='1');
       if(r.key==='daily_report_send_time' && /^\d{1,2}:\d{2}$/.test(r.value||'')) DAILY_REPORT_SEND_TIME = r.value;
+      if(r.key==='header_title')    CUSTOM_HEADER.title    = r.value||'';
+      if(r.key==='header_subtitle') CUSTOM_HEADER.subtitle = r.value||'';
+      if(r.key==='header_tagline')  CUSTOM_HEADER.tagline  = r.value||'';
     });
     // Push the freshly-pulled values into each strip right away, rather
     // than waiting for that strip's own unrelated render interval to
@@ -5445,6 +5592,9 @@ async function customStripMsgPoll(){
     if(typeof tripAlertRender==='function') tripAlertRender();
     if(typeof emergencyTickerRender==='function') emergencyTickerRender();
     if(typeof renderCustomStripMsgFields==='function') renderCustomStripMsgFields();
+    if(typeof headerBrandRender==='function') headerBrandRender();
+    if(typeof renderHeaderContentFields==='function') renderHeaderContentFields();
+    if(typeof headerLogoPollApply==='function') await headerLogoPollApply();
     // Reflect the toggle/time into their inputs too — but only when the
     // report card is actually on screen and the input isn't the thing the
     // person is mid-edit on, same caution the strips' own poll takes.
@@ -8511,10 +8661,13 @@ function toggleEvActions(){
 }
 
 // ── Header logo upload — lets the operator replace the default NEA emblem
-// with their own image (e.g. an actual scanned office seal). Stored as a
-// resized base64 data URL in localStorage on this device only, so it
-// persists across reloads but isn't synced to other devices — the header
-// is per-device branding, not shared app data.
+// with their own image (e.g. an actual scanned office seal). Cloud-synced
+// via app_config (key 'header_logo', same table/pattern as
+// CUSTOM_HEADER/CUSTOM_STRIP_MSG) so an uploaded logo shows on EVERY
+// device, not just the one it was uploaded from. localStorage is still
+// written as a same-device instant-paint cache only, so the logo appears
+// immediately on reload before the first cloud pull completes — but the
+// cloud value is always what wins once fetched (see headerLogoPollApply).
 const HEADER_LOGO_KEY = 'nea_header_logo_v1';
 
 function headerLogoApply(dataUrl){
@@ -8536,10 +8689,35 @@ function headerLogoApply(dataUrl){
   headerLogoRenderSettingsRow();
 }
 
+// Instant-paint from the local cache (avoids a flash of the default
+// emblem while the cloud value is still loading), then immediately
+// checked/overwritten by headerLogoPollApply() once Supabase responds.
 function headerLogoLoadSaved(){
   let saved = '';
   try{ saved = localStorage.getItem(HEADER_LOGO_KEY) || ''; }catch(e){}
+  CUSTOM_HEADER_LOGO = saved;
   if(saved) headerLogoApply(saved);
+}
+
+// Pulls 'header_logo' from app_config and applies it if it differs from
+// what's already on screen — called at load and every 30s from
+// customStripMsgPoll(), same cadence as the header-text/strip sync, so a
+// logo uploaded on one device reaches every other device without a
+// reload. Also refreshes the local instant-paint cache so the next
+// reload on this device starts from the latest cloud value.
+async function headerLogoPollApply(){
+  try{
+    const rows = await sbFetch('app_config?key=eq.header_logo&select=value');
+    const cloudVal = (rows && rows[0] && rows[0].value) || '';
+    if(cloudVal !== CUSTOM_HEADER_LOGO){
+      CUSTOM_HEADER_LOGO = cloudVal;
+      try{
+        if(cloudVal) localStorage.setItem(HEADER_LOGO_KEY, cloudVal);
+        else localStorage.removeItem(HEADER_LOGO_KEY);
+      }catch(e){}
+      headerLogoApply(cloudVal);
+    }
+  }catch(e){ /* keep last-known logo on any glitch */ }
 }
 
 function headerLogoHandleFile(e){
@@ -8549,8 +8727,9 @@ function headerLogoHandleFile(e){
   const reader = new FileReader();
   reader.onload = function(ev){
     const img = new Image();
-    img.onload = function(){
-      // Downscale so the base64 string stays small in localStorage.
+    img.onload = async function(){
+      // Downscale so the base64 string stays small (both for localStorage
+      // and for the app_config text value pushed to Supabase).
       const maxDim = 300;
       let w = img.width, h = img.height;
       if(w > maxDim || h > maxDim){
@@ -8562,8 +8741,17 @@ function headerLogoHandleFile(e){
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, w, h);
       const dataUrl = canvas.toDataURL('image/png');
+      // Paint locally right away, then push to the cloud so every other
+      // device picks it up on their next poll.
       try{ localStorage.setItem(HEADER_LOGO_KEY, dataUrl); }catch(err){}
+      CUSTOM_HEADER_LOGO = dataUrl;
       headerLogoApply(dataUrl);
+      try{
+        await sbPushHeaderLogo(dataUrl);
+        toast('✓ Logo अपलोड भयो — अब सबै device मा देखिन्छ', 2500);
+      }catch(err){
+        toast('⚠ Logo यो device मा लाग्यो तर cloud sync असफल: '+err.message, 3500);
+      }
     };
     img.onerror = function(){ alert('Could not read that image — try another file.'); };
     img.src = ev.target.result;
@@ -8572,9 +8760,16 @@ function headerLogoHandleFile(e){
   reader.readAsDataURL(file);
 }
 
-function headerLogoRemove(){
+async function headerLogoRemove(){
   try{ localStorage.removeItem(HEADER_LOGO_KEY); }catch(e){}
+  CUSTOM_HEADER_LOGO = '';
   headerLogoApply('');
+  try{
+    await sbPushHeaderLogo('');
+    toast('Logo हटाइयो — default NEA emblem अब सबै device मा फर्कियो', 2500);
+  }catch(err){
+    toast('⚠ यो device मा हट्यो तर cloud sync असफल: '+err.message, 3500);
+  }
 }
 
 // Fills in the status line + action button on Settings → Duty Chart Lock →
@@ -8583,10 +8778,9 @@ function headerLogoRemove(){
 function headerLogoRenderSettingsRow(){
   const statusEl=$('logoRemoveStatus'), actionEl=$('logoRemoveAction');
   if(!statusEl || !actionEl) return;
-  let saved = '';
-  try{ saved = localStorage.getItem(HEADER_LOGO_KEY) || ''; }catch(e){}
+  const saved = CUSTOM_HEADER_LOGO || '';
   if(saved){
-    statusEl.innerHTML = '🖼️ <span style="color:#1e9e5a">Custom लोगो हाल सेट गरिएको छ</span>';
+    statusEl.innerHTML = '🖼️ <span style="color:#1e9e5a">Custom लोगो हाल सेट गरिएको छ — सबै device मा देखिन्छ</span>';
     actionEl.innerHTML = '<button class="btn btn-sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="headerLogoRemoveFromSettings()">🗑️ Logo हटाउनुहोस्</button>';
   } else {
     statusEl.innerHTML = '🖼️ <span style="color:var(--dim)">हाल कुनै custom लोगो सेट गरिएको छैन</span> — default NEA emblem देखिँदैछ।';
@@ -8596,9 +8790,8 @@ function headerLogoRenderSettingsRow(){
 window.headerLogoRenderSettingsRow = headerLogoRenderSettingsRow;
 
 function headerLogoRemoveFromSettings(){
-  if(confirm('Remove your uploaded logo and go back to the default NEA emblem?')){
+  if(confirm('Remove your uploaded logo and go back to the default NEA emblem on every device?')){
     headerLogoRemove();
-    toast('Logo हटाइयो — default NEA emblem फर्कियो', 2500);
   }
 }
 window.headerLogoRemoveFromSettings = headerLogoRemoveFromSettings;
@@ -8613,10 +8806,11 @@ window.headerLogoRemoveFromSettings = headerLogoRemoveFromSettings;
   if(removeBtn){
     removeBtn.addEventListener('click', function(e){
       e.stopPropagation();
-      if(confirm('Remove your uploaded logo and go back to the default NEA emblem?')) headerLogoRemove();
+      if(confirm('Remove your uploaded logo and go back to the default NEA emblem on every device?')) headerLogoRemove();
     });
   }
-  headerLogoLoadSaved();
+  headerLogoLoadSaved();   // instant local paint
+  headerLogoPollApply();   // then reconcile with the cloud value
 })();
 
 function evFilteredEvents(){
