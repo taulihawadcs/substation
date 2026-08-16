@@ -2029,6 +2029,130 @@ body.tlr-page-open #page-tlr{
 </head>
 <body>
 
+<!-- ============================================================
+     APP-WIDE LOGIN GATE (Supabase Auth)
+     ============================================================
+     Blocks the entire app — every page, not just S/S Equipments and
+     Transformer (Load) — behind a single shared login. This replaces
+     relying on the Supabase anon key alone: every table's RLS policy
+     was changed from `to anon` to `to authenticated`, so without a
+     valid signed-in session NONE of the app's data can be read or
+     written, regardless of what's visible in the page source. See the
+     Setup SQL further down (search "AUTH MIGRATION") for the matching
+     policy changes and the one shared account to create in Supabase's
+     Authentication tab.
+
+     This overlay is inserted as the very first thing in <body> and
+     physically covers the whole viewport (position:fixed, inset:0,
+     highest z-index in the app) so no page underneath is visible or
+     reachable until supabase.auth.getSession() confirms a valid
+     session. Every other script in this file keeps running underneath
+     exactly as before — nothing else was restructured — because their
+     Supabase calls will simply be rejected by RLS until login
+     succeeds, and the overlay keeps the person from seeing or acting
+     on the empty/failed state that produces.
+-->
+<div id="authGateOverlay" style="position:fixed;inset:0;z-index:99999;background:linear-gradient(160deg,#0d3b66,#12507f 55%,#1a6fa8);display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:16px;padding:34px 28px 28px;width:min(360px,94vw);box-shadow:0 12px 48px rgba(0,0,0,.28);text-align:center">
+    <div style="font-size:32px;margin-bottom:6px">⚡</div>
+    <div style="font-size:18px;font-weight:800;color:#12314f;margin-bottom:2px">NEA Substation Management</div>
+    <div id="authGateSubtitle" style="font-size:12.5px;color:#5b7186;margin-bottom:20px">Staff sign-in required to continue</div>
+
+    <div id="authGateFormWrap">
+      <input type="email" id="authGateEmail" placeholder="Email" autocomplete="username"
+        style="width:100%;padding:11px 14px;border:1.5px solid #d8e2ea;border-radius:9px;font-size:15px;font-family:'Archivo',sans-serif;margin-bottom:9px;box-sizing:border-box"
+        onkeydown="if(event.key==='Enter')document.getElementById('authGatePassword').focus()">
+      <input type="password" id="authGatePassword" placeholder="Password" autocomplete="current-password"
+        style="width:100%;padding:11px 14px;border:1.5px solid #d8e2ea;border-radius:9px;font-size:15px;font-family:'Archivo',sans-serif;margin-bottom:8px;box-sizing:border-box"
+        onkeydown="if(event.key==='Enter')authGateSignIn()">
+      <div id="authGateError" style="font-size:12.5px;color:#d64545;min-height:16px;margin-bottom:10px;line-height:1.5"></div>
+      <button id="authGateSubmitBtn" onclick="authGateSignIn()"
+        style="width:100%;padding:11px;border:none;border-radius:9px;background:#12507f;color:#fff;font-family:'Archivo',sans-serif;font-size:14.5px;font-weight:700;cursor:pointer">Sign In</button>
+    </div>
+
+    <div id="authGateChecking" style="display:none;padding:18px 0;color:#5b7186;font-size:13.5px">Checking session…</div>
+  </div>
+</div>
+
+<script>
+// ── APP-WIDE LOGIN GATE ────────────────────────────────────────────────
+// Loads the Supabase JS SDK from CDN (only network dependency this
+// overlay adds) and gates the whole page behind auth.getSession(). Kept
+// as a self-contained script right after <body> so it runs before any
+// other module's DOMContentLoaded logic — those modules are untouched;
+// this only decides whether the overlay in front of them is showing.
+(function(){
+  var SB_URL = 'https://xewzcnzwlenztynaoevf.supabase.co';
+  var SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhld3pjbnp3bGVuenR5bmFvZXZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NzAzMzUsImV4cCI6MjA5NjQ0NjMzNX0.M-pDhN8vRkftRsOvc5_blhkDAOzm8REYYnOQL_UsEsc';
+
+  function loadSdk(cb){
+    if(window.supabase && window.supabase.createClient){ cb(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
+    s.onload = cb;
+    s.onerror = function(){
+      var err = document.getElementById('authGateError');
+      if(err) err.textContent = '⚠ Login system failed to load — check your internet connection and reload.';
+    };
+    document.head.appendChild(s);
+  }
+
+  function showChecking(on){
+    var f = document.getElementById('authGateFormWrap');
+    var c = document.getElementById('authGateChecking');
+    if(f) f.style.display = on ? 'none' : 'block';
+    if(c) c.style.display = on ? 'block' : 'none';
+  }
+
+  function hideOverlay(){
+    var o = document.getElementById('authGateOverlay');
+    if(o) o.remove();
+  }
+
+  window.authGateSignIn = function(){
+    var email = (document.getElementById('authGateEmail').value || '').trim();
+    var pw = document.getElementById('authGatePassword').value || '';
+    var err = document.getElementById('authGateError');
+    var btn = document.getElementById('authGateSubmitBtn');
+    if(err) err.textContent = '';
+    if(!email || !pw){ if(err) err.textContent = 'Enter both email and password.'; return; }
+    if(btn){ btn.disabled = true; btn.textContent = 'Signing in…'; }
+    window._authGateClient.auth.signInWithPassword({ email: email, password: pw }).then(function(res){
+      if(btn){ btn.disabled = false; btn.textContent = 'Sign In'; }
+      if(res.error){
+        if(err) err.textContent = res.error.message === 'Invalid login credentials'
+          ? 'Incorrect email or password.'
+          : ('⚠ ' + res.error.message);
+        return;
+      }
+      hideOverlay();
+    }).catch(function(e){
+      if(btn){ btn.disabled = false; btn.textContent = 'Sign In'; }
+      if(err) err.textContent = '⚠ Network error — try again.';
+    });
+  };
+
+  window.authGateSignOut = function(){
+    if(window._authGateClient) window._authGateClient.auth.signOut();
+    location.reload();
+  };
+
+  loadSdk(function(){
+    window._authGateClient = supabase.createClient(SB_URL, SB_ANON_KEY);
+    showChecking(true);
+    window._authGateClient.auth.getSession().then(function(res){
+      showChecking(false);
+      if(res.data && res.data.session){
+        hideOverlay();
+      }
+      // else: leave the sign-in form showing (already the default state)
+    }).catch(function(){
+      showChecking(false);
+    });
+  });
+})();
+</script>
+
 <div class="topbar">
   <div class="topbar-banner">
     <svg class="topbar-banner-mountains" viewBox="0 0 1000 200" preserveAspectRatio="none" aria-hidden="true">
@@ -2141,6 +2265,10 @@ body.tlr-page-open #page-tlr{
     <button class="nav-tab" id="navDuty" onclick="showPage('duty')">🗓 Duty Chart</button>
     <button class="nav-tab" id="navEqr" onclick="showPage('eqr')">🧰 S/S Equipments</button>
     <button class="nav-tab" id="navTlr" onclick="showPage('tlr')">📍 ट्रान्सफर्मर (Load)</button>
+    <button class="nav-tab" id="navScanner" onclick="openScannerApp()" title="Letter Scanner (OCR) — opens in a new tab, standalone app">📄 Letter Scanner</button>
+    <button class="nav-tab" id="navLcd" onclick="openLcdApp()" title="Leakage Control (चुहावट नियन्त्रण) — opens in a new tab, standalone app">🚱 Leakage Control</button>
+    <button class="nav-tab" id="navEsurvey" onclick="openEsurveyApp()" title="E-Survey / FieldGrid — opens in a new tab, standalone app">🗺 E-Survey</button>
+    <button class="nav-tab" id="navLetterMemo" onclick="openLetterMemoApp()" title="पत्राचार तथा मेमो व्यवस्थापन प्रणाली (Letter/Memo) — opens in a new tab, standalone app">✉ Letter/Memo</button>
     <button class="nav-tab" onclick="openModeSwitch()">🔀 Mode</button>
     <button class="nav-tab" onclick="openSettings()">⚙ Settings</button>
     <button class="nav-tab" onclick="toggleHelpGuide()" title="प्रयोग निर्देशन">❓ सहयोग</button>
@@ -2521,6 +2649,7 @@ body.tlr-page-open #page-tlr{
       <div class="ev-actions" id="evActions" style="display:none">
         <button class="btn btn-ghost btn-sm" id="msgAlertTgl" onclick="toggleMsgAlert()" title="Play a chime + browser notification when a new message arrives from any device">🔔 Alert Tone: On</button>
         <button class="btn btn-ghost btn-sm" id="pushTgl" onclick="togglePush()" title="Receive alerts on this device even when the app is closed">📲 Push: Off</button>
+        <button class="btn btn-ghost btn-sm" id="hourlyReadingTgl" onclick="toggleHourlyReading()" title="Speaks &quot;Reading Time&quot; out loud at the top of every hour while the app is open on this device. While the app is closed/locked, a notification is shown instead (voice can't play then — browsers don't allow it).">⏰ Hourly Reminder: Off</button>
         <button class="btn btn-ghost btn-sm" onclick="sbPullLog()" title="Load log from Supabase">☁ Sync</button>
         <button class="btn btn-ghost btn-sm" onclick="exportLogCsvActive()">↓ CSV</button>
         <button class="btn btn-ghost btn-sm" onclick="exportLogAllSheets()">↓ All Sheets</button>
@@ -3086,6 +3215,19 @@ gemini-1.5-flash</textarea>
 
       <!-- DUTY CHART LOCK -->
       <div class="s-section" id="sec-dutylock">
+        <!-- ACCOUNT / SIGN OUT — app-wide login gate (see authGateOverlay at
+             top of <body>). Placed first in this section since it's the
+             most fundamental access control now covering every page. -->
+        <div class="card">
+          <div class="card-head"><span class="card-title">👤 Account</span></div>
+          <div class="card-body">
+            <p class="hint" style="margin-bottom:16px;line-height:1.6">
+              यो app अब एउटा साझा staff login द्वारा सुरक्षित छ — sign out गरेपछि फेरि खोल्न email/password चाहिन्छ।
+            </p>
+            <button class="btn btn-sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="if(confirm('Sign out गर्ने हो? फेरि खोल्न email/password चाहिन्छ।')) authGateSignOut()">🚪 Sign Out</button>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-head"><span class="card-title">🔒 Duty Chart Lock</span></div>
           <div class="card-body">
@@ -3236,7 +3378,15 @@ const SEED_BUNDLE = {"order":["POWER TRANSFORMER","POWER TRANSFORMER 2","STATION
 const CANONICAL_ORDER = SEED_BUNDLE.order;
 
 const STORAGE_KEY = 'nea_equipment_register_v2';
+const EQ_CLOUD_KEY = 'equipment_register_data';       // app_config key for the full DATA array
+const EQ_CLOUD_EDITED_KEY = 'equipment_register_edited'; // app_config key for editedIds
 
+// Instant-paint from localStorage (or the hardcoded SEED_BUNDLE if this
+// device has never saved anything) so the page renders immediately —
+// eqCloudPullAndApply() below then reconciles against Supabase right
+// after, which is the actual source of truth from here on. Kept as a
+// fallback path so the register still works even if the network/Supabase
+// is briefly unavailable.
 function loadData(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -3255,9 +3405,70 @@ try{
   if(savedEdits){ editedIds = new Set(JSON.parse(savedEdits)); }
 }catch(e){}
 
+// Writes DATA/editedIds to localStorage (same as before — this instant
+// local cache means the page still loads correctly offline or before the
+// cloud pull completes) AND pushes both to Supabase (app_config), so
+// every other device and every future reload/redeploy reads the same
+// live data instead of the hardcoded SEED_BUNDLE. Debounced by 800ms so
+// rapid edits (e.g. typing) don't fire a network call per keystroke —
+// only the final state after a pause gets pushed.
+let _eqCloudPushTimer = null;
 function persist(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
   localStorage.setItem(STORAGE_KEY + '_edited', JSON.stringify(Array.from(editedIds)));
+  clearTimeout(_eqCloudPushTimer);
+  _eqCloudPushTimer = setTimeout(eqCloudPush, 800);
+}
+
+async function eqCloudPush(){
+  if(typeof getSbUrl!=='function') return; // Supabase not configured on this build — silently skip
+  try{
+    const url = getSbUrl()+'/rest/v1/app_config?on_conflict=key';
+    await fetch(url, {
+      method:'POST',
+      headers:{...sbHeaders(),'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify([
+        {key:EQ_CLOUD_KEY,        value: JSON.stringify(DATA), updated_at:new Date().toISOString()},
+        {key:EQ_CLOUD_EDITED_KEY, value: JSON.stringify(Array.from(editedIds)), updated_at:new Date().toISOString()}
+      ])
+    });
+  }catch(e){ console.warn('Equipment register cloud push failed (kept locally, will retry on next edit):', e.message); }
+}
+
+// One-time-per-load pull: if Supabase already has a saved copy, that
+// becomes DATA/editedIds (overriding whatever localStorage/SEED_BUNDLE
+// gave us above) and the page re-renders from it. If Supabase has NOTHING
+// yet (first run since this migration), the current DATA — which came
+// from localStorage if this device had edits, or SEED_BUNDLE otherwise —
+// is pushed up as the initial cloud copy, so Supabase becomes seeded
+// from whichever device happens to load first.
+async function eqCloudPullAndApply(){
+  if(typeof sbFetch!=='function') return;
+  try{
+    const rows = await sbFetch('app_config?key=in.("'+EQ_CLOUD_KEY+'","'+EQ_CLOUD_EDITED_KEY+'")&select=key,value');
+    const dataRow = rows.find(r=>r.key===EQ_CLOUD_KEY);
+    const editedRow = rows.find(r=>r.key===EQ_CLOUD_EDITED_KEY);
+    if(dataRow && dataRow.value){
+      const parsed = JSON.parse(dataRow.value);
+      if(Array.isArray(parsed) && parsed.length){
+        DATA = parsed;
+        nextId = Math.max(0, ...DATA.map(r => r.id)) + 1;
+        try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }catch(e){}
+        if(editedRow && editedRow.value){
+          try{ editedIds = new Set(JSON.parse(editedRow.value)); }catch(e){}
+          try{ localStorage.setItem(STORAGE_KEY+'_edited', JSON.stringify(Array.from(editedIds))); }catch(e){}
+        }
+        populateSubstations();
+        populateEquipment();
+        renderParams();
+      }
+    } else {
+      // Nothing in the cloud yet — this device's current DATA (local
+      // edits if any, else the hardcoded seed) becomes the first cloud
+      // copy so every other device converges to it going forward.
+      eqCloudPush();
+    }
+  }catch(e){ console.warn('Equipment register cloud pull failed (using local copy):', e.message); }
 }
 
 /* ============================================================
@@ -3624,6 +3835,11 @@ document.getElementById('eq-importFile').addEventListener('change', async (e) =>
 populateSubstations();
 populateEquipment();
 renderParams();
+// Instant local render above, then reconcile with the cloud copy — see
+// the long comment above eqCloudPullAndApply() for why this two-step
+// (local paint, then cloud-authoritative refresh) instead of blocking
+// the initial render on a network round trip.
+eqCloudPullAndApply();
 })();
 </script>
 
@@ -3771,6 +3987,66 @@ renderParams();
       }] : []
     };
   });
+
+  // ── CLOUD PERSISTENCE (Supabase app_config) ──────────────────────────
+  // This module previously had NO persistence at all: every R/Y/B/N
+  // reading, add, or edit lived only in this array in page memory and
+  // was lost the instant the tab was closed or refreshed. tlLocalKey
+  // below is a same-device instant-paint cache (so the table still shows
+  // something immediately on load) but Supabase is the real source of
+  // truth from here on — same app_config table/pattern already used
+  // elsewhere in this app (header content, logos, equipment register).
+  var TL_CLOUD_KEY = 'transformer_load_rows';
+  var TL_LOCAL_KEY = 'nea_tl_rows_cache_v1';
+  var _tlCloudPushTimer = null;
+
+  // Instant local paint from a same-device cache, if this device has one
+  // (e.g. it made edits before this migration, or before a network hiccup).
+  try{
+    var _tlCached = localStorage.getItem(TL_LOCAL_KEY);
+    if(_tlCached){
+      var _tlParsed = JSON.parse(_tlCached);
+      if(Array.isArray(_tlParsed) && _tlParsed.length) rows = _tlParsed;
+    }
+  }catch(e){}
+
+  function tlCloudPush(){
+    if(typeof getSbUrl!=='function' || typeof sbHeaders!=='function') return;
+    try{ localStorage.setItem(TL_LOCAL_KEY, JSON.stringify(rows)); }catch(e){}
+    clearTimeout(_tlCloudPushTimer);
+    _tlCloudPushTimer = setTimeout(function(){
+      var url = getSbUrl()+'/rest/v1/app_config?on_conflict=key';
+      fetch(url, {
+        method:'POST',
+        headers:Object.assign({}, sbHeaders(), {'Prefer':'resolution=merge-duplicates,return=minimal'}),
+        body: JSON.stringify([{key:TL_CLOUD_KEY, value: JSON.stringify(rows), updated_at:new Date().toISOString()}])
+      }).catch(function(e){ console.warn('Transformer load cloud push failed (kept locally, will retry on next edit):', e.message); });
+    }, 800);
+  }
+
+  // One-time-per-load pull. If Supabase already has a saved copy, it
+  // replaces `rows` and the table re-renders from it (cloud always wins
+  // once fetched). If Supabase has nothing yet, this device's current
+  // `rows` (local cache if any, else the hardcoded tl-rows-data seed) is
+  // pushed up as the first cloud copy.
+  function tlCloudPullAndApply(){
+    if(typeof sbFetch!=='function') return;
+    sbFetch('app_config?key=eq.'+TL_CLOUD_KEY+'&select=value').then(function(res){
+      var row = res && res[0];
+      if(row && row.value){
+        var parsed;
+        try{ parsed = JSON.parse(row.value); }catch(e){ parsed = null; }
+        if(Array.isArray(parsed) && parsed.length){
+          rows = parsed;
+          try{ localStorage.setItem(TL_LOCAL_KEY, JSON.stringify(rows)); }catch(e){}
+          populateFilterOptions();
+          render();
+        }
+      } else {
+        tlCloudPush(); // nothing in the cloud yet — seed it from this device
+      }
+    }).catch(function(e){ console.warn('Transformer load cloud pull failed (using local copy):', e.message); });
+  }
 
   // ---------- Date/time normalization ----------
   // Source data has mixed formats: "2083-08-06" (BS, already y-m-d), "2081/8/12" (BS y/m/d),
@@ -4158,6 +4434,7 @@ renderParams();
           tr.classList.add('row-flash');
           setTimeout(function(){ tr.classList.remove('row-flash'); }, 1200);
           if(histBtn) histBtn.textContent = 'Old Record (' + row.history.length + ')';
+          tlCloudPush();
         });
 
         wrap.appendChild(newDate);
@@ -4186,6 +4463,7 @@ renderParams();
             h.savedAt = new Date().toISOString();
             tr.classList.add('row-flash');
             setTimeout(function(){ tr.classList.remove('row-flash'); }, 1200);
+            tlCloudPush();
           });
           replaceWrap.appendChild(replaceBtn);
           extraArea.appendChild(replaceWrap);
@@ -4290,6 +4568,7 @@ renderParams();
           populateRemarkSelect(code);
           renderRemarkExtra();
           applyRowColor();
+          tlCloudPush();
         });
 
         wrap.appendChild(codeInp);
@@ -4299,6 +4578,7 @@ renderParams();
       } else {
         row.faultCode = remarkSelect.value;
         applyRowColor();
+        tlCloudPush();
       }
     }
 
@@ -4562,6 +4842,7 @@ renderParams();
     substationFilter.value = '';
     feederFilter.value = '';
     render();
+    tlCloudPush();
     // Scroll to and flash the new row once it's rendered — this is the
     // confirmation that the add succeeded (no separate toast system on this page).
     setTimeout(function(){
@@ -4575,6 +4856,11 @@ renderParams();
 
   populateFilterOptions();
   render();
+  // Instant local render above, then reconcile with the cloud copy — see
+  // the long comment above tlCloudPullAndApply() for why this two-step
+  // (local paint, then cloud-authoritative refresh) instead of blocking
+  // the initial render on a network round trip.
+  tlCloudPullAndApply();
 })();
 </script>
 
@@ -5845,6 +6131,65 @@ function showAppLock(){
   setTimeout(()=>$('appLockInput').focus(),150);
   fetchPasswordHashes(); // pre-load hashes while user reads screen
 }
+
+/* ── Letter Scanner (OCR) — standalone companion app, kept as a separate
+   file (Scanner.html) rather than merged into this one. It has its own
+   full theme, its own Gemini/OpenAI/PaddleOCR API-key storage, and its
+   own Google-Sheets-based data store — none of which overlaps with this
+   app's Supabase-backed data. Opening it in a new tab keeps both apps
+   fully independent: no shared globals, no CSS bleeding between two very
+   different visual themes, and no risk of a merge breaking either app's
+   own tested behavior. Deploy Scanner.html alongside this file (same
+   folder, same GitHub Pages site) so this relative link resolves. */
+function openScannerApp(){
+  window.open('./Scanner.html', '_blank', 'noopener');
+}
+window.openScannerApp = openScannerApp;
+
+/* ── Leakage Control (LCD) — standalone companion app, kept as a separate
+   file (LCD.html) rather than merged into this one, same reasoning as the
+   Letter Scanner above: its own full theme (Nepali-language PWA), its own
+   Supabase-backed data store for meter-bypass / illegal-hooking cases —
+   none of which overlaps with this app's own Supabase tables. Opening it
+   in a new tab keeps both apps fully independent: no shared globals, no
+   CSS bleeding between two different visual themes, and no risk of a
+   merge breaking either app's own tested behavior. Deploy LCD.html
+   alongside this file (same folder, same GitHub Pages / Netlify site) so
+   this relative link resolves. */
+function openLcdApp(){
+  window.open('./LCD.html', '_blank', 'noopener');
+}
+window.openLcdApp = openLcdApp;
+
+/* ── E-Survey (FieldGrid Pro) — standalone companion app, kept as a
+   separate file (Esurvey.html) rather than merged into this one, same
+   reasoning as the Letter Scanner and Leakage Control apps above: its own
+   full theme, its own field-survey/grid data model and own data store —
+   none of which overlaps with this app's own Supabase tables. Opening it
+   in a new tab keeps both apps fully independent: no shared globals, no
+   CSS bleeding between different visual themes, and no risk of a merge
+   breaking either app's own tested behavior. Deploy Esurvey.html
+   alongside this file (same folder, same GitHub Pages / Netlify site) so
+   this relative link resolves. */
+function openEsurveyApp(){
+  window.open('./Esurvey.html', '_blank', 'noopener');
+}
+window.openEsurveyApp = openEsurveyApp;
+
+/* ── Letter/Memo (पत्राचार तथा मेमो व्यवस्थापन प्रणाली) — standalone
+   companion app, kept as a separate file (LetterMemo.html) rather than
+   merged into this one, same reasoning as the other companion apps above:
+   its own full theme, its own correspondence/memo data model and own data
+   store — none of which overlaps with this app's own Supabase tables.
+   Opening it in a new tab keeps both apps fully independent: no shared
+   globals, no CSS bleeding between different visual themes, and no risk
+   of a merge breaking either app's own tested behavior. Deploy
+   LetterMemo.html alongside this file (same folder, same GitHub Pages /
+   Netlify site) so this relative link resolves. */
+function openLetterMemoApp(){
+  window.open('./LetterMemo.html', '_blank', 'noopener');
+}
+window.openLetterMemoApp = openLetterMemoApp;
 
 /* ── Mode Switch (Operator <-> Monitor), mid-session, no reload ──
    Lives on its own nav tab (visible in both modes, unlike Settings which
@@ -8398,6 +8743,14 @@ const EV_TYPE_ICON  = {'trip':'⚡','shutdown':'🔌','system-gone':'🌐','inco
 // manually-closed event is indistinguishable from one closed normally
 // (same pairing logic, same Supabase row, visible to every other device).
 const EV_TYPE_CLOSE_CONDITION = {'trip':'Charged','shutdown':'Charged','system-gone':'System Restored','incomer-failed':'11KV Incomer Restored','kv33':'33KV Incomer Restored'};
+
+// type -> what feederStatusMap[name].status becomes once this event type
+// closes. Mirrors the restoreStatus logic used by the live dispatch flows
+// (fsRestore*, System Gone/33KV/11KV restore handlers) — 'trip' and
+// 'shutdown' individually move the feeder to 'charged'; the three
+// station/group-wide outage types move it back to 'normal' since the
+// feeder itself was never individually flagged for those.
+const EV_TYPE_CLEAR_STATUS = {'trip':'charged','shutdown':'charged','system-gone':'normal','incomer-failed':'normal','kv33':'normal'};
 // type -> the exact condition string that OPENS it. Mirrors
 // EV_TYPE_CLOSE_CONDITION above; used by dtAddMissedEntry() so a manually
 // backdated entry is logged with a real, recognized condition label
@@ -8908,6 +9261,19 @@ async function closeStuckOutage(i){
   });
   const loggedRow = LOG[0];
   sbInsertLog(loggedRow);
+
+  // Also clear the LIVE status (feederStatusMap) that the Entry screen's
+  // Trip/Normal pill actually reads — recordLogDirect only fixes the Log/
+  // history view (EVENTS pairing). Without this, the feeder keeps showing
+  // the orange Trip pill forever even after the log says it's closed,
+  // because the Entry pill is driven by this separate store, not by
+  // EVENTS. Same three steps a real Charged/Restored dispatch takes: set
+  // the local map, repaint, then push so every other device picks it up.
+  const clearStatus = EV_TYPE_CLEAR_STATUS[e.type] || 'normal';
+  feederStatusMap[e.feeder] = {status: clearStatus, time: finalTime, ts: Date.now()};
+  if(typeof renderFeederStatus==='function') renderFeederStatus();
+  sbPushOneFeedStatus(e.feeder, feederStatusMap[e.feeder]);
+
   toast('Closing outage…', 2000);
 }
 
@@ -10288,6 +10654,22 @@ async function dtAddMissedEntry(){
       reason: 'Manually added — missed at the time'
     });
     sbInsertLog(LOG[0]);
+
+    // If this missed entry closes an outage that's still showing as
+    // live on the Entry screen (feederStatusMap), clear it there too —
+    // otherwise the Trip/whatever pill keeps showing even though the
+    // Log now says it's closed, since the Entry pill reads this separate
+    // store and doesn't derive from EVENTS/LOG. Only touches the map
+    // when the feeder's CURRENT live status actually matches the type
+    // being closed here, so backdating an old, already-superseded
+    // outage can't clobber a genuinely different status set since.
+    const liveNow = feederStatusMap[fd];
+    if(liveNow && liveNow.status === ty){
+      const clearStatus = (typeof EV_TYPE_CLEAR_STATUS!=='undefined' && EV_TYPE_CLEAR_STATUS[ty]) || 'normal';
+      feederStatusMap[fd] = {status: clearStatus, time: endTime, ts: Date.now()};
+      if(typeof renderFeederStatus==='function') renderFeederStatus();
+      sbPushOneFeedStatus(fd, feederStatusMap[fd]);
+    }
   }
   toast('✓ Missed entry added to the Log'+(endTime?' (both start and end)':' — still open, close it from the Live strip when it actually ended'));
   dtRenderSummary();
@@ -11111,6 +11493,22 @@ async function fsEnsureFeederClearFor(name, newType){
     // not silently at "now".
     const chargeTime = dtAskTime(`✓ ${name} — पहिलेको ${oldLabel} कति बजे Charged भयो?`);
     if(chargeTime===null) return false; // operator backed out — abort the whole new-status action too
+
+    // Same guard as markFeederCharged() — reject a Charged time typed
+    // earlier than the outage it's meant to close, since it can never
+    // pair to it later (see the long comment at that other call site).
+    if(live.time){
+      const oldIso = dtIsoFromHM(live.time);
+      const newIso = dtIsoFromHM(chargeTime);
+      if(oldIso && newIso && new Date(newIso).getTime() < new Date(oldIso).getTime()){
+        const proceed2 = confirm(
+          `⚠ Charged समय (${chargeTime}) ${oldLabel} सुरु भएको समय (${live.time}) भन्दा पहिलेको छ।\n\n`+
+          `यसो हुनुले पछि "stuck outage" देखिन सक्छ।\n\n`+
+          `के तपाईं यो समय नै पक्का राख्न चाहनुहुन्छ? (ठीक भए Cancel थिचेर सही समय लेख्नुहोस्)`
+        );
+        if(!proceed2) return false;
+      }
+    }
 
     // Re-check right before writing — another device may have already
     // charged/changed this feeder while the operator was answering the prompts.
@@ -11983,6 +12381,32 @@ async function markFeederCharged(feederName){
     // message, status label, and downtime end all use it.
     const t=dtAskTime('✓ '+feederName+' — कति बजे Charged भयो?');
     if(t===null) return;   // operator cancelled
+
+    // Guard against a Charged time typed EARLIER than the trip it's meant
+    // to close (e.g. operator meant to type 21:25 but typed 20:25 — an
+    // easy slip on a late/tired entry). This isn't just a display nit:
+    // evRebuildAll() sorts LOG by effective time, so a Charged row that
+    // sorts BEFORE its trip's start can never pair to it in evIngestRow —
+    // the trip is left open forever, and if the SAME feeder trips again
+    // later, the pairing engine (correctly) treats that stale open event
+    // as abandoned and opens a second, separate stuck event instead of
+    // closing this one. One bad time entry here produces two orphaned
+    // "stuck outage" rows down the line, which is confusing to unwind
+    // after the fact — so it's much cheaper to catch it right here, at
+    // the moment the time is typed, while the operator still remembers
+    // what actually happened.
+    if(live.time){
+      const tripIso = dtIsoFromHM(live.time);
+      const chargeIso = dtIsoFromHM(t);
+      if(tripIso && chargeIso && new Date(chargeIso).getTime() < new Date(tripIso).getTime()){
+        const proceed = confirm(
+          `⚠ Charged समय (${t}) ट्रिप भएको समय (${live.time}) भन्दा पहिलेको छ।\n\n`+
+          `यसो हुनुको मतलब यो ट्रिप ठीकसँग बन्द नहुन सक्छ — पछि "stuck outage" देखिन सक्छ।\n\n`+
+          `के तपाईं यो समय नै पक्का राख्न चाहनुहुन्छ? (ठीक भए Cancel थिचेर सही समय लेख्नुहोस्)`
+        );
+        if(!proceed) return;
+      }
+    }
 
     // Re-check right before writing — another device may have charged (or
     // otherwise changed) this feeder while the operator was answering the
@@ -13111,6 +13535,82 @@ on conflict (key) do nothing;
 -- Pages password (S/S Equipments + Transformer (Load)): created on first
 -- visit to either page — see requestPagesUnlock() in the app. No seed row
 -- here on purpose, same reasoning as the Settings password above.
+
+-- ============================================================
+-- AUTH MIGRATION — app-wide login gate (Supabase Auth)
+-- ============================================================
+-- Run this ONCE, AFTER you have created the shared staff account (see
+-- step 1 below). This replaces open anon access with "must be signed in"
+-- on every table the app uses. The app's login overlay (authGateOverlay,
+-- top of <body> in the HTML) blocks all pages until a session exists —
+-- this SQL is what makes that enforcement real at the data layer too,
+-- not just in the page UI.
+--
+-- STEP 1 — create the shared account (do this FIRST, in the dashboard,
+-- not SQL): Supabase dashboard → Authentication → Users → Add user →
+-- enter an email + password for the one shared staff login → set
+-- "Auto Confirm User" to YES (so no confirmation email is required
+-- before first sign-in) → Create user.
+--
+-- STEP 2 — run the policy changes below. Safe to re-run (idempotent):
+-- each old anon policy is dropped and replaced with an authenticated-only
+-- version of the same shape (same for/using/with check), so behavior for
+-- a SIGNED-IN session is unchanged from before — only anonymous access is
+-- removed.
+--
+-- IMPORTANT ROLLOUT NOTE: the instant this block finishes running, every
+-- device currently using the app goes dark (data calls start failing)
+-- until that device's browser has an active signed-in session. Run this
+-- only once every device is ready to sign in — see the person's own
+-- rollout plan.
+
+drop policy if exists "anon_all_log"        on message_log;
+create policy "auth_all_log"        on message_log   for all to authenticated using (true) with check (true);
+
+drop policy if exists "anon_all_status"     on feeder_status;
+create policy "auth_all_status"     on feeder_status for all to authenticated using (true) with check (true);
+
+drop policy if exists "anon_all_config"     on app_config;
+create policy "auth_all_config"     on app_config    for all to authenticated using (true) with check (true);
+
+drop policy if exists "anon_all_settings"   on app_settings;
+create policy "auth_all_settings"   on app_settings  for all to authenticated using (true) with check (true);
+
+drop policy if exists "anon_all_downtime"   on downtime_events;
+create policy "auth_all_downtime"   on downtime_events for all to authenticated using (true) with check (true);
+
+drop policy if exists "anon_all_tfx_insp"   on transformer_inspections;
+create policy "auth_all_tfx_insp"   on transformer_inspections for all to authenticated using (true) with check (true);
+
+drop policy if exists "anon_all_tfx_burnt"  on transformer_burnt;
+create policy "auth_all_tfx_burnt"  on transformer_burnt       for all to authenticated using (true) with check (true);
+
+drop policy if exists "anon_all_eq_register" on equipment_register;
+create policy "auth_all_eq_register" on equipment_register    for all to authenticated using (true) with check (true);
+
+drop policy if exists "anon_all_tlr"         on transformer_load_register;
+create policy "auth_all_tlr"         on transformer_load_register for all to authenticated using (true) with check (true);
+
+drop policy if exists "anon_all_devices" on device_registry;
+create policy "auth_all_devices" on device_registry for all to authenticated using (true) with check (true);
+
+drop policy if exists "anon_insert_tfx_docs" on storage.objects;
+drop policy if exists "anon_select_tfx_docs" on storage.objects;
+drop policy if exists "anon_update_tfx_docs" on storage.objects;
+drop policy if exists "anon_delete_tfx_docs" on storage.objects;
+create policy "auth_insert_tfx_docs" on storage.objects for insert to authenticated
+  with check (bucket_id = 'transformer-docs');
+create policy "auth_select_tfx_docs" on storage.objects for select to authenticated
+  using (bucket_id = 'transformer-docs');
+create policy "auth_update_tfx_docs" on storage.objects for update to authenticated
+  using (bucket_id = 'transformer-docs') with check (bucket_id = 'transformer-docs');
+create policy "auth_delete_tfx_docs" on storage.objects for delete to authenticated
+  using (bucket_id = 'transformer-docs');
+
+-- To roll this back and restore the previous open-anon behavior, re-run
+-- the ORIGINAL anon_* policy statements earlier in this file (search
+-- "TABLE POLICIES" / "anon_all_log" above) — they DROP + CREATE the same
+-- way, so simply running them again after this block reverses it.
 
 -- ============================================================
 -- WEB PUSH WEBHOOK — calls the push-notify Edge Function on every
@@ -14956,6 +15456,166 @@ function notifyNewMessages(count, latest){
     }
   }catch(e){}
 }
+
+/* ============================================================
+   HOURLY READING REMINDER — Log Tool section, ⏰ toggle button.
+   Per-device on/off (localStorage, same convention as msgAlertEnabled/
+   pushSupported above — every operator's device remembers its own
+   choice independently; nothing here is written to Supabase, so it
+   never affects any other device or any existing feature).
+
+   At the top of every hour, while enabled:
+   - APP OPEN (foreground or background tab): speaks the sentence via
+     speechSynthesis, exactly like the existing 🔊 Speak button uses —
+     "Reading Time. It is 2 PM. Please take the reading."
+   - APP CLOSED / SCREEN LOCKED: speechSynthesis cannot run at all in
+     that state on any browser — this is a platform restriction, not
+     something fixable from app code. Instead, a local notification
+     (registration.showNotification via the existing service worker,
+     same one used by the Push feature) is shown with the same text,
+     so the operator is still alerted; where the OS/device supports it,
+     that notification can appear and vibrate even with the screen off
+     or the app closed. No sound synthesis happens in that state.
+
+   Scheduling is done with a plain setInterval that checks the clock
+   every 20s and fires once when the minute rolls over to :00 — this
+   only runs while some page/tab of the app is alive in memory (there
+   is no server-side cron here — a true always-on hourly trigger would
+   need a new Supabase Edge Function + pg_cron job, which is server
+   infrastructure outside this single HTML file). This is a deliberate,
+   disclosed limitation, not a bug: an operator who fully closes the
+   app/browser won't get the hourly ping until they reopen it.
+   ============================================================ */
+const HOURLY_READING_KEY = 'nea_hourly_reading_v1';
+let hourlyReadingInterval = null;
+let hourlyReadingLastFiredHour = null; // guards against double-firing within the same hour
+
+function hourlyReadingEnabled(){ return localStorage.getItem(HOURLY_READING_KEY) === 'on'; }
+
+function updateHourlyReadingUI(){
+  const b = $('hourlyReadingTgl');
+  if(!b) return;
+  const on = hourlyReadingEnabled();
+  b.innerHTML = on ? '⏰ Hourly Reminder: On' : '⏰ Hourly Reminder: Off';
+  b.style.color = on ? '#18a34a' : '';
+}
+
+// "2 PM" / "12 AM" style hour label, matching the wording in the request.
+function hourlyReading12h(d){
+  let h = d.getHours();
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if(h === 0) h = 12;
+  return h + ' ' + ap;
+}
+
+function hourlyReadingSpeak(){
+  const text = `Reading Time. It is ${hourlyReading12h(new Date())}. Please take the reading.`;
+  if(typeof ttsAvailable === 'function' && !ttsAvailable()){
+    // No speechSynthesis on this browser at all — fall back to whatever
+    // notification path is available below instead of failing silently.
+    hourlyReadingNotify(text);
+    return;
+  }
+  try{
+    const u = new SpeechSynthesisUtterance(text);
+    // English sentence — use an English voice/lang, independent of the
+    // Nepali-voice picker the Speak button uses for feeder announcements.
+    const voices = (speechSynthesis.getVoices && speechSynthesis.getVoices()) || [];
+    const enVoice = voices.find(v => /^en(-|_|$)/i.test(v.lang||''));
+    if(enVoice){ u.voice = enVoice; u.lang = enVoice.lang; } else { u.lang = 'en-US'; }
+    u.rate = 0.95; u.pitch = 1.0; u.volume = 1.0;
+    // Don't fight/cancel whatever speakMsg() might already be doing —
+    // hourly ticks are infrequent and speech requests queue naturally.
+    speechSynthesis.speak(u);
+  }catch(e){ console.warn('Hourly reading TTS failed:', e.message); }
+  // Also raise a notification if the tab isn't the one currently focused,
+  // so the operator sees/hears it either way.
+  if(document.visibilityState !== 'visible') hourlyReadingNotify(text);
+}
+
+// Local notification fallback — used when the app is backgrounded/closed
+// (speech can't play there) or when TTS isn't supported at all. Reuses
+// the same service worker registration the Push feature already sets
+// up (./sw.js) so no separate registration path is introduced; if that
+// SW isn't registered on this device (Push never turned on), falls back
+// to a plain Notification, and if permission was never granted, does
+// nothing rather than prompting — the toggle-on flow below is what asks.
+async function hourlyReadingNotify(text){
+  try{
+    if(!('Notification' in window) || Notification.permission !== 'granted') return;
+    const body = text || `Reading Time. It is ${hourlyReading12h(new Date())}. Please take the reading.`;
+    let reg = null;
+    try{ reg = await navigator.serviceWorker.getRegistration(); }catch(e){}
+    if(reg && reg.showNotification){
+      await reg.showNotification('⏰ Reading Time', { body, tag:'nea-hourly-reading', vibrate:[200,100,200] });
+    } else {
+      new Notification('⏰ Reading Time', { body, tag:'nea-hourly-reading' });
+    }
+  }catch(e){ console.warn('Hourly reading notification failed:', e.message); }
+}
+
+function hourlyReadingTick(){
+  if(!hourlyReadingEnabled()) return;
+  const d = new Date();
+  // Fire once per hour, in the first 20s after the hour rolls over —
+  // the interval below polls every 20s so this window is always caught.
+  if(d.getMinutes() === 0){
+    const hourKey = d.toDateString()+'|'+d.getHours();
+    if(hourlyReadingLastFiredHour === hourKey) return; // already fired this hour
+    hourlyReadingLastFiredHour = hourKey;
+    hourlyReadingSpeak();
+  }
+}
+
+function hourlyReadingStart(){
+  if(hourlyReadingInterval) return;
+  hourlyReadingInterval = setInterval(hourlyReadingTick, 20000);
+  hourlyReadingTick(); // in case enabled right as the hour turns over
+}
+
+async function toggleHourlyReading(){
+  const turningOn = !hourlyReadingEnabled();
+  if(turningOn){
+    // Ask notification permission up front (same one-tap-gesture pattern
+    // as toggleMsgAlert) so the locked/closed-app fallback can actually
+    // show something later — speech itself needs no permission.
+    if('Notification' in window && Notification.permission === 'default'){
+      try{ await Notification.requestPermission(); }catch(e){}
+    }
+    localStorage.setItem(HOURLY_READING_KEY, 'on');
+    hourlyReadingLastFiredHour = null;
+    hourlyReadingStart();
+    // Speak a short confirmation right away — proves audio works on this
+    // device/browser and satisfies the "user gesture unlocks audio" rule
+    // mobile browsers require before any later, timer-fired speech works.
+    try{
+      const u = new SpeechSynthesisUtterance('Hourly reading reminder turned on.');
+      u.lang = 'en-US'; u.rate = 0.95;
+      speechSynthesis.speak(u);
+    }catch(e){}
+    toast('⏰ Hourly reading reminder ON — will speak every hour while the app is open; notification while locked/closed.', 5000);
+  } else {
+    localStorage.setItem(HOURLY_READING_KEY, 'off');
+    if(hourlyReadingInterval){ clearInterval(hourlyReadingInterval); hourlyReadingInterval = null; }
+    toast('⏰ Hourly reading reminder OFF');
+  }
+  updateHourlyReadingUI();
+}
+window.toggleHourlyReading = toggleHourlyReading;
+
+// Restore this device's own saved choice at load — independent of every
+// other device, per the per-user requirement.
+(function initHourlyReading(){
+  updateHourlyReadingUI();
+  if(hourlyReadingEnabled()) hourlyReadingStart();
+  // Re-arm cleanly whenever the tab regains focus, in case the browser
+  // throttled/paused the interval while backgrounded (common on mobile) —
+  // this only re-checks the clock, it never fires a reminder out of turn
+  // because hourlyReadingLastFiredHour still blocks any hour already sent.
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible' && hourlyReadingEnabled()) hourlyReadingTick();
+  });
+})();
 
 /* ============================================================
    REAL-TIME SYNC — poll Supabase every 15s for feeder status
