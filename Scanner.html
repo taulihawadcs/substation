@@ -1,0 +1,3886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEA Taulihawa DCS — Letter Scanner (Standalone, Gemini)</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Noto+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --navy: #0f2240; --blue: #1a4a8a; --mid: #2563c4;
+    --accent: #e8a020; --accent2: #f0c040; --light: #deeaf7;
+    --bg: #060f1e; --bg2: #0c1d35; --bg3: #112244;
+    --text: #e8edf5; --muted: #7a90b0;
+    --success: #22c55e; --warn: #f59e0b; --red: #ef4444;
+    --card: rgba(17,34,68,0.85);
+    --gemini: #4285f4;
+    --gemini2: #ea4335;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Noto Sans', sans-serif; background: var(--bg); color: var(--text);
+    min-height: 100vh; overflow-x: hidden;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(37,99,196,0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(37,99,196,0.06) 1px, transparent 1px);
+    background-size: 40px 40px; pointer-events: none;
+  }
+  .glow-orb { position: fixed; border-radius: 50%; filter: blur(100px); pointer-events: none; z-index: 0; }
+  .orb1 { width: 500px; height: 500px; background: rgba(66,133,244,0.12); top: -150px; right: -100px; }
+  .orb2 { width: 400px; height: 400px; background: rgba(232,160,32,0.07); bottom: -100px; left: -100px; }
+
+  .wrap { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 20px 60px; }
+
+  header {
+    padding: 32px 0 28px;
+    border-bottom: 1px solid rgba(37,99,196,0.3);
+    display: flex; align-items: center; gap: 20px;
+  }
+  .logo {
+    width: 54px; height: 54px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--mid), var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 22px; color: #fff;
+    flex-shrink: 0; box-shadow: 0 0 30px rgba(37,99,196,0.4);
+  }
+  .header-text h1 {
+    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 26px;
+    letter-spacing: 0.5px; color: var(--text);
+  }
+  .header-text p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .badge {
+    margin-left: auto; padding: 6px 14px; border-radius: 20px;
+    background: linear-gradient(135deg, rgba(66,133,244,0.2), rgba(234,67,53,0.15));
+    border: 1px solid rgba(66,133,244,0.4);
+    font-size: 12px; color: #93c5fd; font-weight: 600;
+    flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+  }
+
+  .card {
+    background: var(--card); border: 1px solid rgba(37,99,196,0.2);
+    border-radius: 16px; padding: 24px; margin-bottom: 20px;
+    backdrop-filter: blur(10px);
+  }
+  .card-title {
+    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 17px;
+    color: var(--accent2); margin-bottom: 14px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .card-title .hint { color: var(--muted); font-size: 13px; font-weight: 400; font-family: 'Noto Sans'; }
+
+  .first-time-banner {
+    background: linear-gradient(135deg, rgba(66,133,244,0.12), rgba(234,67,53,0.08));
+    border: 1px solid rgba(66,133,244,0.3);
+    border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;
+    display: flex; gap: 14px; align-items: flex-start;
+  }
+  .first-time-banner .icon { font-size: 28px; flex-shrink: 0; }
+  .first-time-banner h3 {
+    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 16px;
+    color: #93c5fd; margin-bottom: 4px;
+  }
+  .first-time-banner p { font-size: 13px; color: var(--text); line-height: 1.5; }
+  .first-time-banner a { color: var(--accent2); text-decoration: none; font-weight: 600; }
+  .first-time-banner a:hover { text-decoration: underline; }
+
+  /* CONFIG SECTION */
+  .config-row {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px;
+  }
+  .config-row label {
+    font-size: 12px; color: var(--muted); min-width: 110px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  input[type="password"], input[type="text"], input[type="url"], select {
+    background: rgba(17,34,68,0.8); border: 1px solid rgba(37,99,196,0.3);
+    color: var(--text); padding: 9px 12px; border-radius: 8px;
+    font-family: 'Noto Sans', sans-serif; font-size: 13px;
+    outline: none; transition: border-color 0.2s; flex: 1; min-width: 280px;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  option { background: #0c1d35; }
+  .api-input { font-family: monospace; font-size: 12px; }
+
+  .config-status {
+    font-size: 12px; padding: 7px 12px; border-radius: 8px;
+    margin-top: 8px; display: inline-flex; align-items: center; gap: 8px;
+  }
+  .config-status.ok { background: rgba(34,197,94,0.15); color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
+  .config-status.err { background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+  .config-status.warn { background: rgba(245,158,11,0.15); color: #fde68a; border: 1px solid rgba(245,158,11,0.3); }
+
+  /* DROP ZONE */
+  .drop-zone {
+    border: 2px dashed rgba(37,99,196,0.4);
+    border-radius: 12px; padding: 36px 20px; text-align: center;
+    cursor: pointer; transition: all 0.3s; background: rgba(37,99,196,0.04);
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent); background: rgba(232,160,32,0.05);
+  }
+  .drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+  .drop-icon { font-size: 40px; margin-bottom: 10px; }
+  .drop-text { font-size: 15px; color: var(--text); font-weight: 600; }
+  .drop-sub { font-size: 12px; color: var(--muted); margin-top: 5px; }
+
+  .file-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+  .file-item {
+    display: flex; align-items: center; gap: 12px; padding: 9px 14px;
+    background: rgba(37,99,196,0.08); border-radius: 8px;
+    border: 1px solid rgba(37,99,196,0.15); font-size: 13px;
+  }
+  .file-item .fi-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-item .fi-size { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+  .file-item .fi-remove {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: 14px; padding: 2px 6px; border-radius: 4px;
+  }
+  .file-item .fi-remove:hover { color: var(--red); }
+
+  /* BUTTONS */
+  .btn {
+    padding: 11px 22px; border-radius: 9px; border: none; cursor: pointer;
+    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 15px;
+    letter-spacing: 0.4px; transition: all 0.2s;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--mid), var(--blue));
+    color: #fff; box-shadow: 0 4px 18px rgba(37,99,196,0.35);
+  }
+  .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(37,99,196,0.5); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-accent {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: var(--navy); box-shadow: 0 4px 18px rgba(232,160,32,0.3);
+  }
+  .btn-accent:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(232,160,32,0.4); }
+  .btn-accent:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-gemini {
+    background: linear-gradient(135deg, var(--gemini), #1a73e8);
+    color: #fff; box-shadow: 0 4px 18px rgba(66,133,244,0.4);
+  }
+  .btn-gemini:hover:not(:disabled) { transform: translateY(-2px); }
+  .btn-ghost {
+    background: rgba(37,99,196,0.12); border: 1px solid rgba(37,99,196,0.3);
+    color: var(--text);
+  }
+  .btn-ghost:hover { background: rgba(37,99,196,0.2); }
+  .btn-test {
+    background: rgba(96,165,250,0.15); border: 1px solid rgba(96,165,250,0.4);
+    color: #93c5fd;
+  }
+  .btn-test:hover { background: rgba(96,165,250,0.25); }
+  .btn-sm { padding: 7px 14px; font-size: 13px; border-radius: 7px; }
+
+  /* PROGRESS */
+  .progress-bar { height: 6px; background: rgba(37,99,196,0.15); border-radius: 3px; overflow: hidden; margin: 10px 0; }
+  .progress-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--gemini), var(--accent)); transition: width 0.5s ease; }
+  .progress-text { font-size: 13px; color: var(--muted); }
+
+  /* RESULTS TABLE */
+  .palika-group { margin-bottom: 20px; }
+  .palika-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+    padding: 9px 14px; border-radius: 9px;
+    background: rgba(37,99,196,0.12); border: 1px solid rgba(37,99,196,0.2);
+  }
+  .palika-name { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 16px; color: var(--accent2); }
+  .palika-count { margin-left: auto; padding: 3px 10px; border-radius: 12px; background: var(--mid); color: #fff; font-size: 11px; font-weight: 700; }
+  .table-wrap { overflow-x: auto; border-radius: 9px; border: 1px solid rgba(37,99,196,0.2); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .sv-cell { cursor: pointer; transition: background 0.15s; }
+  .sv-cell:hover { background: rgba(37,99,196,0.14); }
+  thead tr { background: rgba(37,99,196,0.2); }
+  thead th {
+    padding: 10px 12px; text-align: left; font-family: 'Rajdhani', sans-serif;
+    font-weight: 600; font-size: 11px; letter-spacing: 0.4px; text-transform: uppercase;
+    color: var(--muted); white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid rgba(37,99,196,0.1); }
+  tbody tr:hover { background: rgba(37,99,196,0.06); }
+  td { padding: 8px 12px; vertical-align: top; }
+  td[contenteditable="true"] {
+    background: rgba(232,160,32,0.08); outline: 1px solid var(--accent); border-radius: 4px;
+  }
+  .del-row { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 14px; padding: 2px 6px; }
+  .del-row:hover { color: var(--red); }
+
+  /* LOG */
+  .scan-log {
+    background: rgba(6,15,30,0.8); border: 1px solid rgba(37,99,196,0.15);
+    border-radius: 8px; padding: 14px; max-height: 200px; overflow-y: auto;
+    font-size: 12px; font-family: monospace;
+  }
+  .log-line { padding: 2px 0; color: var(--muted); }
+  .log-line.info { color: #60a5fa; }
+  .log-line.ok { color: var(--success); }
+  .log-line.err { color: var(--red); }
+  .log-line.warn { color: var(--warn); }
+
+  /* AI INSTRUCTIONS */
+  .ai-instructions-box {
+    background: rgba(232,160,32,0.06);
+    border: 1px solid rgba(232,160,32,0.25);
+    border-radius: 10px; padding: 14px 16px; margin-top: 14px;
+  }
+  .ai-instructions-label {
+    font-size: 12px; font-weight: 700; color: var(--accent2);
+    letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 7px;
+  }
+  textarea.ai-instr {
+    width: 100%; min-height: 60px; max-height: 160px;
+    background: rgba(6,15,30,0.7); border: 1px solid rgba(232,160,32,0.2);
+    border-radius: 7px; color: var(--text);
+    font-family: 'Noto Sans', sans-serif; font-size: 13px;
+    padding: 9px 11px; resize: vertical; outline: none;
+  }
+  textarea.ai-instr:focus { border-color: var(--accent); }
+
+  /* EXPORT BUTTONS GRID */
+  .export-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px; margin-top: 16px;
+  }
+  .export-card {
+    border-radius: 11px; padding: 14px; border: 1px solid;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .export-card.gsheet { background: rgba(34,197,94,0.07); border-color: rgba(34,197,94,0.25); }
+  .export-card.excel { background: rgba(34,197,94,0.07); border-color: rgba(34,197,94,0.2); }
+  .export-card.csv { background: rgba(96,165,250,0.07); border-color: rgba(96,165,250,0.2); }
+  .export-card.pdf { background: rgba(124,58,237,0.07); border-color: rgba(124,58,237,0.2); }
+  .export-card .ec-title {
+    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 14px;
+  }
+  .export-card .ec-sub { font-size: 11px; color: var(--muted); line-height: 1.4; }
+
+  /* MODAL */
+  .modal-bg {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:999;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-bg.show { display:flex; }
+  .modal {
+    background:#0c1d35; border:1px solid rgba(37,99,196,0.4); border-radius:14px;
+    padding:28px; max-width:680px; width:100%; max-height:90vh; overflow-y:auto;
+    position:relative;
+  }
+  .modal-close {
+    position:absolute; top:12px; right:12px; background:none; border:none;
+    color:var(--muted); font-size:22px; cursor:pointer;
+  }
+  .modal h2 { font-family:'Rajdhani',sans-serif; font-weight:700; font-size:21px; color:var(--accent2); margin-bottom:16px; }
+  .modal .step-box {
+    background:rgba(37,99,196,0.1); border-radius:9px; padding:13px 15px; margin-bottom:9px;
+    border-left: 3px solid var(--gemini); font-size:13px; line-height:1.55;
+  }
+  .modal .step-box strong { color:var(--accent2); }
+  .modal pre {
+    background:#060f1e; border-radius:7px; padding:11px; margin-top:8px;
+    font-size:11px; overflow-x:auto; white-space:pre; color:#93c5fd;
+    border:1px solid rgba(37,99,196,0.2); max-height:280px;
+  }
+
+  .spinner {
+    width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: #fff; border-radius: 50%;
+    animation: spin 0.8s linear infinite; display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+  .empty-state .es-icon { font-size: 44px; margin-bottom: 10px; }
+
+  /* COLLAPSIBLE */
+  details { background: rgba(37,99,196,0.06); border-radius: 9px; padding: 0; margin-bottom: 12px; border: 1px solid rgba(37,99,196,0.15); }
+  details summary {
+    padding: 12px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
+    color: var(--accent2); list-style: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before { content: '▶'; font-size: 10px; color: var(--muted); transition: transform 0.2s; }
+  details[open] summary::before { transform: rotate(90deg); }
+  details > *:not(summary) { padding: 0 16px 14px; }
+
+  @media (max-width: 600px) {
+    header { flex-wrap: wrap; }
+    .badge { margin-left: 0; }
+    .config-row label { min-width: 80px; }
+    input { min-width: 200px; }
+  }
+
+  /* ═══ TOP-LEVEL TABS ═══ */
+  .main-tabs {
+    display: flex; gap: 8px; margin: 22px 0 18px; flex-wrap: wrap;
+  }
+  .main-tab {
+    padding: 10px 20px; border-radius: 10px; cursor: pointer;
+    background: rgba(37,99,196,0.1); border: 1px solid rgba(37,99,196,0.25);
+    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 14px;
+    color: var(--muted); transition: all 0.2s; display: flex; align-items: center; gap: 7px;
+  }
+  .main-tab:hover { background: rgba(37,99,196,0.18); color: var(--text); }
+  .main-tab.active {
+    background: linear-gradient(135deg, var(--mid), var(--blue));
+    color: #fff; box-shadow: 0 4px 16px rgba(37,99,196,0.35);
+    border-color: transparent;
+  }
+  .tab-page { display: none; }
+  .tab-page.active { display: block; }
+
+  /* ═══ SEARCH PAGE ═══ */
+  .search-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .search-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 160px; }
+  .search-field label {
+    font-size: 11px; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .search-field select, .search-field input {
+    width: 100%; min-width: 0;
+  }
+  .search-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+  .search-summary { font-size: 12.5px; color: var(--muted); margin-left: auto; }
+  .search-results-wrap { margin-top: 16px; }
+  .scan-chip-link {
+    color: var(--accent2); font-size: 12px; text-decoration: none;
+    padding: 3px 9px; border-radius: 6px; background: rgba(232,160,32,0.12);
+    border: 1px solid rgba(232,160,32,0.3); white-space: nowrap;
+  }
+  .scan-chip-link:hover { background: rgba(232,160,32,0.22); }
+  .no-scan-dot { color: var(--muted); font-size: 11px; }
+
+  /* ═══ DEMAND TYPE MANAGER ═══ */
+  .dt-manager { margin-top: 4px; }
+  .dt-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .dt-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    background: rgba(37,99,196,0.08); border: 1px solid rgba(37,99,196,0.15);
+    border-radius: 8px; font-size: 13px;
+  }
+  .dt-row .dt-name { flex: 1; }
+  .dt-row input[type="text"] {
+    flex: 1; min-width: 0; padding: 6px 10px; font-size: 13px;
+  }
+  .dt-row .dt-edit-btn, .dt-row .dt-save-btn, .dt-row .dt-cancel-btn {
+    background: none; border: 1px solid rgba(37,99,196,0.3); color: var(--muted);
+    cursor: pointer; font-size: 12px; padding: 5px 10px; border-radius: 6px;
+  }
+  .dt-row .dt-edit-btn:hover { color: var(--accent2); border-color: var(--accent); }
+  .dt-row .dt-save-btn { color: var(--success); border-color: rgba(34,197,94,0.4); }
+  .dt-row .dt-save-btn:hover { background: rgba(34,197,94,0.12); }
+  .dt-row .dt-cancel-btn:hover { color: var(--red); border-color: rgba(239,68,68,0.4); }
+  .dt-add-row { display: flex; gap: 10px; margin-top: 12px; }
+  .dt-add-row input { flex: 1; min-width: 0; }
+  .dt-status { font-size: 12px; margin-top: 10px; min-height: 16px; }
+  .dt-status.ok { color: var(--success); }
+  .dt-status.err { color: var(--red); }
+  .dt-propagate-note {
+    font-size: 11.5px; color: var(--muted); margin-top: 4px; line-height: 1.4;
+  }
+
+  /* ═══ SCAN-ONLY TOGGLE ═══ */
+  .toggle-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    background: rgba(232,160,32,0.06); border: 1px solid rgba(232,160,32,0.2);
+    border-radius: 9px; margin-top: 10px;
+  }
+  .switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .slider {
+    position: absolute; inset: 0; background: rgba(122,144,176,0.35);
+    border-radius: 22px; cursor: pointer; transition: 0.2s;
+  }
+  .switch .slider::before {
+    content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: 0.2s;
+  }
+  .switch input:checked + .slider { background: var(--accent); }
+  .switch input:checked + .slider::before { transform: translateX(18px); }
+  .toggle-label { font-size: 13px; color: var(--text); font-weight: 600; }
+  .toggle-hint { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+
+  /* ═══ CORRECTION POPUP (scan-attach ambiguity) ═══ */
+  .correction-item {
+    background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.25);
+    border-radius: 10px; padding: 14px; margin-bottom: 12px;
+  }
+  .correction-item .ci-title { font-weight: 700; color: #fca5a5; font-size: 13.5px; margin-bottom: 6px; }
+  .correction-item .ci-reason { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .correction-item .ci-candidates { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .ci-candidate {
+    display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+    background: rgba(37,99,196,0.08); border-radius: 6px; cursor: pointer;
+    border: 1px solid transparent; font-size: 12.5px;
+  }
+  .ci-candidate:hover { border-color: var(--accent); }
+  .ci-candidate input[type="radio"] { width: auto; margin: 0; flex-shrink: 0; }
+  .ci-manual-row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+  .ci-manual-row input { flex: 1; min-width: 0; font-size: 12px; padding: 6px 9px; }
+  .ci-skip-btn {
+    background: none; border: 1px solid rgba(122,144,176,0.4); color: var(--muted);
+    cursor: pointer; font-size: 11.5px; padding: 5px 10px; border-radius: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="glow-orb orb1"></div>
+<div class="glow-orb orb2"></div>
+
+<div class="wrap">
+  <!-- ════════════ SETTINGS PANEL ════════════ -->
+  <div class="card">
+    <div class="card-title">⚙️ Settings <span class="hint">— stored locally on this device only</span>
+      <button class="btn btn-test btn-sm" id="testProviderBtn" onclick="testProvider()" style="margin-left:auto;">Test Gemini</button>
+      <button class="btn btn-test btn-sm" onclick="testSheet()">Test Sheet</button>
+      <button class="btn-ghost btn btn-sm" id="settingsToggleBtn" onclick="toggleSettingsPanel()">▲ Hide</button>
+    </div>
+
+    <div id="settingsBody">
+      <div class="config-row">
+        <label>🧩 AI Provider</label>
+        <select id="providerSelect" onchange="onProviderChange()">
+          <option value="gemini" selected>Google Gemini</option>
+          <option value="openai">OpenAI (GPT)</option>
+          <option value="paddle">Local (PaddleOCR)</option>
+        </select>
+        <span class="hint" style="font-size:12px;">Pick whichever API you have a key for, or run PaddleOCR locally — no key needed.</span>
+      </div>
+
+      <div class="config-row" id="geminiKeyRow">
+        <label>🔑 Gemini API Key</label>
+        <input type="password" class="api-input" id="geminiKey"
+               placeholder="AIza..." oninput="saveSettings()">
+        <button class="btn-ghost btn btn-sm" onclick="toggleKeyVisibility('geminiKey','toggleGeminiKey')" id="toggleGeminiKey">👁 Show</button>
+        <button class="btn-ghost btn btn-sm" onclick="showSetup('gemini')">📖 Get Key</button>
+      </div>
+
+      <div class="config-row" id="geminiModelRow">
+        <label>🤖 AI Model</label>
+        <select id="modelSelect" onchange="saveSettings()">
+          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (15 RPM, 1000/day, fastest)</option>
+          <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (10 RPM, 250/day, balanced)</option>
+          <option value="gemini-2.5-pro">Gemini 2.5 Pro (5 RPM, 100/day, best for hard handwriting)</option>
+        </select>
+      </div>
+
+      <div class="config-row" id="openaiKeyRow" style="display:none;">
+        <label>🔑 OpenAI API Key</label>
+        <input type="password" class="api-input" id="openaiKey"
+               placeholder="sk-..." oninput="saveSettings()">
+        <button class="btn-ghost btn btn-sm" onclick="toggleKeyVisibility('openaiKey','toggleOpenaiKey')" id="toggleOpenaiKey">👁 Show</button>
+        <button class="btn-ghost btn btn-sm" onclick="showSetup('openai')">📖 Get Key</button>
+      </div>
+
+      <div class="config-row" id="openaiModelRow" style="display:none;">
+        <label>🤖 AI Model</label>
+        <select id="openaiModelSelect" onchange="saveSettings()">
+          <option value="gpt-4o-mini">GPT-4o mini (cheapest, good for clear scans)</option>
+          <option value="gpt-4o" selected>GPT-4o (balanced, best for handwriting)</option>
+          <option value="gpt-4.1">GPT-4.1 (strongest reasoning, slower/costlier)</option>
+        </select>
+        <span class="hint" style="font-size:12px;">⚠️ OpenAI vision only accepts images (JPG/PNG) — PDF files will be skipped under this provider.</span>
+      </div>
+
+      <div class="config-row" id="paddleUrlRow" style="display:none;">
+        <label>🌐 PaddleOCR Server URL</label>
+        <input type="url" class="api-input" id="paddleUrl" value="http://localhost:8501"
+               placeholder="http://localhost:8501" oninput="saveSettings()">
+        <button class="btn-ghost btn btn-sm" onclick="showSetup('paddle')">📖 Setup</button>
+        <span class="hint" style="font-size:12px;">No API key needed — a small local Python server runs PaddleOCR (Devanagari model) on your own machine/network. Fields are auto-filled from the OCR text using built-in Nepali parsing rules — always review the results. ⚠️ Image files only; PDFs are skipped under this provider.</span>
+      </div>
+
+      <div class="config-row">
+        <label>📊 Google Sheet URL</label>
+        <input type="url" id="sheetUrl"
+               placeholder="https://script.google.com/macros/s/AKfycb..../exec"
+               oninput="saveSettings()">
+        <button class="btn-ghost btn btn-sm" onclick="showSetup('gsheet')">📖 Setup</button>
+      </div>
+
+      <div id="settingsStatus" class="config-status warn">⚠️ Settings not saved yet — fill an API key to start scanning.</div>
+
+      <!-- SCAN-ONLY-BY-DARTA TOGGLE -->
+      <div class="toggle-row">
+        <label class="switch">
+          <input type="checkbox" id="scanOnlyMode" onchange="saveSettings()">
+          <span class="slider"></span>
+        </label>
+        <div>
+          <div class="toggle-label">📎 Scan-only sync — attach by Darta No.</div>
+          <div class="toggle-hint">
+            When ON, no AI/API is used to read the letter at all — just scan the
+            physical document (or upload a photo) and you'll be asked to type its
+            Darta No. (दर्ता नं.) directly. "Sync to Sheet" then matches each scan
+            to the existing row with that Darta No. and attaches it there. If a
+            Darta No. matches more than one row, you'll get a confirmation popup to
+            pick the right one. If it matches <strong>no</strong> row, a new row is
+            added automatically with just the Darta No. and the scanned image.
+          </div>
+        </div>
+      </div>
+
+      <!-- DEMAND TYPE MANAGER -->
+      <details style="margin-top:10px;">
+        <summary>🏷️ Manage Demand Types (माग किसिम) — add new or rename existing</summary>
+        <div class="dt-manager">
+          <div class="hint" style="font-size:12px; margin-bottom:8px;">
+            This list is read live from your Google Sheet's hidden "Config" tab. Renaming
+            here only affects the master list + dropdowns by default; check
+            "also update existing rows" if you also want past entries relabelled.
+          </div>
+          <div class="dt-list" id="dtList">
+            <div class="hint" style="font-size:12px;">Set your Google Sheet URL and click "Test Sheet" (or open this section) to load the current list.</div>
+          </div>
+          <div class="dt-add-row">
+            <input type="text" id="dtNewName" placeholder="New demand type name, e.g. Meter Replacement">
+            <button class="btn btn-accent btn-sm" onclick="addDemandType()">+ Add Type</button>
+            <button class="btn btn-ghost btn-sm" onclick="loadDemandTypesFromSheet()">↻ Refresh</button>
+          </div>
+          <div class="dt-status" id="dtStatus"></div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+
+  <!-- ════════════ MAIN TABS ════════════ -->
+  <div class="main-tabs">
+    <div class="main-tab active" id="tab-btn-scan" onclick="switchMainTab('scan')">📷 Scan Letters</div>
+    <div class="main-tab" id="tab-btn-search" onclick="switchMainTab('search')">🔎 Search Register</div>
+    <div class="main-tab" id="tab-btn-sheets" onclick="switchMainTab('sheets')">📋 View/Edit Sheets</div>
+  </div>
+
+  <!-- ════════════ TAB: SCAN ════════════ -->
+  <div class="tab-page active" id="tab-scan">
+
+  <!-- ════════════ STEP 1: UPLOAD ════════════ -->
+  <div class="card">
+    <div class="card-title">📁 Upload Scanned Letters <span class="hint">— JPG, PNG, or PDF</span></div>
+
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" multiple accept="image/*,.pdf">
+      <div class="drop-icon">📄</div>
+      <div class="drop-text">Drop letters here or click to browse</div>
+      <div class="drop-sub">Multiple files at once · Phone camera photos work fine</div>
+    </div>
+
+    <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+      <button class="btn btn-ghost btn-sm" id="scanDeviceBtn" onclick="scanFromDevice()">🖨️ Scan a Document</button>
+      <label id="singleFileModeLabel" style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none;">
+        <input type="checkbox" id="singleFileMode" onchange="saveSettings()" style="width:auto;margin:0;">
+        Single document — auto-run AI scan after capture
+      </label>
+      <span id="scanOnlyModeNotice" style="font-size:12.5px;color:var(--accent2);display:none;">📎 Scan-only mode: you'll be asked for the Darta No. right after each capture — no AI used.</span>
+      <span id="scanDeviceStatus" style="font-size:12.5px;color:var(--muted);"></span>
+    </div>
+
+    <div class="file-list" id="fileList"></div>
+
+    <details id="aiInstrDetails">
+      <summary>🧠 Optional: Custom AI Instructions</summary>
+      <textarea class="ai-instr" id="aiInstructions"
+        placeholder="Examples:&#10;• If letter mentions '11KV line', classify as HT Cable&#10;• Letters from Banganga Ward 5 → mark High priority"></textarea>
+    </details>
+
+    <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+      <button class="btn btn-gemini" id="scanBtn" disabled onclick="startScan()">
+        🔍 Scan with AI
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="clearFiles()">✕ Clear</button>
+      <span id="fileCount" style="font-size:13px;color:var(--muted);"></span>
+    </div>
+  </div>
+
+  <!-- ════════════ STEP 2: SCANNING ════════════ -->
+  <div class="card" id="card-scanning" style="display:none;">
+    <div class="card-title">🤖 AI Scanning in Progress</div>
+    <div id="scanProgress" style="margin-bottom:6px; font-size:14px; color:var(--accent2);">Processing...</div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="progress-text" id="progressText">0 / 0</div>
+    <div class="scan-log" id="scanLog"></div>
+  </div>
+
+  <!-- ════════════ STEP 3: RESULTS ════════════ -->
+  <div class="card" id="card-results" style="display:none;">
+    <div class="card-title">✅ Review & Edit <span class="hint">— click any cell to edit</span></div>
+
+    <div id="resultsNotify" style="font-size:13px; color:var(--success); margin-bottom:14px;"></div>
+
+    <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" onclick="addBlankRow()">+ Add Row</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearResults()">🗑 Clear All</button>
+      <span style="margin-left:auto; font-size:12px; color:var(--muted);">
+        <strong id="totalCount" style="color:var(--text);">0</strong> records ·
+        <strong id="palikaCount" style="color:var(--text);">0</strong> palikas
+      </span>
+    </div>
+
+    <div id="resultsSection"></div>
+
+    <!-- EXPORT OPTIONS -->
+    <div style="margin-top:20px;">
+      <div class="card-title" style="margin-bottom:10px;">💾 Export Options</div>
+
+      <div class="export-grid">
+        <div class="export-card gsheet">
+          <div class="ec-title" style="color:var(--success);">🔗 Google Sheet</div>
+          <div class="ec-sub" id="gsheetEcSub">Sync directly to your Demand Register</div>
+          <button class="btn btn-accent btn-sm" id="gsheetBtn" onclick="syncToSheet()">📤 Sync to Sheet</button>
+        </div>
+
+        <div class="export-card csv">
+          <div class="ec-title" style="color:#93c5fd;">📥 CSV Files</div>
+          <div class="ec-sub">One CSV per Palika, downloads instantly</div>
+          <button class="btn btn-test btn-sm" onclick="downloadCSV()">📥 Download CSV</button>
+        </div>
+
+        <div class="export-card excel">
+          <div class="ec-title" style="color:#86efac;">📊 Excel (XLSX)</div>
+          <div class="ec-sub">Single workbook, one sheet per Palika</div>
+          <button class="btn btn-test btn-sm" onclick="downloadExcel()">📊 Download Excel</button>
+        </div>
+
+        <div class="export-card pdf">
+          <div class="ec-title" style="color:#c4b5fd;">📑 PDF Backup</div>
+          <div class="ec-sub">Bundle all uploaded images into one PDF</div>
+          <button class="btn btn-test btn-sm" id="pdfBtn" onclick="downloadPDF()">📑 Download PDF</button>
+        </div>
+      </div>
+
+      <div id="exportStatus" style="margin-top:14px; font-size:13px;"></div>
+    </div>
+  </div>
+
+  </div> <!-- /tab-scan -->
+
+  <!-- ════════════ TAB: SEARCH ════════════ -->
+  <div class="tab-page" id="tab-search">
+
+    <div class="card">
+      <div class="card-title">🔎 Search the Demand Register
+        <span class="hint">— reads live from your Google Sheet, never writes anything</span>
+      </div>
+
+      <div class="search-bar">
+        <div class="search-field">
+          <label>🏛 Palika</label>
+          <select id="searchPalika">
+            <option value="all" selected>All Palikas</option>
+          </select>
+        </div>
+        <div class="search-field">
+          <label>⚡ Demand Type</label>
+          <select id="searchDemandType">
+            <option value="all" selected>All Types</option>
+          </select>
+        </div>
+        <div class="search-field">
+          <label>📅 Fiscal Year</label>
+          <select id="searchFiscalYear">
+            <option value="all" selected>All Years</option>
+          </select>
+        </div>
+        <div class="search-field">
+          <label>🔢 Ward No.</label>
+          <input type="text" id="searchWard" placeholder="e.g. 3" inputmode="numeric">
+        </div>
+      </div>
+      <div class="search-bar" style="margin-top:10px;">
+        <div class="search-field">
+          <label>📇 Darta No. (दर्ता नं.)</label>
+          <input type="text" id="searchDartaNo" placeholder="e.g. 452">
+        </div>
+        <div class="search-field">
+          <label>👤 Applicant Name — word match</label>
+          <input type="text" id="searchName" placeholder="e.g. राम बहादुर">
+        </div>
+        <div class="search-field" style="flex:1.4;">
+          <label>🎯 Purpose (उद्देश्य) — word match</label>
+          <input type="text" id="searchPurpose" placeholder="e.g. घरायसी, सुरक्षा, जडान...">
+        </div>
+      </div>
+
+      <div class="search-actions">
+        <button class="btn btn-accent btn-sm" id="searchBtn" onclick="runSearch()">🔎 Search</button>
+        <button class="btn btn-ghost btn-sm" onclick="resetSearch()">✕ Reset Filters</button>
+        <button class="btn btn-ghost btn-sm" id="printSearchBtn" onclick="printSearchResults()" style="display:none;">🖨️ Print Results</button>
+        <span class="search-summary" id="searchSummary"></span>
+      </div>
+
+      <div class="search-results-wrap" id="searchResultsWrap"></div>
+    </div>
+
+  </div> <!-- /tab-search -->
+
+  <!-- ════════════ TAB: SHEET VIEW/EDIT ════════════ -->
+  <div class="tab-page" id="tab-sheets">
+
+    <div class="card">
+      <div class="card-title">📋 View &amp; Edit Sheets
+        <span class="hint">— live copy of every Palika tab, edits save straight back to the Google Sheet</span>
+      </div>
+
+      <div class="search-bar">
+        <div class="search-field" style="flex:1;">
+          <label>🏛 Choose Palika</label>
+          <select id="sheetViewPalika" onchange="loadSheetView()">
+            <option value="">— Select a Palika —</option>
+          </select>
+        </div>
+        <div class="search-field" style="flex:0 0 auto; align-self:flex-end;">
+          <button class="btn btn-ghost btn-sm" onclick="loadSheetView()">↻ Refresh</button>
+        </div>
+        <div class="search-field" style="flex:0 0 auto; align-self:flex-end;">
+          <button class="btn btn-ghost btn-sm" id="printSheetBtn" onclick="printSheetView()" style="display:none;">🖨️ Print</button>
+        </div>
+      </div>
+      <div class="dt-propagate-note" style="margin-top:6px;">
+        Click any cell to edit it. Press Enter or click away to save. Dropdown fields
+        (Demand Type / Priority / Status) show a picker so you can't type an off-list value.
+        The Scan column shows the attached photo — click it to view full-size.
+      </div>
+
+      <div id="sheetViewStatus" class="dt-status" style="margin-top:8px;"></div>
+      <div class="search-results-wrap" id="sheetViewWrap"></div>
+    </div>
+
+  </div> <!-- /tab-sheets -->
+
+  <!-- Footer help -->
+  <div style="text-align:center; padding:20px 0; font-size:12px; color:var(--muted);">
+    <a href="#" onclick="showSetup('about'); return false;" style="color:var(--accent2);">About this app</a>
+  </div>
+</div>
+
+<!-- ════════════ SETUP MODALS ════════════ -->
+<div class="modal-bg" id="setupModal">
+  <div class="modal">
+    <button class="modal-close" onclick="hideSetup()">✕</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<!-- ════════════ SCAN-ATTACH CORRECTION POPUP ════════════ -->
+<div class="modal-bg" id="correctionModal">
+  <div class="modal" style="max-width:600px;">
+    <button class="modal-close" onclick="closeCorrectionModal()">✕</button>
+    <h2>📄 Confirm Scan Matches</h2>
+    <p style="font-size:12.5px; color:var(--muted); margin-bottom:14px; line-height:1.5;">
+      These scans matched more than one existing row by Darta No., so nothing was
+      attached automatically. Pick the right row for each, or skip — nothing is
+      guessed or written without your confirmation. (Scans that matched no row at
+      all have already been added as new rows.)
+    </p>
+    <div id="correctionList"></div>
+    <div style="display:flex; gap:10px; margin-top:16px; justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" onclick="closeCorrectionModal()">Close</button>
+      <button class="btn btn-accent btn-sm" id="correctionApplyBtn" onclick="applyCorrections()">✅ Apply Selected Matches</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ SCAN VIEWER POPUP (view scanned file inline) ════════════ -->
+<div class="modal-bg" id="scanViewModal">
+  <div class="modal" style="max-width:700px;">
+    <button class="modal-close" onclick="closeScanViewModal()">✕</button>
+    <h2 id="scanViewTitle">📄 Scanned Letter</h2>
+    <div id="scanViewBody" style="margin-top:10px;"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  NEA LETTER SCANNER — STANDALONE GEMINI VERSION
+// ═══════════════════════════════════════════════════════════════════
+
+const PALIKAS = ["Kapilvastu","Banganga","Buddhabhumi","Mayadevi","Yashodhara","Suddhodhan","Sidhganga"];
+// ── FINAL DROPDOWN LIST v6 — 14 items, ordered by operational importance ──
+// DEMAND_TYPES starts as this seed list (matches the Config sheet's seed in
+// the Apps Script), but is REPLACED with the live list read from the Google
+// Sheet's Config tab as soon as it's available (see loadDemandTypesFromSheet).
+// It's declared with `let` (not `const`) so add/rename can update it in place
+// without touching every place that reads it.
+let DEMAND_TYPES = [
+  // 🔴 Emergency / Safety
+  "Pole Broken",
+  "Pole Tilt",
+  "Wire Broken",
+  "Cable Sag Correction",
+  "Voltage Correction",
+  "Conductor to Cable",
+
+  // 🟠 New infrastructure
+  "New Pole and Cable",
+  "Pole (पोल)",
+  "LT Cable",
+  "HT Cable",
+  "Transformer",
+  "Line Extension",
+
+  // 🔵 Other
+  "Pole/Cable Shifting",
+  "Other"
+];
+const PRIORITIES = ["High","Medium","Low"];
+const STATUSES = ["Pending","In Progress","Completed","Rejected"];
+
+const STORAGE_KEY = 'nea_taulihawa_settings_v3';
+
+// ── State ──
+let files = [];
+let allRows = [];
+let nextId = 1;
+let SETTINGS = {
+  provider: 'gemini',
+  geminiKey: '', model: 'gemini-2.5-flash',
+  openaiKey: '', openaiModel: 'gpt-4o',
+  paddleUrl: 'http://localhost:8501',
+  sheetUrl: '', singleFileMode: false, settingsCollapsed: false,
+  scanOnlyMode: false
+};
+
+// ═══════════════════════════════════════════════════════════════════
+//  SETTINGS PERSISTENCE (localStorage)
+// ═══════════════════════════════════════════════════════════════════
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      SETTINGS = { ...SETTINGS, ...JSON.parse(raw) };
+      if (SETTINGS.provider === 'ollama') SETTINGS.provider = 'paddle'; // migrate old saved settings
+      document.getElementById('providerSelect').value = SETTINGS.provider || 'gemini';
+      document.getElementById('geminiKey').value = SETTINGS.geminiKey || '';
+      document.getElementById('modelSelect').value = SETTINGS.model || 'gemini-2.5-flash';
+      document.getElementById('openaiKey').value = SETTINGS.openaiKey || '';
+      document.getElementById('openaiModelSelect').value = SETTINGS.openaiModel || 'gpt-4o';
+      document.getElementById('paddleUrl').value = SETTINGS.paddleUrl || 'http://localhost:8501';
+      document.getElementById('sheetUrl').value = SETTINGS.sheetUrl || '';
+      document.getElementById('singleFileMode').checked = !!SETTINGS.singleFileMode;
+      document.getElementById('scanOnlyMode').checked = !!SETTINGS.scanOnlyMode;
+      applyProviderVisibility();
+      const hasAnyKey = SETTINGS.geminiKey || SETTINGS.openaiKey || SETTINGS.paddleUrl;
+      if (SETTINGS.settingsCollapsed && hasAnyKey) {
+        document.getElementById('settingsBody').style.display = 'none';
+        document.getElementById('settingsToggleBtn').textContent = '▼ Show';
+      }
+    }
+  } catch(e) { console.warn('Could not load settings:', e); }
+  applyProviderVisibility();
+  updateSettingsStatus();
+  // Hide first-time banner if user already has a key for the selected provider
+  if (SETTINGS.geminiKey || SETTINGS.openaiKey) {
+    const firstTimeBannerEl = document.getElementById('firstTimeBanner');
+    if (firstTimeBannerEl) firstTimeBannerEl.style.display = 'none';
+  }
+  // Populate demand-type-dependent UI (dropdowns already in the DOM use the
+  // seed list until the live one arrives) and try to fetch the live lists.
+  if (SETTINGS.sheetUrl) {
+    loadDemandTypesFromSheet();
+    loadFiscalYearsFromSheet();
+  }
+  populateSearchPalikaDropdown();
+  populateSheetViewPalikaDropdown();
+  updateGsheetButtonLabel();
+}
+
+function saveSettings() {
+  SETTINGS.provider = document.getElementById('providerSelect').value;
+  SETTINGS.geminiKey = document.getElementById('geminiKey').value.trim();
+  SETTINGS.model = document.getElementById('modelSelect').value;
+  SETTINGS.openaiKey = document.getElementById('openaiKey').value.trim();
+  SETTINGS.openaiModel = document.getElementById('openaiModelSelect').value;
+  SETTINGS.paddleUrl = document.getElementById('paddleUrl').value.trim().replace(/\/+$/, '');
+  SETTINGS.sheetUrl = document.getElementById('sheetUrl').value.trim();
+  SETTINGS.singleFileMode = document.getElementById('singleFileMode').checked;
+  SETTINGS.scanOnlyMode = document.getElementById('scanOnlyMode').checked;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(SETTINGS));
+  } catch(e) { /* probably opened from file:// in private mode — that's OK, will work for this session */ }
+  updateSettingsStatus();
+  updateScanOnlyUI();
+  updateGsheetButtonLabel();
+}
+
+// Reflects the scan-only-attach toggle in the Export card's button/label so
+// the operator can always see which sync mode is active before clicking.
+function updateGsheetButtonLabel() {
+  const btn = document.getElementById('gsheetBtn');
+  const sub = document.getElementById('gsheetEcSub');
+  if (!btn || !sub) return;
+  if (SETTINGS.scanOnlyMode) {
+    btn.innerHTML = '📎 Attach Scans by Darta No.';
+    sub.textContent = 'Scan-only mode: attaches to matching rows; no-match scans become new rows';
+  } else {
+    btn.innerHTML = '📤 Sync to Sheet';
+    sub.textContent = 'Sync directly to your Demand Register';
+  }
+}
+
+// Shows/hides the provider-specific config rows based on the currently
+// selected provider, and relabels the Test button to match.
+function applyProviderVisibility() {
+  const provider = document.getElementById('providerSelect').value;
+  document.getElementById('geminiKeyRow').style.display = provider === 'gemini' ? '' : 'none';
+  document.getElementById('geminiModelRow').style.display = provider === 'gemini' ? '' : 'none';
+  document.getElementById('openaiKeyRow').style.display = provider === 'openai' ? '' : 'none';
+  document.getElementById('openaiModelRow').style.display = provider === 'openai' ? '' : 'none';
+  document.getElementById('paddleUrlRow').style.display = provider === 'paddle' ? '' : 'none';
+  const label = provider === 'gemini' ? 'Gemini' : provider === 'openai' ? 'OpenAI' : 'PaddleOCR';
+  document.getElementById('testProviderBtn').textContent = `Test ${label}`;
+  updateScanOnlyUI();
+}
+
+function onProviderChange() {
+  applyProviderVisibility();
+  saveSettings();
+}
+
+// Reflects the scan-only-sync toggle in the upload card: relabels the scan
+// button, hides the AI-only controls (custom instructions, auto-run-AI
+// checkbox) that don't apply when no AI is being used, and shows a short
+// notice instead. Also re-evaluates whether the scan button should be
+// enabled — scan-only mode needs files but no provider API key.
+function updateScanOnlyUI() {
+  const provider = document.getElementById('providerSelect').value;
+  const label = provider === 'gemini' ? 'Gemini' : provider === 'openai' ? 'OpenAI' : 'PaddleOCR';
+  const scanBtn = document.getElementById('scanBtn');
+  const aiInstr = document.getElementById('aiInstrDetails');
+  const singleModeLabel = document.getElementById('singleFileModeLabel');
+  const scanOnlyNotice = document.getElementById('scanOnlyModeNotice');
+
+  if (SETTINGS.scanOnlyMode) {
+    if (scanBtn) scanBtn.textContent = '📎 Add Scans — Enter Darta No.';
+    if (aiInstr) aiInstr.style.display = 'none';
+    if (singleModeLabel) singleModeLabel.style.display = 'none';
+    if (scanOnlyNotice) scanOnlyNotice.style.display = '';
+  } else {
+    if (scanBtn) scanBtn.textContent = provider === 'paddle' ? '🔍 Scan with PaddleOCR' : `🔍 Scan with ${label} AI`;
+    if (aiInstr) aiInstr.style.display = '';
+    if (singleModeLabel) singleModeLabel.style.display = '';
+    if (scanOnlyNotice) scanOnlyNotice.style.display = 'none';
+  }
+  updateScanButton();
+}
+
+// Returns truthy when the currently active provider has what it needs to
+// run a scan (a real API key for Gemini/OpenAI, or just a server URL for
+// PaddleOCR since it needs no key).
+function activeApiKey() {
+  if (SETTINGS.provider === 'openai') return SETTINGS.openaiKey;
+  if (SETTINGS.provider === 'paddle') return SETTINGS.paddleUrl;
+  return SETTINGS.geminiKey;
+}
+
+// Returns the currently active provider's model id.
+function activeModel() {
+  if (SETTINGS.provider === 'openai') return SETTINGS.openaiModel;
+  if (SETTINGS.provider === 'paddle') return 'PP-OCR (devanagari)';
+  return SETTINGS.model;
+}
+
+
+function providerLabel() {
+  return SETTINGS.provider === 'openai' ? 'OpenAI' : SETTINGS.provider === 'paddle' ? 'PaddleOCR' : 'Gemini';
+}
+
+function updateSettingsStatus() {
+  const status = document.getElementById('settingsStatus');
+  const provider = providerLabel();
+  const hasKey = SETTINGS.provider === 'openai'
+    ? (SETTINGS.openaiKey && SETTINGS.openaiKey.startsWith('sk-'))
+    : SETTINGS.provider === 'paddle'
+    ? !!SETTINGS.paddleUrl
+    : (SETTINGS.geminiKey && SETTINGS.geminiKey.startsWith('AIza'));
+  const hasSheet = SETTINGS.sheetUrl && SETTINGS.sheetUrl.includes('script.google.com');
+  if (hasKey && hasSheet) {
+    status.className = 'config-status ok';
+    status.innerHTML = `✓ ${provider} configured and Sheet URL set. Ready to scan and sync!`;
+  } else if (hasKey) {
+    status.className = 'config-status warn';
+    status.innerHTML = `✓ ${provider} configured — scanning works. ⚠️ Sheet URL not set, sync to Google Sheet won't work (CSV/Excel still work).`;
+  } else {
+    status.className = 'config-status err';
+    const setupKey = SETTINGS.provider === 'openai' ? 'openai' : SETTINGS.provider === 'paddle' ? 'paddle' : 'gemini';
+    const needText = SETTINGS.provider === 'paddle' ? 'PaddleOCR server URL required' : `${provider} API key required`;
+    status.innerHTML = `⚠️ ${needText} to scan. <a href="#" onclick="showSetup('${setupKey}'); return false;" style="color:var(--accent2);">Setup guide →</a>`;
+  }
+}
+
+function toggleSettingsPanel() {
+  const body = document.getElementById('settingsBody');
+  const btn = document.getElementById('settingsToggleBtn');
+  const collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? '' : 'none';
+  btn.textContent = collapsed ? '▲ Hide' : '▼ Show';
+  SETTINGS.settingsCollapsed = !collapsed;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(SETTINGS)); } catch(e) {}
+}
+
+function toggleKeyVisibility(inputId, btnId) {
+  const input = document.getElementById(inputId);
+  const btn = document.getElementById(btnId);
+  if (input.type === 'password') { input.type = 'text'; btn.textContent = '🙈 Hide'; }
+  else { input.type = 'password'; btn.textContent = '👁 Show'; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  CONNECTION TESTS
+// ═══════════════════════════════════════════════════════════════════
+
+function testProvider() {
+  if (SETTINGS.provider === 'openai') testOpenAI();
+  else if (SETTINGS.provider === 'paddle') testPaddle();
+  else testGemini();
+}
+
+async function testGemini() {
+  if (!SETTINGS.geminiKey) { alert('Please paste your Gemini API key first.'); return; }
+  const status = document.getElementById('settingsStatus');
+  status.className = 'config-status warn';
+  status.innerHTML = '<span class="spinner" style="vertical-align:middle;"></span> Testing Gemini connection...';
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${SETTINGS.model}:generateContent`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': SETTINGS.geminiKey
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: 'Reply with just the word OK' }] }]
+      })
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      let errMsg;
+      try { errMsg = JSON.parse(errText).error?.message || errText; }
+      catch { errMsg = errText; }
+      throw new Error(`HTTP ${resp.status}: ${errMsg.slice(0,200)}`);
+    }
+    const data = await resp.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    status.className = 'config-status ok';
+    status.innerHTML = `✓ Gemini ${SETTINGS.model} works! AI replied: "${text.trim()}"`;
+  } catch(err) {
+    status.className = 'config-status err';
+    let msg = err.message;
+    if (msg.includes('API_KEY_INVALID') || msg.includes('API key')) {
+      msg = '✗ Invalid API key. Get a fresh one at aistudio.google.com/apikey';
+    } else if (msg.includes('quota') || msg.includes('429')) {
+      msg = '✗ Daily quota hit (free tier resets midnight Pacific time). Try again later or switch model.';
+    } else if (msg.includes('Failed to fetch')) {
+      msg = '✗ Network error. Check internet connection.';
+    } else {
+      msg = '✗ ' + msg;
+    }
+    status.innerHTML = msg;
+  }
+}
+
+async function testOpenAI() {
+  if (!SETTINGS.openaiKey) { alert('Please paste your OpenAI API key first.'); return; }
+  const status = document.getElementById('settingsStatus');
+  status.className = 'config-status warn';
+  status.innerHTML = '<span class="spinner" style="vertical-align:middle;"></span> Testing OpenAI connection...';
+  try {
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SETTINGS.openaiKey}`
+      },
+      body: JSON.stringify({
+        model: SETTINGS.openaiModel,
+        messages: [{ role: 'user', content: 'Reply with just the word OK' }],
+        max_tokens: 5
+      })
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      let errMsg;
+      try { errMsg = JSON.parse(errText).error?.message || errText; }
+      catch { errMsg = errText; }
+      throw new Error(`HTTP ${resp.status}: ${errMsg.slice(0,200)}`);
+    }
+    const data = await resp.json();
+    const text = data.choices?.[0]?.message?.content || '';
+    status.className = 'config-status ok';
+    status.innerHTML = `✓ OpenAI ${SETTINGS.openaiModel} works! AI replied: "${text.trim()}"`;
+  } catch(err) {
+    status.className = 'config-status err';
+    let msg = err.message;
+    if (msg.includes('Incorrect API key') || msg.includes('invalid_api_key')) {
+      msg = '✗ Invalid API key. Get a fresh one at platform.openai.com/api-keys';
+    } else if (msg.includes('insufficient_quota') || msg.includes('429')) {
+      msg = '✗ Quota/rate limit hit, or no billing set up. Check platform.openai.com/usage';
+    } else if (msg.includes('Failed to fetch')) {
+      msg = '✗ Network error. Check internet connection.';
+    } else {
+      msg = '✗ ' + msg;
+    }
+    status.innerHTML = msg;
+  }
+}
+
+async function testPaddle() {
+  if (!SETTINGS.paddleUrl) { alert('Please enter your PaddleOCR server URL first (default http://localhost:8501).'); return; }
+  const status = document.getElementById('settingsStatus');
+  status.className = 'config-status warn';
+  status.innerHTML = '<span class="spinner" style="vertical-align:middle;"></span> Testing PaddleOCR server connection...';
+  try {
+    const resp = await fetch(`${SETTINGS.paddleUrl}/health`, { method: 'GET' });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${errText.slice(0,200)}`);
+    }
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    status.className = 'config-status ok';
+    status.innerHTML = `✓ PaddleOCR server is live! Engine: ${data.engine || 'PaddleOCR'} · Language: ${data.lang || 'devanagari'}`;
+  } catch(err) {
+    status.className = 'config-status err';
+    let msg = err.message;
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+      msg = `✗ Can't reach ${SETTINGS.paddleUrl}. Is the PaddleOCR server running? Start it with: python paddle_server.py — see the 📖 Setup guide. Also check the URL, firewall, and that this browser can reach that host/port.`;
+    } else {
+      msg = '✗ ' + msg;
+    }
+    status.innerHTML = msg;
+  }
+}
+
+async function testSheet() {
+  if (!SETTINGS.sheetUrl) { alert('Please paste your Apps Script URL first.'); return; }
+  const status = document.getElementById('settingsStatus');
+  status.className = 'config-status warn';
+  status.innerHTML = '<span class="spinner" style="vertical-align:middle;"></span> Testing Google Sheet connection...';
+  try {
+    const resp = await fetch(SETTINGS.sheetUrl, { method: 'GET', redirect: 'follow' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (data.ok) {
+      status.className = 'config-status ok';
+      status.innerHTML = `✓ Sheet API live! ${data.message || ''}`;
+      loadDemandTypesFromSheet();
+      loadFiscalYearsFromSheet();
+    } else throw new Error(data.error || 'Returned ok:false');
+  } catch(err) {
+    status.className = 'config-status err';
+    let msg = err.message;
+    if (msg.includes('Failed to fetch') || msg.includes('CORS')) {
+      msg = '✗ Cannot reach Apps Script. Check: (1) URL ends with /exec  (2) "Who has access" = Anyone  (3) Web App is deployed.';
+    }
+    status.innerHTML = msg;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  FILE HANDLING
+// ═══════════════════════════════════════════════════════════════════
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); addFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', e => addFiles(e.target.files));
+
+function addFiles(newFiles) {
+  for (const f of newFiles) {
+    if (!files.find(x => x.name === f.name && x.size === f.size)) files.push(f);
+  }
+  renderFileList();
+}
+
+function renderFileList() {
+  const el = document.getElementById('fileList');
+  el.innerHTML = '';
+  files.forEach((f, i) => {
+    const sizeKB = (f.size / 1024).toFixed(0);
+    const sizeMB = (f.size / 1024 / 1024).toFixed(1);
+    const isPdf = f.type === 'application/pdf';
+    const isLarge = isPdf && f.size > 7 * 1024 * 1024;
+    const isImg = f.type.startsWith('image/');
+    const icon = isPdf ? '📕' : (isImg ? '🖼️' : '📄');
+    const warn = isLarge ? `<span style="color:var(--warn);font-size:11px;">⚠️ Large PDF (${sizeMB}MB) — may fail.</span>` : '';
+    const div = document.createElement('div');
+    div.className = 'file-item';
+    div.innerHTML = `
+      <span style="font-size:18px;">${icon}</span>
+      <span class="fi-name">${escapeHtml(f.name)}</span>
+      <span class="fi-size">${sizeKB > 999 ? sizeMB + ' MB' : sizeKB + ' KB'}</span>
+      <button class="fi-remove" onclick="removeFile(${i})">✕</button>
+      ${warn ? `<div style="width:100%;padding-left:30px;">${warn}</div>` : ''}
+    `;
+    el.appendChild(div);
+  });
+  document.getElementById('fileCount').textContent = files.length ? `${files.length} file(s) ready` : '';
+  updateScanButton();
+}
+
+function updateScanButton() {
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = files.length === 0 || (!SETTINGS.scanOnlyMode && !activeApiKey());
+}
+
+function removeFile(i) { files.splice(i, 1); fileInput.value=''; renderFileList(); }
+function clearFiles() { files = []; fileInput.value = ''; renderFileList(); }
+
+// ═══════════════════════════════════════════════════════════════════
+//  DIRECT SCANNER / DEVICE CAPTURE
+//  Tries the local scanner-bridge helper first (PowerShell/WIA → real
+//  scanner via Windows Fax and Scan engine). Falls back to a live camera,
+//  then the OS file/photo picker. Whatever comes back is added straight
+//  into the normal upload queue (same as drag-and-drop), so it then goes
+//  through "Scan with AI" like any other uploaded file.
+// ═══════════════════════════════════════════════════════════════════
+const SCAN_BRIDGE_PORT = 8723;          // must match the PowerShell helper
+const SCAN_BRIDGE_URL  = `http://localhost:${SCAN_BRIDGE_PORT}/scan`;
+
+function setScanDeviceStatus(msg, color) {
+  const el = document.getElementById('scanDeviceStatus');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.color = color || 'var(--muted)';
+}
+
+// Adds a freshly-captured file to the queue, then either auto-runs
+// "Scan with AI" (if the "Single document" checkbox is on) or asks
+// once whether this was a single document and offers to enable that
+// checkbox so future captures don't need to ask again.
+function handleCapturedFile(file, statusMsg) {
+  addFiles([file]);
+  setScanDeviceStatus(statusMsg, 'var(--success)');
+
+  if (SETTINGS.scanOnlyMode) {
+    startScanOnlyCapture();
+    return;
+  }
+
+  const singleMode = document.getElementById('singleFileMode');
+  if (singleMode && singleMode.checked) {
+    startScan();
+    return;
+  }
+
+  const isSingle = confirm('Is this the only document for this batch?\n\nClick OK to scan it now with AI.\nClick Cancel if you plan to add more letters before scanning.');
+  if (isSingle) {
+    if (singleMode && confirm('Always auto-run AI scan after a single-document capture? (You can turn this off anytime via the checkbox.)')) {
+      singleMode.checked = true;
+      saveSettings();
+    }
+    startScan();
+  }
+}
+
+async function scanFromDevice() {
+  const btn = document.getElementById('scanDeviceBtn');
+  if (btn) btn.disabled = true;
+
+  // 1) Try the local scanner bridge (real WIA scan)
+  setScanDeviceStatus('⏳ Contacting scanner bridge… place the document in the scanner.', 'var(--accent2)');
+  try {
+    const resp = await fetch(SCAN_BRIDGE_URL, { method:'GET', cache:'no-store' });
+    if (resp.ok) {
+      const ct = resp.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        // helper returned an error object
+        const j = await resp.json();
+        throw new Error(j.error || 'Scanner bridge reported an error.');
+      }
+      const blob = await resp.blob();
+      if (blob && blob.size > 0) {
+        const ext = blob.type.includes('png') ? 'png' : 'jpg';
+        const file = new File([blob], 'scan_'+Date.now()+'.'+ext, { type: blob.type || 'image/jpeg' });
+        if (btn) btn.disabled = false;
+        handleCapturedFile(file, '✅ Scan received from scanner — added to upload list.');
+        return;
+      }
+      throw new Error('Scanner bridge returned an empty image.');
+    }
+    throw new Error('Scanner bridge responded with status '+resp.status);
+  } catch (err) {
+    // Bridge not running / blocked / no scanner → fall back
+    setScanDeviceStatus(
+      `ℹ️ Scanner bridge not reachable (${err.message}). Falling back to camera/picker. ` +
+      `To enable direct scanning, run the scanner-bridge helper (see the included .bat file).`,
+      'var(--muted)'
+    );
+  }
+
+  // 2) Try a live camera / doc-camera via getUserMedia
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width:{ideal:3000}, height:{ideal:3000} } });
+      await captureFromStreamIntoQueue(stream);
+      if (btn) btn.disabled = false;
+      return;
+    } catch (err) {
+      setScanDeviceStatus('ℹ️ Camera not available. Falling back to file picker.', 'var(--muted)');
+    }
+  }
+
+  // 3) Fall back to the OS picker, requesting the camera capture attribute
+  //    so mobile devices open the camera UI directly.
+  const picker = document.createElement('input');
+  picker.type = 'file';
+  picker.accept = 'image/*';
+  picker.capture = 'environment';
+  picker.onchange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleCapturedFile(e.target.files[0], '✅ Photo added to upload list.');
+    }
+    if (btn) btn.disabled = false;
+  };
+  picker.click();
+}
+
+function captureFromStreamIntoQueue(stream) {
+  return new Promise(resolve => {
+    const video = document.createElement('video');
+    video.autoplay = true; video.playsInline = true; video.muted = true;
+    video.srcObject = stream;
+    video.onloadedmetadata = () => {
+      video.play();
+      // brief delay so autofocus/exposure settle
+      setTimeout(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 1280;
+        canvas.height = video.videoHeight || 960;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        stream.getTracks().forEach(t => t.stop());
+        canvas.toBlob(blob => {
+          const file = new File([blob], 'scan_'+Date.now()+'.jpg', { type: 'image/jpeg' });
+          handleCapturedFile(file, '✅ Photo captured — added to upload list.');
+          resolve();
+        }, 'image/jpeg', 0.92);
+      }, 700);
+    };
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  AI SCANNING WITH GEMINI
+// ═══════════════════════════════════════════════════════════════════
+
+const SCAN_DELAY_MS = 4500;  // ~13 RPM safe under 15 RPM Flash-Lite limit
+const MAX_RETRIES = 4;
+const RETRY_BASE_MS = 8000;
+
+async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function blankRow(filename) {
+  return [{
+    id: 0, palika: 'Kapilvastu',
+    letterDate: '', receivedDate: new Date().toLocaleDateString('en-CA'),
+    applicant: '', dartaNo: '', demandType: 'Other',
+    quantity: '', location: '', purpose: '',
+    priority: 'Medium', status: 'Pending',
+    remarks: `[Scan failed — fill manually] ${filename}`,
+    thumb: ''
+  }];
+}
+
+function nepToArab(str) {
+  return String(str).replace(/[०-९]/g, d => '०१२३४५६७८९'.indexOf(d));
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SCAN-ONLY CAPTURE — no AI/OCR call at all.
+//
+// Used instead of startScan() whenever SETTINGS.scanOnlyMode is on,
+// whether files arrived via the drop-zone/file-picker (batch) or via
+// "🖨️ Scan a Document" (single capture). For every queued file, the
+// operator is simply asked to type its Darta No. — nothing is read
+// off the letter automatically. The resulting rows carry only the
+// Darta No. and the scanned image; everything else is left blank so
+// "Attach Scans by Darta No." (syncScansOnly) can match/attach or,
+// failing a match, add a fresh row with just those two things.
+// ═══════════════════════════════════════════════════════════════════
+
+// Asks for one Darta No. via a plain prompt, normalising Devanagari
+// digits to Arabic and stripping anything that isn't a digit. Returns
+// null if the operator cancelled (skip this file), or '' if they left
+// it blank (also treated as skip, but distinguished for the summary).
+function promptDartaNo(filename, index, total) {
+  const progress = total > 1 ? ` (${index}/${total})` : '';
+  const raw = window.prompt(`📇 Darta No. (दर्ता नं.) for:\n${filename}${progress}\n\nLeave blank + Cancel to skip this scan.`, '');
+  if (raw === null) return null;
+  return nepToArab(raw.trim()).replace(/[^0-9]/g, '');
+}
+
+async function startScanOnlyCapture() {
+  if (!files.length) return;
+
+  const queued = files.slice();
+  files = [];
+  fileInput.value = '';
+  renderFileList();
+
+  const newRows = [];
+  let skipped = 0;
+
+  for (let i = 0; i < queued.length; i++) {
+    const f = queued[i];
+    const dartaNo = promptDartaNo(f.name, i + 1, queued.length);
+    if (!dartaNo) { skipped++; continue; }
+
+    const thumb = await makeThumb(f);
+    const scanFull = await makeScanFull(f);
+    newRows.push({
+      id: nextId++, palika: 'Kapilvastu',
+      letterDate: '', receivedDate: new Date().toLocaleDateString('en-CA'),
+      applicant: '', dartaNo, demandType: 'Other',
+      quantity: '', location: '', purpose: '',
+      priority: 'Medium', status: 'Pending',
+      remarks: '[Scan-only attach — physical scanner, no AI/OCR used]',
+      thumb, scanFull
+    });
+  }
+
+  allRows = [...allRows, ...newRows];
+  renderResults();
+  document.getElementById('card-scanning').style.display = 'none';
+  document.getElementById('card-results').style.display = 'block';
+
+  if (newRows.length) setScanDeviceStatus(`✅ ${newRows.length} scan(s) ready — set the correct Palika (default Kapilvastu) if needed, then "Attach Scans by Darta No.".`, 'var(--success)');
+  if (skipped) alert(`${skipped} scan(s) skipped — no Darta No. entered. Re-scan them anytime to add later.`);
+}
+
+function extractJSON(raw) {
+  if (!raw || !raw.trim()) return null;
+  let s = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  // 1. Direct parse
+  try { return JSON.parse(s); } catch {}
+
+  // 2. Find array boundaries [ ... ]
+  const start = s.indexOf('['), end = s.lastIndexOf(']');
+  if (start !== -1 && end !== -1 && end > start) {
+    try { return JSON.parse(s.slice(start, end + 1)); } catch {}
+  }
+
+  // 3. Fix common issues: trailing commas, single quotes
+  try {
+    let fixed = s.replace(/,\s*([}\]])/g, '$1').replace(/'/g, '"');
+    const fs = fixed.indexOf('['), fe = fixed.lastIndexOf(']');
+    if (fs !== -1 && fe !== -1) return JSON.parse(fixed.slice(fs, fe + 1));
+  } catch {}
+
+  // 4. Recover from TRUNCATED arrays: collect all complete objects {...}
+  // This handles MAX_TOKENS cutoffs where the response stops mid-object.
+  try {
+    const objs = [];
+    let depth = 0, inStr = false, esc = false, objStart = -1;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') {
+        if (depth === 0) objStart = i;
+        depth++;
+      } else if (ch === '}') {
+        depth--;
+        if (depth === 0 && objStart !== -1) {
+          try { objs.push(JSON.parse(s.slice(objStart, i + 1))); } catch {}
+          objStart = -1;
+        }
+      }
+    }
+    if (objs.length) return objs;
+  } catch {}
+
+  return null;
+}
+
+function normaliseRow(r) {
+  const dartaNo = nepToArab((r.dartaNo || '').toString().trim()).replace(/[^0-9]/g, '');
+  let letterDate = nepToArab((r.letterDate || '').toString().trim());
+  letterDate = letterDate.replace(/[-. ]/g, '/').replace(/\/+/g, '/');
+  if (!/^20[7-9]\d\/\d{1,2}\/\d{1,2}$/.test(letterDate)) letterDate = '';
+  return {
+    id: 0,
+    palika: PALIKAS.includes(r.palika) ? r.palika : 'Kapilvastu',
+    letterDate,
+    receivedDate: new Date().toLocaleDateString('en-CA'),
+    applicant: (r.applicant || '').toString().trim(),
+    dartaNo,
+    demandType: DEMAND_TYPES.includes(r.demandType) ? r.demandType : 'Other',
+    quantity: (r.quantity || '').toString().trim(),
+    location: (r.location || '').toString().trim(),
+    purpose: (r.purpose || '').toString().trim(),
+    priority: PRIORITIES.includes(r.priority) ? r.priority : 'Medium',
+    status: 'Pending',
+    remarks: (r.remarks || '').toString().trim(),
+    thumb: ''
+  };
+}
+
+async function startScan() {
+  if (!files.length) return;
+  if (SETTINGS.scanOnlyMode) { return startScanOnlyCapture(); }
+  if (!activeApiKey()) { alert(`Please set up ${providerLabel()} first!`); return; }
+
+  document.getElementById('card-scanning').style.display = 'block';
+  document.getElementById('card-results').style.display = 'none';
+  document.getElementById('scanLog').innerHTML = '';
+
+  const total = files.length;
+  let done = 0, newRows = [], failed = [];
+  const provider = SETTINGS.provider;
+  const callAI = provider === 'openai' ? callOpenAI : provider === 'paddle' ? callPaddleOCR : callGemini;
+  const imageOnly = provider === 'openai' || provider === 'paddle'; // can't accept raw PDF bytes
+
+  const modelLabel = provider === 'openai' ? 'OpenAI ' + SETTINGS.openaiModel
+                    : provider === 'paddle' ? 'PaddleOCR (devanagari) @ ' + SETTINGS.paddleUrl
+                    : 'Gemini ' + SETTINGS.model;
+  log(`🚀 Starting scan of ${total} file(s) using ${modelLabel}`, 'info');
+
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    log(`📄 [${i+1}/${total}] ${f.name}`, 'info');
+    updateProgress(i, total, `Scanning ${i+1}/${total}: ${f.name}`);
+
+    // OpenAI's vision endpoint and the local PaddleOCR server only accept
+    // images, not raw PDF bytes — skip PDFs under these providers rather
+    // than sending a request that will always fail.
+    if (imageOnly && f.type === 'application/pdf') {
+      log(`⚠️ ${f.name} is a PDF — ${providerLabel()} provider only supports images. Switch to Gemini for PDFs, or convert this file to an image first. Adding blank row.`, 'warn');
+      const thumb = await makeThumb(f);
+      const scanFull = await makeScanFull(f);
+      failed.push(f.name);
+      blankRow(f.name).forEach(r => { r.id = nextId++; r.thumb = thumb; r.scanFull = scanFull; newRows.push(r); });
+      done++; updateProgress(done, total, `${done}/${total}`); continue;
+    }
+
+    let rows = null, lastErr = '', fileData;
+    const thumb = await makeThumb(f);
+    const scanFull = await makeScanFull(f);
+    try {
+      fileData = await fileToBase64(f);
+    } catch(e) {
+      log(`❌ Cannot read ${f.name}: ${e.message}`, 'err');
+      failed.push(f.name);
+      blankRow(f.name).forEach(r => { r.id = nextId++; r.thumb = thumb; r.scanFull = scanFull; newRows.push(r); });
+      done++; updateProgress(done, total, `${done}/${total}`); continue;
+    }
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        rows = await callAI(fileData);
+        break;
+      } catch(e) {
+        lastErr = e.message;
+        const is429 = lastErr.includes('429') || lastErr.toLowerCase().includes('quota') || lastErr.toLowerCase().includes('rate');
+        if (is429 && attempt < MAX_RETRIES) {
+          const wait = RETRY_BASE_MS * Math.pow(2, attempt - 1);
+          log(`⏳ Rate-limited — waiting ${wait/1000}s (retry ${attempt})`, 'warn');
+          await sleep(wait);
+        } else if (!is429) break;
+      }
+    }
+
+    if (rows && rows.length > 0) {
+      rows.forEach(r => { r.id = nextId++; r.thumb = thumb; r.scanFull = scanFull; newRows.push(r); });
+      log(`✅ ${rows.length} demand(s) extracted`, 'ok');
+    } else {
+      log(`⚠️ ${lastErr || 'No data'} — adding blank row`, 'warn');
+      failed.push(f.name);
+      blankRow(f.name).forEach(r => { r.id = nextId++; r.thumb = thumb; r.scanFull = scanFull; newRows.push(r); });
+    }
+
+    done++;
+    updateProgress(done, total, `${done}/${total}`);
+    if (i < files.length - 1) await sleep(SCAN_DELAY_MS);
+  }
+
+  allRows = [...allRows, ...newRows];
+  log(`\n🎉 Done — ${newRows.length - failed.length} auto-filled, ${failed.length} blank`, 'ok');
+
+  setTimeout(() => {
+    renderResults();
+    document.getElementById('card-results').style.display = 'block';
+  }, 600);
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    if (file.type === 'application/pdf') {
+      if (file.size > 7 * 1024 * 1024) {
+        rej(new Error(`PDF too large (${(file.size/1024/1024).toFixed(1)}MB). Split it.`));
+        return;
+      }
+      const r = new FileReader();
+      r.onload = () => res({ base64: r.result.split(',')[1], mimeType: 'application/pdf' });
+      r.onerror = () => rej(new Error('PDF read failed'));
+      r.readAsDataURL(file);
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      rej(new Error(`Unsupported: ${file.type}`)); return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => rej(new Error('Image read failed'));
+    reader.onload = e => {
+      const img = new Image();
+      img.onerror = () => rej(new Error('Cannot decode (HEIC? Convert to JPG)'));
+      img.onload = () => {
+        try {
+          // Higher resolution = better digit recognition for handwritten Nepali.
+          // 1800px max edge gives Gemini enough detail without bloating payload.
+          const MAX = 1800;
+          let w = img.naturalWidth, h = img.naturalHeight;
+          if (w > MAX || h > MAX) {
+            const sc = MAX / Math.max(w, h);
+            w = Math.round(w * sc); h = Math.round(h * sc);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          // 0.92 quality preserves more detail in stamp/text areas than 0.88
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+          res({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
+        } catch(err) { rej(err); }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Resize an image file to a JPEG data URL.
+//  - maxEdge:  cap on the longest side (px)
+//  - quality:  starting JPEG quality
+//  - maxChars: optional cap on the data-URL length (0 = none)
+//  - maxPixels:optional cap on total width*height (0 = none). Google Sheets'
+//    insertImage rejects images over 1,000,000 px, so the Drive/pop-out
+//    image must stay under that.
+function resizeToDataUrl(file, maxEdge, quality, maxChars, maxPixels) {
+  return new Promise((resolve) => {
+    if (!file || !file.type || !file.type.startsWith('image/')) { resolve(''); return; }
+    const reader = new FileReader();
+    reader.onerror = () => resolve('');
+    reader.onload = e => {
+      const img = new Image();
+      img.onerror = () => resolve('');
+      img.onload = () => {
+        try {
+          let w = img.naturalWidth, h = img.naturalHeight;
+          // 1) cap longest edge
+          if (w > maxEdge || h > maxEdge) {
+            const sc = maxEdge / Math.max(w, h);
+            w = Math.round(w * sc); h = Math.round(h * sc);
+          }
+          // 2) cap total pixels (keeps us under insertImage's 1 MP limit)
+          if (maxPixels && w * h > maxPixels) {
+            const sc = Math.sqrt(maxPixels / (w * h));
+            w = Math.max(1, Math.floor(w * sc));
+            h = Math.max(1, Math.floor(h * sc));
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.imageSmoothingQuality = 'high';
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          let q = quality;
+          let out = canvas.toDataURL('image/jpeg', q);
+          // Step quality down until it fits maxChars (or we hit a floor).
+          while (maxChars && out.length > maxChars && q > 0.3) {
+            q -= 0.1;
+            out = canvas.toDataURL('image/jpeg', q);
+          }
+          if (maxChars && out.length > maxChars) { resolve(''); return; } // too big to store
+          resolve(out);
+        } catch (err) { resolve(''); }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// In-cell image: 900px longest edge, capped under 1 MP, good quality.
+function makeThumb(file) {
+  return resizeToDataUrl(file, 900, 0.82, 0, 900000);
+}
+
+// Pop-out scan saved to Drive — readable and ~400 KB. Capped under ~950,000
+// px so Sheets' insertImage (max 1 MP / 2 MB) always accepts it. We aim the
+// JPEG near a 400 KB target by nudging quality, staying legible for letters.
+function makeScanFull(file) {
+  // ~400 KB target (raised from 250 KB for sharper text/stamps). resizeToDataUrl
+  // works on data-URL char length; base64 is ~1.37x the byte size, so 400 KB ≈
+  // 548000 chars. We pass that as a soft target via a dedicated targeting resizer.
+  return resizeToTargetBytes(file, 1000, 950000, 400 * 1024);
+}
+
+// Like resizeToDataUrl but aims for a target byte size: starts high and steps
+// quality down only until the encoded image is at/under targetBytes (with a
+// quality floor so it never gets unreadable).
+function resizeToTargetBytes(file, maxEdge, maxPixels, targetBytes) {
+  return new Promise((resolve) => {
+    if (!file || !file.type || !file.type.startsWith('image/')) { resolve(''); return; }
+    const reader = new FileReader();
+    reader.onerror = () => resolve('');
+    reader.onload = e => {
+      const img = new Image();
+      img.onerror = () => resolve('');
+      img.onload = () => {
+        try {
+          let w = img.naturalWidth, h = img.naturalHeight;
+          if (w > maxEdge || h > maxEdge) {
+            const sc = maxEdge / Math.max(w, h);
+            w = Math.round(w * sc); h = Math.round(h * sc);
+          }
+          if (maxPixels && w * h > maxPixels) {
+            const sc = Math.sqrt(maxPixels / (w * h));
+            w = Math.max(1, Math.floor(w * sc));
+            h = Math.max(1, Math.floor(h * sc));
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.imageSmoothingQuality = 'high';
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          // estimate bytes from data-URL length: bytes ≈ chars * 0.73
+          let q = 0.92;
+          let out = canvas.toDataURL('image/jpeg', q);
+          while ((out.length * 0.73) > targetBytes && q > 0.6) {
+            q -= 0.06;
+            out = canvas.toDataURL('image/jpeg', q);
+          }
+          resolve(out);
+        } catch (err) { resolve(''); }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function buildExtractionPrompt(userNote) {
+  return `You are an expert data extraction assistant for NEA (Nepal Electricity Authority) Taulihawa DCS in Kapilvastu, Nepal. Extract structured data from this scanned demand letter.
+
+The 7 Palikas are: Kapilvastu, Banganga, Buddhabhumi, Mayadevi, Yashodhara, Suddhodhan, Sidhganga.
+
+EXTRACTION RULES:
+
+1. APPLICANT NAME: Most letters are FORWARDING letters by Ward Chairperson on behalf of citizens. Extract the ACTUAL CITIZEN named in the body, NOT the ward chair signing. Look for phrases: "को निवेदन अनुसार", "श्री/श्रीमती [Name]", "ले विद्युत माग गर्नुभएको", "निवेदक".
+
+2. LETTER DATE — the single MOST IMPORTANT field. Read it CORRECTLY:
+
+   ⚠️ STEP-BY-STEP METHOD (do this BEFORE outputting JSON):
+   a) Find ALL dates on the document. There are usually 2-3:
+        • Date written by the letter author (top of letter, near "मिति")
+        • Date in the rubber stamp box (when letter was received)
+        • Sometimes a third date in signature area
+   b) The ANSWER is the LATEST/MOST RECENT of these dates.
+   c) For that one date, examine each digit ONE AT A TIME.
+
+   ⚠️ NEPALI DIGIT REFERENCE — study the SHAPES carefully:
+        ० (zero)  : full oval, like English "0"
+        १ (one)   : vertical line with hook on top, like "9" backwards
+        २ (two)   : rounded curl with a tail underneath
+        ३ (three) : zigzag-like, two curves stacked
+        ४ (four)  : looks like English digit "8" but the loop is OPEN at top — DON'T confuse with ८
+        ५ (five)  : has a horizontal bar at top with a hook — DON'T confuse with ४
+        ६ (six)   : closed loop at bottom with curve above
+        ७ (seven) : curl that opens at top, like "9" with tail — DON'T confuse with ३
+        ८ (eight) : closed loop similar to "C" stacked
+        ९ (nine)  : closed loop on top with tail down
+
+   ⚠️ TOP DIGIT CONFUSIONS to watch for:
+        ४ vs ८  →  ४ has OPEN top, ८ has CLOSED top
+        ३ vs ७  →  ३ has TWO curls, ७ has ONE curl
+        ५ vs ४  →  ५ has horizontal bar on top, ४ does not
+        ५ vs २  →  ५ has a TOP BAR and its curl opens LEFT; २ has NO top bar and a tail below
+        १ vs ९  →  १ is open vertical line, ९ is closed loop
+        ८ vs ९  →  ८ is C-like open loop; ९ is a closed loop with a tail
+
+   ⚠️ VALIDATION RULES — apply these to catch errors:
+        • Year MUST be 4 digits starting with "20" (Nepali BS).
+        • Year MUST be in range 2070-2090. If you read e.g. 2061 or 2099, you misread a digit.
+        • Month is 1-12. If you read 13 or higher, you misread.
+        • Day is 1-32. If you read 33 or higher, you misread.
+
+   ⚠️ NEPALI MONTH NAMES (sometimes spelled out instead of digit):
+        बैशाख=01  जेठ=02  असार/असाढ़=03  साउन/श्रावण=04
+        भदौ/भाद्र=05  असोज/आश्विन=06  कार्तिक=07  मंसिर/मार्ग=08
+        पुष/पौष=09  माघ=10  फागुन/फाल्गुन=11  चैत/चैत्र=12
+
+   ⚠️ REAL NEPALI OFFICE NUMBER PRACTICES — expect ALL of these:
+        • MIXED SCRIPTS in one number: clerks freely mix Devanagari and Arabic
+          digits, e.g. "20८३" = 2083, "४3५७" = 4357. Read digit by digit and
+          convert each to Arabic — never reject a number for being mixed.
+        • DATE SEPARATORS vary: "/", "-", ".", or the danda "।" or "|",
+          e.g. "२०८३।३।१८" = 2083/03/18. A vertical stroke between digit
+          groups in a date is a SEPARATOR, not the digit १ (1). If reading a
+          stroke as "1" would create an invalid month/day (e.g. 13, 19 where
+          the stamp clearly has 3 groups), treat it as a separator instead.
+        • NO LEADING ZEROS: "२०८३/३/५" means 2083/03/05.
+        • गते STYLE: "२०८३ साल असार १८ गते" or "असार १८, २०८३" — combine
+          the month name table above with the day after/before it.
+        • FISCAL YEAR SUFFIXES: numbers like "४८९/०८२-८३" or "पत्र संख्या
+          ०८२/०८३" carry the fiscal year (BS 2082/83) — the "/०८२" part is
+          NOT part of the serial number and "०८२/०८३" alone is NOT a date.
+        • Faint or skewed rubber stamps: digits may be half-printed. Read
+          only what is genuinely visible; leave the field empty if a digit
+          is truly illegible — do not pad or guess missing digits.
+
+   ⚠️ CROSS-CHECK the dates you read:
+        • The stamp (received) date is normally the SAME DAY or a FEW DAYS
+          AFTER the letter's written मिति — never weeks before it. If your
+          reading violates this, re-examine the digits you likely misread.
+        • Both dates are normally in the SAME BS year, close to the current
+          fiscal year. A year far from the other date's year is a misread.
+
+   OUTPUT FORMAT: YYYY/MM/DD using Arabic numerals only.
+   Examples: "2082/03/15", "2081/11/02", "2082/01/29".
+
+3. DARTA NO. (दर्ता नं.) — the second MOST IMPORTANT field:
+
+   ⚠️ STEP-BY-STEP METHOD:
+   a) Locate the rubber stamp box. It is usually at the TOP of the letter,
+      either left or right corner. It contains 3-4 horizontal lines:
+        Line 1: Office name (e.g. "विद्युत प्राधिकरण", "तौलिहवा वितरण ग्राहक सेवा")
+        Line 2: The label "दर्ता नं." or "दर्ता नम्बर" or "Darta No."
+        Line 3: ⭐ THE NUMBER — this is what you must read.
+        Line 4: A date (NOT what we want here; that's for letterDate)
+   b) Read the number on Line 3, digit by digit, using the digit reference above.
+   c) The number is typically 2-4 digits long (e.g., 78, 452, 1024, 3220).
+
+   ⚠️ COMMON MISTAKES on darta numbers:
+        • Reading the date instead of the darta number — they are SEPARATE lines.
+        • Confusing ४ (4) with ८ (8) — count the loops.
+        • Missing a digit when the handwriting runs together.
+        • Including a slash like "452/2081" — only the NUMBER part goes in dartaNo.
+
+   ⚠️ VALIDATION:
+        • Result must be ONLY Arabic digits 0-9. No letters, no slashes, no spaces.
+        • Length is 1-5 digits typically.
+        • Darta numbers are often written in MIXED Devanagari/Arabic digits
+          ("४3५७" = 4357) — convert each digit individually.
+        • If the number carries a fiscal-year tail like "४३५७/०८२-८३",
+          keep only the serial part before the slash: 4357.
+
+   If multiple stamp boxes exist (sometimes ward office + NEA office both stamp),
+   use the NEA / DCS / विद्युत प्राधिकरण stamp — that's our office.
+
+   ⚠️ The sending office's own numbers "च.नं." (chalani no.) and "पत्र संख्या"
+   printed/written on the LETTERHEAD (top-left) are NOT the darta number.
+   Only the number inside the NEA receiving stamp counts. If the NEA stamp's
+   number is unreadable, leave dartaNo empty — do NOT substitute the च.नं.
+
+4. PALIKA: From letter header/address. Default "Kapilvastu" if unclear.
+
+5. DEMAND TYPE: Single best match. Use these exact strings:
+   • Emergency: Pole Broken | Pole Tilt | Wire Broken | Cable Sag Correction | Voltage Correction | Conductor to Cable
+   • New infra: New Pole and Cable | Pole (पोल) | LT Cable | HT Cable | Transformer | Line Extension
+   • Other: Pole/Cable Shifting | Other
+
+   Hints: A leaning/tilted pole = "Pole Tilt"; a broken/snapped pole = "Pole Broken"; a snapped/torn wire = "Wire Broken"; sagging/loose wire = "Cable Sag Correction"; low/no voltage complaint = "Voltage Correction"; replacing bare conductor with insulated cable = "Conductor to Cable". For domestic meter/electrification requests with new poles, use "New Pole and Cable". For ONLY a pole request without cable, use "Pole (पोल)".
+
+6. LOCATION: Tole/village/ward area from body, e.g. "वडा ३, रामपुर टोल". ALWAYS include the ward (वडा/Ward) number when it appears anywhere in the letter — it is used for sorting.
+
+7. FILL EVERY FIELD — do not leave fields blank unless the information is genuinely absent from the letter:
+   • quantity: if the letter implies an amount (e.g. "एउटा पोल" = 1 pole, "200 मिटर तार"), fill it; otherwise put the best short description.
+   • purpose: always summarise WHY the demand is made in a few words (e.g. "घरायसी विद्युत जडान", "सुरक्षा - झुकेको पोल").
+   • location: always give at least the ward/tole if stated anywhere.
+   • applicant: the citizen's name; if only a ward office is named, put that.
+   • Only use "" (empty) when the letter truly does not contain that information. Never invent a darta number or a date you cannot read — leave those empty if unreadable, but DO fill descriptive fields (quantity/purpose/location) with your best reading.
+
+8. LANGUAGE: Write applicant, location, purpose, quantity and remarks in NEPALI
+   (Devanagari script), copying the letter's own wording where possible
+   (e.g. "बहडिलवा गाउँका मानिसहरू", "वडा ३, बसन्तपुर बहडिलवा गाउँ", "५ वटा पोल र १ ट्रान्सफर्मर").
+   Keep palika and demandType as the exact English enum values listed, and
+   letterDate/dartaNo in Arabic numerals.
+
+OUTPUT: Return ONLY a raw JSON array. No markdown fences, no explanation, no surrounding object/key — just the array itself. Start with [ end with ].
+
+[
+  {
+    "palika": "Kapilvastu | Banganga | Buddhabhumi | Mayadevi | Yashodhara | Suddhodhan | Sidhganga",
+    "letterDate": "YYYY/MM/DD or empty",
+    "applicant": "actual citizen name or empty",
+    "dartaNo": "Arabic numeral string or empty",
+    "demandType": "exact value from list: Pole Broken|Pole Tilt|Wire Broken|Cable Sag Correction|Voltage Correction|Conductor to Cable|New Pole and Cable|Pole (पोल)|LT Cable|HT Cable|Transformer|Line Extension|Pole/Cable Shifting|Other",
+    "quantity": "e.g. 5 poles or 200m or empty",
+    "location": "tole/ward area or empty",
+    "purpose": "reason from letter or empty",
+    "priority": "High | Medium",
+    "remarks": "additional notes or empty"
+  }
+]${userNote}`;
+}
+
+async function callGemini(fileData) {
+  const userInstr = document.getElementById('aiInstructions').value.trim();
+  const userNote = userInstr ? `\n\nADDITIONAL OPERATOR INSTRUCTIONS:\n${userInstr}` : '';
+
+  const prompt = buildExtractionPrompt(userNote);
+
+  // Flash-Lite is a smaller model and benefits from MORE thinking budget for
+  // handwritten digit reading. Flash and Pro are stronger and need less.
+  const thinkBudget =
+    SETTINGS.model.includes('flash-lite') ? 8192 :
+    SETTINGS.model.includes('pro')        ? 4096 :
+                                            4096;  // gemini-2.5-flash default
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${SETTINGS.model}:generateContent`;
+  const body = {
+    contents: [{
+      parts: [
+        { inline_data: { mime_type: fileData.mimeType, data: fileData.base64 } },
+        { text: prompt }
+      ]
+    }],
+    generationConfig: {
+      temperature: 0.05,         // very low — we want consistent, careful reading
+      maxOutputTokens: 24576,    // generous total to fit thinking + JSON + safety margin
+      responseMimeType: "application/json",
+      thinkingConfig: {
+        thinkingBudget: thinkBudget,
+        includeThoughts: false
+      }
+    }
+  };
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': SETTINGS.geminiKey
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    let msg;
+    try { msg = JSON.parse(errText).error?.message || errText; }
+    catch { msg = errText; }
+    if (resp.status === 429) throw new Error(`429 quota: ${msg.slice(0,100)}`);
+    throw new Error(`HTTP ${resp.status}: ${msg.slice(0,150)}`);
+  }
+
+  const data = await resp.json();
+  if (data.error) throw new Error(`Gemini: ${data.error.message}`);
+
+  const finishReason = data.candidates?.[0]?.finishReason || 'unknown';
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+  if (finishReason === 'MAX_TOKENS') {
+    log(`⚠️ Response was truncated by token limit. Got partial: ${text.length} chars`, 'warn');
+  }
+
+  if (!text.trim()) {
+    if (finishReason === 'MAX_TOKENS') {
+      throw new Error(`Truncated by token limit before any output. Try Flash-Lite model or smaller image.`);
+    }
+    throw new Error(`Empty response (finish: ${finishReason})`);
+  }
+
+  const parsed = extractJSON(text);
+  if (!parsed || !Array.isArray(parsed) || parsed.length === 0) {
+    if (finishReason === 'MAX_TOKENS') {
+      throw new Error(`JSON cut off mid-response. Got: ${text.slice(0,150)}`);
+    }
+    throw new Error(`JSON parse failed: ${text.slice(0,150)}`);
+  }
+  return parsed.map(normaliseRow);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  AI SCANNING WITH OPENAI (GPT-4o / GPT-4o mini / GPT-4.1 vision)
+// ═══════════════════════════════════════════════════════════════════
+//  fileData is always an image here — startScan() already filters out
+//  PDFs before calling callAI() when the active provider is OpenAI,
+//  since OpenAI's chat-completions vision input only accepts images.
+async function callOpenAI(fileData) {
+  const userInstr = document.getElementById('aiInstructions').value.trim();
+  const userNote = userInstr ? `\n\nADDITIONAL OPERATOR INSTRUCTIONS:\n${userInstr}` : '';
+
+  const prompt = buildExtractionPrompt(userNote);
+
+  // OpenAI's vision input wants a data: URL, not raw base64 + separate mime.
+  const dataUrl = `data:${fileData.mimeType};base64,${fileData.base64}`;
+
+  const body = {
+    model: SETTINGS.openaiModel,
+    temperature: 0.05,        // very low — consistent, careful digit reading
+    max_tokens: 4096,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }
+        ]
+      }
+    ]
+  };
+
+  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SETTINGS.openaiKey}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    let msg;
+    try { msg = JSON.parse(errText).error?.message || errText; }
+    catch { msg = errText; }
+    if (resp.status === 429) throw new Error(`429 quota: ${msg.slice(0,100)}`);
+    throw new Error(`HTTP ${resp.status}: ${msg.slice(0,150)}`);
+  }
+
+  const data = await resp.json();
+  if (data.error) throw new Error(`OpenAI: ${data.error.message}`);
+
+  const finishReason = data.choices?.[0]?.finish_reason || 'unknown';
+  const text = data.choices?.[0]?.message?.content || '';
+
+  if (finishReason === 'length') {
+    log(`⚠️ Response was truncated by token limit. Got partial: ${text.length} chars`, 'warn');
+  }
+
+  if (!text.trim()) {
+    if (finishReason === 'length') {
+      throw new Error(`Truncated by token limit before any output. Try GPT-4o mini or a smaller image.`);
+    }
+    throw new Error(`Empty response (finish: ${finishReason})`);
+  }
+
+  const parsed = extractJSON(text);
+  if (!parsed || !Array.isArray(parsed) || parsed.length === 0) {
+    if (finishReason === 'length') {
+      throw new Error(`JSON cut off mid-response. Got: ${text.slice(0,150)}`);
+    }
+    throw new Error(`JSON parse failed: ${text.slice(0,150)}`);
+  }
+  return parsed.map(normaliseRow);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  LOCAL SCANNING WITH PADDLEOCR (PP-OCR devanagari model served by a
+//  small local Python server — see the 📖 Setup guide / paddle_server.py)
+// ═══════════════════════════════════════════════════════════════════
+//  fileData is always an image here — startScan() already filters out
+//  PDFs before calling callAI() when the active provider is PaddleOCR.
+//  No API key is required; the browser posts the image to your own
+//  local/LAN server, gets back raw OCR text, and then a rule-based
+//  Nepali parser below maps that text into the demand-row fields.
+// Re-encodes an already-base64 JPEG/PNG at a smaller size, purely in-browser
+// via canvas. Used to shrink images before sending to the local OCR server,
+// keeping request size and server memory use down.
+function downscaleBase64Jpeg(base64, maxEdge, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onerror = () => reject(new Error('Could not downscale image for PaddleOCR'));
+    img.onload = () => {
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > maxEdge || h > maxEdge) {
+        const sc = maxEdge / Math.max(w, h);
+        w = Math.round(w * sc); h = Math.round(h * sc);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
+    };
+    img.src = 'data:image/jpeg;base64,' + base64;
+  });
+}
+
+async function callPaddleOCR(fileData) {
+  // OCR works best on a reasonably large image — but cap it so the JSON
+  // request body stays small and the local server doesn't blow up memory.
+  const smallBase64 = await downscaleBase64Jpeg(fileData.base64, 1800, 0.9);
+
+  let resp;
+  try {
+    resp = await fetch(`${SETTINGS.paddleUrl}/ocr`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: smallBase64 })
+    });
+  } catch (e) {
+    throw new Error(`Can't reach PaddleOCR server at ${SETTINGS.paddleUrl} — is it running? Start it with: python paddle_server.py (${e.message})`);
+  }
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    let msg;
+    try { msg = JSON.parse(errText).error || errText; }
+    catch { msg = errText; }
+    throw new Error(`PaddleOCR HTTP ${resp.status}: ${msg.slice(0,200)}`);
+  }
+
+  const data = await resp.json();
+  if (data.error) throw new Error(`PaddleOCR: ${data.error}`);
+
+  const text = (data.text || (Array.isArray(data.lines) ? data.lines.join('\n') : '') || '').trim();
+  if (!text) {
+    throw new Error('PaddleOCR returned no text — the image may be blank, too blurry, or upside down.');
+  }
+
+  // Show what the OCR actually read, so parser misses can be diagnosed
+  // against the original letter (dates, palika names, darta numbers...).
+  log('📝 OCR text (' + text.split('\n').length + ' lines): ' + text.replace(/\n/g, ' ⏎ ').slice(0, 600), 'info');
+
+  const row = parseNepaliLetterText(text);
+  return [normaliseRow(row)];
+}
+
+// ───────────────────────────────────────────────────────────────────
+//  Rule-based Nepali demand-letter parser.
+//  PaddleOCR only returns raw text (no AI reasoning), so these regex
+//  heuristics map that text onto the same fields the LLM providers
+//  return. Rows from this provider should ALWAYS be reviewed by hand.
+// ───────────────────────────────────────────────────────────────────
+
+const NP_DIGIT_MAP = { '०':'0','१':'1','२':'2','३':'3','४':'4','५':'5','६':'6','७':'7','८':'8','९':'9' };
+function toArabicDigits(s) { return (s || '').replace(/[०-९]/g, d => NP_DIGIT_MAP[d]); }
+
+const NP_MONTHS = [
+  [/बैशाख|वैशाख|बैसाख/, 1], [/जेठ|जेष्ठ/, 2], [/असार|आषाढ|असाढ/, 3],
+  [/साउन|श्रावण|सावन/, 4], [/भदौ|भाद्र/, 5], [/असोज|आश्विन|आस्विन/, 6],
+  [/कार्तिक|कात्तिक/, 7], [/मंसिर|मार्ग|मङ्सिर/, 8], [/पुष|पौष|पुस/, 9],
+  [/माघ/, 10], [/फागुन|फाल्गुन/, 11], [/चैत|चैत्र/, 12]
+];
+
+function parseNepaliLetterText(rawText) {
+  const text = toArabicDigits(rawText);
+  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+
+  // ── 1. Letter date: collect every valid BS date, keep the latest ──
+  const dates = [];
+  const dre = /(20[6-9]\d)\s*[\/\-.।|]\s*(\d{1,2})\s*[\/\-.।|]\s*(\d{1,2})/g;
+  let m;
+  while ((m = dre.exec(text)) !== null) {
+    const y = +m[1], mo = +m[2], d = +m[3];
+    if (y >= 2070 && y <= 2090 && mo >= 1 && mo <= 12 && d >= 1 && d <= 32) dates.push([y, mo, d]);
+  }
+  // Also "…साल <month name> महिना <day> गते" style
+  for (const [re, mo] of NP_MONTHS) {
+    const nm = text.match(new RegExp('(20[7-8]\\d)[^\\d]{0,20}' + re.source + '[^\\d]{0,15}(\\d{1,2})'));
+    if (nm) {
+      const y = +nm[1], d = +nm[nm.length - 1];
+      if (y >= 2070 && y <= 2090 && d >= 1 && d <= 32) dates.push([y, mo, d]);
+    }
+  }
+  dates.sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]) || (a[2] - b[2]));
+  const latest = dates[dates.length - 1];
+  const letterDate = latest
+    ? `${latest[0]}/${String(latest[1]).padStart(2,'0')}/${String(latest[2]).padStart(2,'0')}`
+    : '';
+
+  // ── 2. Darta no.: number on/near a line containing "दर्ता" ──
+  let dartaNo = '';
+  for (let i = 0; i < lines.length; i++) {
+    if (/दर्ता|darta/i.test(lines[i])) {
+      // strip any date on the line so we don't grab it by mistake
+      const cleaned = lines[i].replace(dre, ' ');
+      let dm = cleaned.match(/(\d{1,5})/);
+      if (!dm && lines[i + 1]) dm = lines[i + 1].replace(dre, ' ').match(/^(\d{1,5})\b/);
+      if (dm) { dartaNo = dm[1]; break; }
+    }
+  }
+  // Fallback: rubber-stamp दर्ता label often OCRs badly, but the number
+  // itself survives as a bare 2-4 digit line near the top of the letter.
+  if (!dartaNo) {
+    for (let i = 0; i < Math.min(lines.length, 8); i++) {
+      const bm = lines[i].match(/^(\d{2,4})$/);
+      if (bm && !(+bm[1] >= 2070 && +bm[1] <= 2090)) { dartaNo = bm[1]; break; }
+    }
+  }
+
+  // ── 3. Palika: match the 6 specific ones first, Kapilvastu is both a
+  //       palika and the district name so it's the fallback ──
+  // Patterns are deliberately loose — OCR often drops or swaps matras
+  // (e.g. यशोधरा read as यशाधरा), so match on stable consonant skeletons.
+  const PALIKA_PATTERNS = [
+    ['Banganga',    /बाणग|वाणग|banganga/i],
+    ['Buddhabhumi', /बुद्धभ|वुद्धभ|buddhabhumi/i],
+    ['Mayadevi',    /माया?देवी|मायादेवि|mayadevi/i],
+    ['Yashodhara',  /य[शस][ाोे]?धर|yashodhara/i],
+    ['Suddhodhan',  /[शस]ुद्धोधन|[शस]ुद्धाधन|suddhodhan/i],
+    ['Sidhganga',   /सिद्धग|सिद्दग|sidhganga/i],
+    ['Kapilvastu',  /कपिलवस्तु|कपिलवस्त|kapilvastu/i]
+  ];
+  let palika = 'Kapilvastu';
+  for (const [name, re] of PALIKA_PATTERNS) { if (re.test(text)) { palika = name; break; } }
+
+  // ── 4. Demand type: ordered keyword rules ──
+  const hasPole = /पोल|खम्बा|खम्भा|pole/i.test(text);
+  const hasWire = /तार|केबल|कन्डक्टर|cable|conductor|wire/i.test(text);
+  let demandType = 'Other', priority = 'Medium', purpose = '';
+  if (/न्सफ|ट्रान्स|transformer/i.test(text)) {
+    demandType = 'Transformer'; purpose = 'ट्रान्सफर्मर माग';
+  } else if (hasPole && /भाँच|भांच|भाच|टुट|भत्क/i.test(text)) {
+    demandType = 'Pole Broken'; priority = 'High'; purpose = 'सुरक्षा - भाँचिएको पोल';
+  } else if (/झुक|ढल्क|ढल्के|बाङ्गि|बांगि/i.test(text) && hasPole) {
+    demandType = 'Pole Tilt'; priority = 'High'; purpose = 'सुरक्षा - झुकेको पोल';
+  } else if (hasWire && /चुँड|चुड|छिन|टुट/i.test(text)) {
+    demandType = 'Wire Broken'; priority = 'High'; purpose = 'सुरक्षा - चुँडिएको तार';
+  } else if (hasWire && /झुण्ड|झोल|झुल|sag/i.test(text)) {
+    demandType = 'Cable Sag Correction'; priority = 'High'; purpose = 'झुण्डिएको तार मिलाउने';
+  } else if (/भोल्टेज|भोल्टेज|voltage|लो भोल्ट/i.test(text)) {
+    demandType = 'Voltage Correction'; priority = 'High'; purpose = 'भोल्टेज सुधार';
+  } else if (/कन्डक्टर|conductor/i.test(text) && /केबल|cable/i.test(text)) {
+    demandType = 'Conductor to Cable'; purpose = 'कन्डक्टरलाई केबलमा बदल्ने';
+  } else if (/सार्न|सारि|shift|स्थानान्तरण/i.test(text) && (hasPole || hasWire)) {
+    demandType = 'Pole/Cable Shifting'; purpose = 'पोल/तार सार्ने';
+  } else if (/विस्तार|extension/i.test(text)) {
+    demandType = 'Line Extension'; purpose = 'लाइन विस्तार';
+  } else if (hasPole && hasWire) {
+    demandType = 'New Pole and Cable'; purpose = 'घरायसी विद्युत जडान';
+  } else if (hasPole) {
+    demandType = 'Pole (पोल)'; purpose = 'पोल माग';
+  } else if (/एच\s*टी|HT/i.test(text) && hasWire) {
+    demandType = 'HT Cable'; purpose = 'एचटी केबल माग';
+  } else if (hasWire) {
+    demandType = 'LT Cable'; purpose = 'केबल/तार माग';
+  } else if (/मिटर|जडान|विद्युत माग/i.test(text)) {
+    demandType = 'New Pole and Cable'; purpose = 'घरायसी विद्युत जडान';
+  }
+
+  // ── 5. Applicant: citizen name after श्री/श्रीमती, before को/ले ──
+  let applicant = '';
+  const OFFICE_WORDS = /कार्यालय|नगरपालिका|गाउँपालिका|वडा|अध्यक्ष|प्रमुख|प्राधिकरण|शाखा/;
+  const nameRe = /श्री(?:मती)?\s+([\u0900-\u097F]+(?:\s+[\u0900-\u097F]+){0,3}?)\s*(?:ज्यू)?\s*(?:को|ले|का)\s/g;
+  let nmatch;
+  while ((nmatch = nameRe.exec(text)) !== null) {
+    const cand = nmatch[1].trim();
+    if (!OFFICE_WORDS.test(cand) && cand.length >= 3) { applicant = cand; break; }
+  }
+  // Fallback: no citizen named (village-wide demands) — use the signer,
+  // i.e. the name line directly above a वडा अध्यक्ष / प्रमुख / सचिव line.
+  if (!applicant) {
+    for (let i = 1; i < lines.length; i++) {
+      if (/अध्यक्ष|प्रमुख|सचिव/.test(lines[i])) {
+        const prev = lines[i - 1].trim();
+        if (/^[\u0900-\u097F]{2,}(\s+[\u0900-\u097F]{2,}){0,3}$/.test(prev) && !OFFICE_WORDS.test(prev)) {
+          applicant = prev; break;
+        }
+      }
+    }
+  }
+
+  // ── 6. Location: ward number + tole if present ──
+  let location = '';
+  const wm = text.match(/वडा\s*(?:नं|नम्बर|ने|न)?\.?\s*[:\-]?\s*(\d{1,2})/) || text.match(/ward\s*(?:no)?\.?\s*[:\-]?\s*(\d{1,2})/i);
+  if (wm) location = `वडा ${wm[1]}`;
+  const tm = text.match(/([\u0900-\u097F]{3,})\s*टोल/);
+  if (tm && !OFFICE_WORDS.test(tm[1])) location = (location ? location + ', ' : '') + `${tm[1]} टोल`;
+  else {
+    const gm = text.match(/([\u0900-\u097F]{3,})\s*गाउ[ँम]?/);
+    if (gm && !OFFICE_WORDS.test(gm[1])) location = (location ? location + ', ' : '') + `${gm[1]} गाउँ`;
+  }
+
+  // ── 7. Quantity: counts of poles / metres of wire ──
+  const qParts = [];
+  const pq = text.match(/(\d{1,3})[\s\-–]*(?:वटा|थान|ओटा)?[\s\-–]*(?:पोल|खम्बा|खम्भा)/);
+  if (pq) qParts.push(`${pq[1]} pole${+pq[1] > 1 ? 's' : ''}`);
+  else if (/एउटा\s*(?:पोल|खम्बा)/.test(text)) qParts.push('1 pole');
+  const wq = text.match(/(\d{2,5})\s*(?:मिटर|मि\.|m\b|meter)/i);
+  if (wq) qParts.push(`${wq[1]}m`);
+
+  return {
+    palika, letterDate, applicant, dartaNo, demandType,
+    quantity: qParts.join(', '),
+    location, purpose, priority,
+    remarks: 'PaddleOCR स्वतः-भरिएको — कृपया सबै फिल्ड जाँच गर्नुहोस्'
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  PROGRESS / LOG
+// ═══════════════════════════════════════════════════════════════════
+
+function updateProgress(done, total, msg) {
+  const pct = total > 0 ? Math.round(done/total*100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = `${done} / ${total}`;
+  document.getElementById('scanProgress').textContent = msg;
+}
+
+function log(msg, type='info') {
+  const el = document.getElementById('scanLog');
+  const d = document.createElement('div');
+  d.className = `log-line ${type}`;
+  d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  RENDER RESULTS TABLE
+// ═══════════════════════════════════════════════════════════════════
+
+function renderResults() {
+  const section = document.getElementById('resultsSection');
+  section.innerHTML = '';
+  const byPalika = {};
+  for (const p of PALIKAS) byPalika[p] = [];
+  for (const r of allRows) (byPalika[r.palika] || (byPalika[r.palika]=[])).push(r);
+
+  let totalCount = 0, activePalikas = 0;
+  for (const palika of PALIKAS) {
+    const rows = byPalika[palika];
+    if (!rows.length) continue;
+    activePalikas++; totalCount += rows.length;
+    const group = document.createElement('div');
+    group.className = 'palika-group';
+    group.innerHTML = `
+      <div class="palika-header">
+        <span class="palika-name">🏛 ${palika}</span>
+        <span class="palika-count">${rows.length}</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>#</th><th>Palika</th><th>Letter Date</th><th>Applicant</th>
+            <th>Darta</th><th>Type</th><th>Qty</th><th>Location</th>
+            <th>Purpose</th><th>Pri</th><th>Status</th><th>Remarks</th><th>Scan</th><th></th>
+          </tr></thead>
+          <tbody id="tbody-${palika}"></tbody>
+        </table>
+      </div>
+    `;
+    section.appendChild(group);
+    rows.forEach((r,i) => renderRow(palika, r, i+1));
+  }
+  if (!totalCount) {
+    section.innerHTML = `<div class="empty-state"><div class="es-icon">📭</div><p>No records yet.</p></div>`;
+  }
+  document.getElementById('resultsNotify').textContent = `✅ ${totalCount} demand(s) extracted — review, edit, then export below.`;
+  document.getElementById('totalCount').textContent = totalCount;
+  document.getElementById('palikaCount').textContent = activePalikas;
+}
+
+function renderRow(palika, r, sno) {
+  const tbody = document.getElementById('tbody-'+palika);
+  if (!tbody) return;
+  const tr = document.createElement('tr');
+  tr.id = 'row-'+r.id;
+  tr.innerHTML = `
+    <td>${sno}</td>
+    <td><select onchange="changePalika(${r.id},this.value)" style="font-size:12px;padding:3px 5px;">
+      ${PALIKAS.map(p=>`<option ${p===r.palika?'selected':''}>${p}</option>`).join('')}
+    </select></td>
+    <td><input type="text" value="${escapeHtml(r.letterDate)}" onchange="updateField(${r.id},'letterDate',this.value)" placeholder="YYYY/MM/DD" style="width:95px;font-size:12px;padding:3px 5px;"></td>
+    <td contenteditable="true" onblur="updateField(${r.id},'applicant',this.textContent)">${escapeHtml(r.applicant)}</td>
+    <td><input type="text" value="${escapeHtml(r.dartaNo)}" onchange="updateField(${r.id},'dartaNo',this.value)" style="width:60px;text-align:center;font-size:12px;padding:3px 5px;"></td>
+    <td><select onchange="updateField(${r.id},'demandType',this.value)" style="font-size:12px;padding:3px 5px;width:120px;">
+      ${DEMAND_TYPES.map(d=>`<option ${d===r.demandType?'selected':''}>${d}</option>`).join('')}
+    </select></td>
+    <td contenteditable="true" onblur="updateField(${r.id},'quantity',this.textContent)">${escapeHtml(r.quantity)}</td>
+    <td contenteditable="true" onblur="updateField(${r.id},'location',this.textContent)">${escapeHtml(r.location)}</td>
+    <td contenteditable="true" onblur="updateField(${r.id},'purpose',this.textContent)" style="min-width:130px;">${escapeHtml(r.purpose)}</td>
+    <td><select onchange="updateField(${r.id},'priority',this.value)" style="font-size:12px;padding:3px 5px;">
+      ${PRIORITIES.map(p=>`<option ${p===r.priority?'selected':''}>${p}</option>`).join('')}
+    </select></td>
+    <td><select onchange="updateField(${r.id},'status',this.value)" style="font-size:12px;padding:3px 5px;">
+      ${STATUSES.map(s=>`<option ${s===r.status?'selected':''}>${s}</option>`).join('')}
+    </select></td>
+    <td contenteditable="true" onblur="updateField(${r.id},'remarks',this.textContent)">${escapeHtml(r.remarks)}</td>
+    <td style="text-align:center;">${r.thumb
+      ? `<img src="${r.thumb}" alt="scan" onclick="viewThumb(${r.id})" style="height:46px;max-width:64px;object-fit:cover;border-radius:4px;border:1px solid rgba(37,99,196,0.3);cursor:zoom-in;display:block;">`
+      : `<span style="color:var(--muted);font-size:11px;">—</span>`}</td>
+    <td><button class="del-row" onclick="deleteRow(${r.id})">🗑</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function viewThumb(id) {
+  const r = allRows.find(x => x.id === id);
+  if (!r || !r.thumb) return;
+  document.getElementById('modalContent').innerHTML =
+    `<h2>📄 Scanned Letter</h2><img src="${r.thumb}" alt="scan" style="width:100%;height:auto;border-radius:8px;border:1px solid rgba(37,99,196,0.3);">`;
+  document.getElementById('setupModal').classList.add('show');
+}
+
+function updateField(id, field, val) {
+  const r = allRows.find(x=>x.id===id);
+  if (r) r[field] = String(val).trim();
+  document.getElementById('totalCount').textContent = allRows.length;
+  document.getElementById('palikaCount').textContent = new Set(allRows.map(r=>r.palika)).size;
+}
+function changePalika(id, p) {
+  const r = allRows.find(x=>x.id===id);
+  if (r) r.palika = p;
+  renderResults();
+}
+function deleteRow(id) { allRows = allRows.filter(x=>x.id!==id); renderResults(); }
+function addBlankRow() {
+  allRows.push({
+    id: nextId++, palika: PALIKAS[0],
+    letterDate:'', receivedDate: new Date().toISOString().slice(0,10),
+    applicant:'', dartaNo:'', demandType:'Pole (पोल)', quantity:'',
+    location:'', purpose:'', priority:'Medium', status:'Pending', remarks:'', thumb:''
+  });
+  renderResults();
+}
+function clearResults() {
+  if (allRows.length && !confirm('Clear all extracted records?')) return;
+  allRows = []; renderResults();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  EXPORT — GOOGLE SHEET
+// ═══════════════════════════════════════════════════════════════════
+
+async function syncToSheet() {
+  if (!allRows.length) { alert('No data!'); return; }
+  if (!SETTINGS.sheetUrl) {
+    alert('Apps Script URL not set. Click "Setup" next to the Sheet URL field for instructions.');
+    return;
+  }
+  if (SETTINGS.scanOnlyMode) { return syncScansOnly(); }
+
+  const btn = document.getElementById('gsheetBtn');
+  const status = document.getElementById('exportStatus');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Syncing...';
+
+  const byPalika = {};
+  for (const r of allRows) {
+    if (!byPalika[r.palika]) byPalika[r.palika] = [];
+    byPalika[r.palika].push({
+      letterDate: r.letterDate, receivedDate: r.receivedDate,
+      applicant: r.applicant, dartaNo: r.dartaNo,
+      demandType: r.demandType, quantity: r.quantity,
+      location: r.location, purpose: r.purpose,
+      priority: r.priority, status: r.status, remarks: r.remarks,
+      thumb: r.thumb || '',
+      scanFull: r.scanFull || ""
+    });
+  }
+
+  status.style.color = 'var(--muted)';
+  status.innerHTML = `⏳ Sending ${allRows.length} records to ${Object.keys(byPalika).length} palika tab(s)...`;
+
+  try {
+    const resp = await fetch(SETTINGS.sheetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(byPalika),
+      redirect: 'follow'
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    let result;
+    try { result = JSON.parse(text); }
+    catch { throw new Error('Invalid response. Got: ' + text.slice(0,200)); }
+    if (result.ok) {
+      status.style.color = 'var(--success)';
+      const summary = (result.results || []).join('<br>');
+      status.innerHTML = `
+        ✅ <strong>${result.totalWritten || allRows.length} rows saved!</strong><br>
+        <div style="margin-top:6px; font-size:12px;">${summary}</div>`;
+      btn.innerHTML = '✅ Saved!';
+      setTimeout(() => { btn.innerHTML = '📤 Sync to Sheet'; btn.disabled = false; }, 5000);
+    } else throw new Error(result.error || 'Server returned ok:false');
+  } catch(err) {
+    status.style.color = 'var(--red)';
+    status.innerHTML = '❌ ' + err.message;
+    btn.innerHTML = '📤 Sync to Sheet';
+    btn.disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  EXPORT — CSV
+// ═══════════════════════════════════════════════════════════════════
+
+function downloadCSV() {
+  if (!allRows.length) { alert('No data!'); return; }
+  const byPalika = {};
+  for (const r of allRows) {
+    if (!byPalika[r.palika]) byPalika[r.palika] = [];
+    byPalika[r.palika].push(r);
+  }
+  const headers = ['S.N.','Letter Date','Received Date','Applicant','Darta No.',
+                   'Demand Type','Quantity','Location','Purpose','Priority','Status','Remarks'];
+  const date = new Date().toISOString().slice(0,10);
+  let downloaded = 0;
+  for (const palika of Object.keys(byPalika)) {
+    const rows = byPalika[palika];
+    const csvRows = [headers.join(',')];
+    rows.forEach((r,i) => {
+      csvRows.push([
+        i+1, r.letterDate, r.receivedDate, r.applicant, r.dartaNo,
+        r.demandType, r.quantity, r.location, r.purpose, r.priority, r.status, r.remarks
+      ].map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(','));
+    });
+    const blob = new Blob(['\ufeff' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `NEA_${palika}_${date}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    downloaded++;
+  }
+  document.getElementById('exportStatus').innerHTML = `✅ Downloaded ${downloaded} CSV file(s)`;
+  document.getElementById('exportStatus').style.color = 'var(--success)';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  EXPORT — EXCEL (XLSX with embedded scan images, via ExcelJS)
+//  Library loaded on demand from CDN — nothing baked into this file.
+// ═══════════════════════════════════════════════════════════════════
+
+function dataUrlToB64(dataUrl) {
+  // returns { b64, ext } or null
+  if (!dataUrl || dataUrl.indexOf(',') === -1) return null;
+  const ext = /image\/png/i.test(dataUrl) ? 'png' : 'jpeg';
+  return { b64: dataUrl.split(',')[1], ext };
+}
+
+async function downloadExcel() {
+  if (!allRows.length) { alert('No data!'); return; }
+  const status = document.getElementById('exportStatus');
+  status.style.color = 'var(--muted)';
+  status.innerHTML = '⏳ Loading Excel library...';
+
+  // Load ExcelJS dynamically (supports embedding images, unlike SheetJS free build)
+  if (typeof ExcelJS === 'undefined') {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+      s.onload = res; s.onerror = () => rej(new Error('Cannot load Excel library — check internet'));
+      document.head.appendChild(s);
+    }).catch(err => { status.innerHTML = '❌ ' + err.message; status.style.color = 'var(--red)'; throw err; });
+  }
+
+  status.innerHTML = '⏳ Building workbook...';
+  const wb = new ExcelJS.Workbook();
+  const byPalika = {};
+  for (const r of allRows) {
+    if (!byPalika[r.palika]) byPalika[r.palika] = [];
+    byPalika[r.palika].push(r);
+  }
+  const headers = ['S.N.','Letter Date','Received Date','Applicant','Darta No.',
+                   'Demand Type','Quantity','Location','Purpose','Priority','Status','Remarks','Scan'];
+  const widths = [6,14,14,22,9,18,9,24,30,9,11,24,16];
+
+  for (const palika of Object.keys(byPalika)) {
+    const rows = byPalika[palika];
+    const ws = wb.addWorksheet(palika.slice(0,31));
+    ws.columns = widths.map(w => ({ width: w }));
+
+    // Header row
+    const headerRow = ws.addRow(headers);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { vertical: 'middle' };
+
+    rows.forEach((r, i) => {
+      const row = ws.addRow([
+        i+1, r.letterDate, r.receivedDate, r.applicant, r.dartaNo,
+        r.demandType, r.quantity, r.location, r.purpose, r.priority, r.status, r.remarks, ''
+      ]);
+      row.alignment = { vertical: 'middle', wrapText: true };
+
+      // Embed the scan thumbnail into the last ("Scan") column
+      const t = dataUrlToB64(r.thumb);
+      if (t) {
+        const imgId = wb.addImage({ base64: t.b64, extension: t.ext });
+        const rowNumber = row.number;           // 1-based, includes header
+        row.height = 60;                         // make room for the image
+        // Scan column is index 13 (1-based) → zero-based col 12
+        ws.addImage(imgId, {
+          tl: { col: 12.1, row: rowNumber - 1 + 0.1 },
+          ext: { width: 90, height: 70 },
+          editAs: 'oneCell'
+        });
+      }
+    });
+  }
+
+  const date = new Date().toISOString().slice(0,10);
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `NEA_Taulihawa_${date}.xlsx`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  status.style.color = 'var(--success)';
+  status.innerHTML = `✅ Excel file downloaded — ${Object.keys(byPalika).length} palika sheet(s), scans embedded`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  EXPORT — PDF (bundle uploaded images)
+// ═══════════════════════════════════════════════════════════════════
+
+async function downloadPDF() {
+  const imgs = files.filter(f => f.type.startsWith('image/'));
+  if (!imgs.length) { alert('No images uploaded.'); return; }
+  const btn = document.getElementById('pdfBtn');
+  btn.disabled = true; btn.innerHTML = '⏳ Building...';
+  try {
+    const { jsPDF } = window.jspdf;
+    const imgList = await Promise.all(imgs.map(f => new Promise((res,rej) => {
+      const r = new FileReader();
+      r.onload = e => {
+        const im = new Image();
+        im.onload = () => res({ data: e.target.result, w: im.naturalWidth, h: im.naturalHeight, name: f.name });
+        im.onerror = () => rej(new Error(f.name));
+        im.src = e.target.result;
+      };
+      r.onerror = () => rej(new Error(f.name));
+      r.readAsDataURL(f);
+    })));
+    let pdf = null;
+    imgList.forEach((it, idx) => {
+      const ls = it.w > it.h;
+      const pw = ls ? 297 : 210, ph = ls ? 210 : 297;
+      if (idx === 0) pdf = new jsPDF({ orientation: ls ? 'l' : 'p', unit:'mm', format:'a4' });
+      else pdf.addPage('a4', ls ? 'l' : 'p');
+      const m = 5, maxW = pw-2*m, maxH = ph-2*m;
+      const ratio = Math.min(maxW/it.w, maxH/it.h);
+      const dw = it.w*ratio, dh = it.h*ratio;
+      pdf.addImage(it.data, 'JPEG', (pw-dw)/2, (ph-dh)/2, dw, dh);
+      pdf.setFontSize(8); pdf.setTextColor(150);
+      pdf.text(`${idx+1}/${imgList.length} • ${it.name}`, pw/2, ph-1.5, {align:'center'});
+    });
+    pdf.save(`NEA_Letters_${new Date().toISOString().slice(0,10)}.pdf`);
+    btn.innerHTML = '✅ Downloaded!';
+    setTimeout(() => { btn.innerHTML = '📑 Download PDF'; btn.disabled = false; }, 2500);
+  } catch(err) {
+    alert('PDF failed: ' + err.message);
+    btn.innerHTML = '📑 Download PDF'; btn.disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SETUP MODALS
+// ═══════════════════════════════════════════════════════════════════
+
+const PADDLE_SERVER_CODE = `# paddle_server.py — local OCR server for the NEA scanner
+# Install once:  pip install paddlepaddle paddleocr flask flask-cors pillow numpy
+# Run:           py -V:3.12 paddle_server.py
+import base64, io, os
+# NOTE: requires paddlepaddle 3.2.2 (3.3.x has a broken oneDNN CPU path:
+# "ConvertPirAttribute2RuntimeAttribute not support pir::ArrayAttribute").
+# Install with:  py -V:3.12 -m pip install paddlepaddle==3.2.2
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from PIL import Image
+import numpy as np
+from paddleocr import PaddleOCR
+
+# Nepali uses Devanagari script. Model naming changed across PaddleOCR
+# versions, so try the codes in order until one works:
+#   3.x (PP-OCRv5 multilingual): lang='ne' (Nepali) or 'hi' (Hindi, same script)
+#   2.x (legacy):                lang='devanagari' script group
+ocr = None
+_last_err = None
+for kwargs in (
+    # Fast CPU setup. NOTE: naming any model makes PaddleOCR ignore \`lang\`,
+    # so BOTH models must be named explicitly — mobile detector + the
+    # Devanagari (Nepali) recognizer.
+    dict(text_detection_model_name='PP-OCRv5_mobile_det',
+         text_recognition_model_name='devanagari_PP-OCRv5_mobile_rec',
+         use_doc_orientation_classify=False, use_doc_unwarping=False,
+         use_textline_orientation=False),                             # 3.x fast + Devanagari
+    dict(lang='ne', use_doc_orientation_classify=False,
+         use_doc_unwarping=False, use_textline_orientation=False),   # 3.x Nepali (default det)
+    dict(lang='hi', use_doc_orientation_classify=False,
+         use_doc_unwarping=False, use_textline_orientation=False),   # 3.x Hindi (same script)
+    dict(lang='devanagari', use_angle_cls=True),                     # 2.x legacy
+):
+    try:
+        ocr = PaddleOCR(**kwargs)
+        print("Loaded PaddleOCR:", kwargs.get('text_recognition_model_name') or f"lang='{kwargs.get('lang')}'")
+        break
+    except (ValueError, TypeError) as e:
+        _last_err = e
+if ocr is None:
+    raise SystemExit(f"Could not load a Devanagari-capable model: {_last_err}")
+
+app = Flask(__name__)
+CORS(app)  # allow the scanner HTML page (any origin) to call this server
+
+@app.get('/health')
+def health():
+    return jsonify(ok=True, engine='PaddleOCR', lang='devanagari')
+
+@app.post('/ocr')
+def do_ocr():
+    try:
+        data = request.get_json(force=True)
+        img = Image.open(io.BytesIO(base64.b64decode(data['image']))).convert('RGB')
+        arr = np.array(img)
+        lines = []
+        if hasattr(ocr, 'predict'):                    # PaddleOCR 3.x
+            for res in ocr.predict(arr):
+                lines += [t for t in res.get('rec_texts', []) if t]
+        else:                                          # PaddleOCR 2.x
+            result = ocr.ocr(arr, cls=True)
+            for page in (result or []):
+                for item in (page or []):
+                    lines.append(item[1][0])
+        return jsonify(ok=True, lines=lines, text='\\n'.join(lines))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e)), 500
+
+if __name__ == '__main__':
+    print('PaddleOCR server running at http://localhost:8501')
+    app.run(host='0.0.0.0', port=8501)
+`;
+
+const APPS_SCRIPT_CODE = `// NEA TAULIHAWA DCS — SHEET SYNC
+//
+// Use the FULL script file provided separately
+// (NEA_SCRIPT_v10_2.gs — "FULL SCRIPT v10.2").
+//
+// That file is the single source of truth. It:
+//   • appends new rows without altering existing entries
+//   • embeds the scanned photo into the Scan column (N)
+//   • sorts each Palika sheet by ward number (non-destructively)
+//   • rebuilds the Summary sheet
+//   • serves read-only Search (Palika / Demand Type / Purpose word-match /
+//     Fiscal Year / Darta No. / Applicant Name / Ward No.) via ?action=search
+//   • serves a live, editable copy of any Palika sheet via
+//     ?action=getSheetData, with single-cell edits via action:'updateCell'
+//   • lets this app add/rename Demand Types (Config tab) live
+//   • lets this app attach a scan ONLY (no new row) to an existing row
+//     matched by Darta No., with ambiguous/unmatched cases reported back
+//     instead of guessed
+//
+// HOW TO INSTALL:
+//   1. Extensions -> Apps Script
+//   2. Delete the default code, paste the FULL v10.2 file
+//   3. Ctrl+S to save
+//   4. Run  runOneTimeUpdate  once -> Authorize -> Allow
+//   5. Deploy -> Manage deployments -> Edit -> New version -> Deploy
+//   6. Copy the /exec URL into the "Google Sheet URL" field
+//
+// IF SOME SCANS SHOW BLANK WHEN VIEWED IN THIS APP:
+//   Run  repairScanSharing  once (Function dropdown -> repairScanSharing
+//   -> Run). This fixes link-sharing on any scan that was created before
+//   this fix, or whose sharing silently failed — it only changes Drive
+//   sharing settings, never a spreadsheet cell.
+//
+// (Paste the full v10.2 file here in the editor — not this note.)`;
+
+const MODALS = {
+  gemini: {
+    title: '🔑 Get Your Free Gemini API Key',
+    html: `
+      <div class="step-box">
+        <strong>Step 1:</strong> Open Google AI Studio:<br>
+        <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#60a5fa;">https://aistudio.google.com/apikey ↗</a>
+      </div>
+      <div class="step-box">
+        <strong>Step 2:</strong> Sign in with any Google account (your office Gmail works fine — no credit card needed).
+      </div>
+      <div class="step-box">
+        <strong>Step 3:</strong> Click <strong>"+ Create API key"</strong>. Choose "Create API key in new project" if asked.
+      </div>
+      <div class="step-box">
+        <strong>Step 4:</strong> Copy the long key that appears (starts with <code style="color:#fde68a;">AIza...</code>).
+      </div>
+      <div class="step-box" style="border-left-color:var(--success);">
+        <strong style="color:var(--success);">Step 5:</strong> Paste it in the "Gemini API Key" field above and click <strong>Test Gemini</strong>.
+      </div>
+      <div style="background:rgba(34,197,94,0.1); border-radius:9px; padding:12px; margin-top:12px; font-size:12px; color:#86efac;">
+        ✅ <strong>Free tier limits</strong> (no credit card, no expiry):<br>
+        • Gemini 2.5 Flash-Lite: 15 req/min, <strong>1,000 letters/day</strong><br>
+        • Gemini 2.5 Flash: 10 req/min, 250 letters/day<br>
+        Resets at midnight Pacific time. Plenty for an office workload.
+      </div>
+      <div style="background:rgba(245,158,11,0.1); border-radius:9px; padding:12px; margin-top:8px; font-size:11px; color:#fde68a;">
+        ⚠️ Don't share or commit the key publicly. It's stored only on this device's browser.
+      </div>`
+  },
+  openai: {
+    title: '🔑 Get Your OpenAI API Key',
+    html: `
+      <div class="step-box">
+        <strong>Step 1:</strong> Open OpenAI's API key page:<br>
+        <a href="https://platform.openai.com/api-keys" target="_blank" style="color:#60a5fa;">https://platform.openai.com/api-keys ↗</a>
+      </div>
+      <div class="step-box">
+        <strong>Step 2:</strong> Sign in or create an account. Add a payment method under <strong>Billing</strong> — OpenAI's API is pay-as-you-go, there is no free daily quota like Gemini.
+      </div>
+      <div class="step-box">
+        <strong>Step 3:</strong> Click <strong>"+ Create new secret key"</strong>, name it (e.g. "NEA Scanner"), and create it.
+      </div>
+      <div class="step-box">
+        <strong>Step 4:</strong> Copy the key that appears (starts with <code style="color:#fde68a;">sk-...</code>) — it's shown only once.
+      </div>
+      <div class="step-box" style="border-left-color:var(--success);">
+        <strong style="color:var(--success);">Step 5:</strong> Paste it in the "OpenAI API Key" field above, pick "OpenAI (GPT)" as the provider, and click <strong>Test OpenAI</strong>.
+      </div>
+      <div style="background:rgba(245,158,11,0.1); border-radius:9px; padding:12px; margin-top:8px; font-size:11px; color:#fde68a;">
+        ⚠️ OpenAI vision models only accept image files (JPG/PNG) — PDF uploads are skipped automatically when this provider is selected. Use Gemini for PDFs.
+      </div>
+      <div style="background:rgba(245,158,11,0.1); border-radius:9px; padding:12px; margin-top:8px; font-size:11px; color:#fde68a;">
+        ⚠️ Don't share or commit the key publicly. It's stored only on this device's browser.
+      </div>`
+  },
+  paddle: {
+    title: '🖥️ Set Up Local Scanning with PaddleOCR',
+    html: `
+      <div class="step-box">
+        <strong>Step 1:</strong> Install Python 3.9+ on a computer (your PC, an office server, anything reachable over the network):<br>
+        <a href="https://www.python.org/downloads/" target="_blank" style="color:#60a5fa;">https://www.python.org/downloads ↗</a>
+      </div>
+      <div class="step-box">
+        <strong>Step 2:</strong> Install PaddleOCR and the tiny server dependencies from a terminal on that machine:
+        <pre style="white-space:pre-wrap;">pip install paddlepaddle paddleocr flask flask-cors pillow numpy</pre>
+        The first run downloads the Devanagari (Nepali) recognition model automatically (~20 MB, one time).
+      </div>
+      <div class="step-box">
+        <strong>Step 3:</strong> Save this as <code style="color:#fde68a;">paddle_server.py</code> and run it with <code style="color:#fde68a;">python paddle_server.py</code>:
+        <pre id="paddleServerCode"></pre>
+        <button class="btn btn-test btn-sm" onclick="copyPaddleServer()" style="margin-top:8px;">📋 Copy</button>
+      </div>
+      <div class="step-box">
+        <strong>Step 4:</strong> Make sure the server is reachable from <em>this browser</em>:
+        <ul style="margin:6px 0 0 18px; padding:0;">
+          <li>Same computer → default <code style="color:#fde68a;">http://localhost:8501</code> works as-is.</li>
+          <li>Different computer on your LAN → use its LAN IP here, e.g. <code style="color:#fde68a;">http://192.168.1.50:8501</code> (the server already listens on all interfaces and allows CORS).</li>
+        </ul>
+      </div>
+      <div class="step-box">
+        <strong>Step 5:</strong> Pick "Local (PaddleOCR)" as the provider above, enter the URL, then click <strong>Test PaddleOCR</strong>.
+      </div>
+      <div style="background:rgba(34,197,94,0.1); border-radius:9px; padding:12px; margin-top:12px; font-size:12px; color:#86efac;">
+        ✅ Fully free, fully offline/private — nothing leaves your network. No API key, no usage limits, no internet required once the model is downloaded. Runs fine on CPU-only machines.
+      </div>
+      <div style="background:rgba(245,158,11,0.1); border-radius:9px; padding:12px; margin-top:8px; font-size:11px; color:#fde68a;">
+        ⚠️ PaddleOCR is pure OCR — it reads the text but does not "understand" the letter like Gemini/GPT do. The app fills the fields using built-in Nepali keyword rules, which work best on <strong>printed/typed</strong> letters. Handwritten dates and darta numbers will often need manual correction — always review every row. Image files only (JPG/PNG); PDFs are skipped under this provider.
+      </div>`
+  },
+  gsheet: {
+    title: '📊 Apps Script Setup (one time)',
+    html: `
+      <div class="step-box">
+        <strong>Step 1:</strong> Open your Google Sheet (the Demand Register) in your browser.
+      </div>
+      <div class="step-box"><strong>Step 2:</strong> Click <strong>Extensions → Apps Script</strong>.</div>
+      <div class="step-box">
+        <strong>Step 3:</strong> Delete all default code, paste this:
+        <pre id="scriptCode"></pre>
+        <button class="btn btn-test btn-sm" onclick="copyScript()" style="margin-top:8px;">📋 Copy</button>
+      </div>
+      <div class="step-box"><strong>Step 4:</strong> Press <strong>Ctrl+S</strong> to save.</div>
+      <div class="step-box">
+        <strong>Step 5:</strong> Click <strong>Deploy → New deployment</strong> → ⚙ → <strong>Web app</strong><br>
+        • Execute as: <strong>Me</strong> · Who has access: <strong>Anyone</strong> ⚠️<br>
+        • Click <strong>Deploy</strong> → Authorize → Allow.
+      </div>
+      <div class="step-box" style="border-left-color:var(--success);">
+        <strong style="color:var(--success);">Step 6:</strong> Copy the URL (ends in <code style="color:#fde68a;">/exec</code>) and paste in the "Google Sheet URL" field above.
+      </div>
+      <div class="step-box" style="border-left-color:var(--accent);">
+        <strong style="color:var(--accent2);">Step 7 (for scans):</strong> In each Palika tab, add a <strong>"Scan"</strong> header in <strong>column N</strong> (right after Remarks). The synced scanned letter image is embedded into that column automatically. To view a scan larger, <strong>single-click the image cell</strong> — Sheets shows a preview you can expand.
+      </div>`
+  },
+  about: {
+    title: 'ℹ️ About this App',
+    html: `
+      <div class="step-box">
+        <strong>What it does:</strong> Scans Nepali demand letters using AI (Google Gemini, OpenAI GPT) or a fully local PaddleOCR server, extracts applicant name, dates, darta number, location, and demand type, and syncs to your Google Sheet.
+      </div>
+      <div class="step-box">
+        <strong>Search & manage:</strong> The "Search Register" tab reads live from your Sheet — filter by Palika, Demand Type, Purpose (word match), Applicant Name (word match), Darta No., Ward No., and Fiscal Year (starts month 4, e.g. 2082/04/01–2083/03/32). Results can be printed. In Settings you can add or rename Demand Types, which updates the Sheet's dropdown everywhere. The "Scan-only sync" toggle skips AI entirely — you just scan/photograph the letter and type its Darta No. when asked, and it's attached to the matching row (or added as a new row if nothing matches). Any scan can be viewed inline without leaving the app.
+      </div>
+      <div class="step-box">
+        <strong>View & edit sheets:</strong> The "View/Edit Sheets" tab shows a live, directly-editable copy of any Palika tab — click a cell to change it, and it saves straight back to the Google Sheet. Also printable.
+      </div>
+      <div class="step-box">
+        <strong>Where it runs:</strong> 100% in your browser. No backend server. Save the HTML file to your computer or pendrive — works offline except when scanning (Gemini call) or syncing (Sheet call).
+      </div>
+      <div class="step-box">
+        <strong>Privacy:</strong> Your API key, settings, and extracted data stay on this device's browser localStorage. Letter images are sent to Google's Gemini API for AI processing only when you click Scan. Google's free tier may use prompts to improve their models — for confidential government data, consider their paid tier where this is disabled.
+      </div>
+      <div class="step-box">
+        <strong>Data flow:</strong> Letter image → your browser → Gemini API (extracts text) → your browser (you review/edit) → your Google Sheet (via your Apps Script). Anthropic/Claude is not involved at any step.
+      </div>
+      <div class="step-box">
+        <strong>Cost:</strong> Free up to 1,000 letters/day on Flash-Lite model. Above that, pay tier is roughly $0.001 per letter.
+      </div>`
+  }
+};
+
+function showSetup(key) {
+  const m = MODALS[key];
+  if (!m) return;
+  document.getElementById('modalContent').innerHTML = `<h2>${m.title}</h2>${m.html}`;
+  if (key === 'gsheet') document.getElementById('scriptCode').textContent = APPS_SCRIPT_CODE;
+  if (key === 'paddle') document.getElementById('paddleServerCode').textContent = PADDLE_SERVER_CODE;
+  document.getElementById('setupModal').classList.add('show');
+}
+function hideSetup() { document.getElementById('setupModal').classList.remove('show'); }
+function copyPaddleServer() {
+  navigator.clipboard.writeText(PADDLE_SERVER_CODE).then(() => {
+    event.target.textContent = '✅ Copied!';
+    setTimeout(() => event.target.textContent = '📋 Copy', 2000);
+  });
+}
+function copyScript() {
+  navigator.clipboard.writeText(APPS_SCRIPT_CODE).then(() => {
+    event.target.textContent = '✅ Copied!';
+    setTimeout(() => event.target.textContent = '📋 Copy', 2000);
+  });
+}
+document.getElementById('setupModal').addEventListener('click', e => {
+  if (e.target.id === 'setupModal') hideSetup();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  MAIN TABS
+// ═══════════════════════════════════════════════════════════════════
+
+function switchMainTab(tab) {
+  const pages = { scan: 'tab-scan', search: 'tab-search', sheets: 'tab-sheets' };
+  const btns  = { scan: 'tab-btn-scan', search: 'tab-btn-search', sheets: 'tab-btn-sheets' };
+  Object.keys(pages).forEach(key => {
+    document.getElementById(pages[key]).classList.toggle('active', key === tab);
+    document.getElementById(btns[key]).classList.toggle('active', key === tab);
+  });
+  if (tab === 'search') {
+    populateSearchPalikaDropdown();
+    populateSearchDemandTypeDropdown();
+    if (SETTINGS.sheetUrl) loadFiscalYearsFromSheet();
+  } else if (tab === 'sheets') {
+    populateSheetViewPalikaDropdown();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  DEMAND TYPE MANAGER  (Config sheet — add / rename, live)
+// ═══════════════════════════════════════════════════════════════════
+
+// Pull the current live Demand Type list from the Google Sheet's Config
+// tab and refresh: the in-memory DEMAND_TYPES array, the row-editor
+// dropdowns (via re-render if results are showing), the Settings manager
+// list, and the Search page's Demand Type dropdown.
+async function loadDemandTypesFromSheet() {
+  if (!SETTINGS.sheetUrl) { renderDemandTypeManager(); return; }
+  try {
+    const url = SETTINGS.sheetUrl + (SETTINGS.sheetUrl.includes('?') ? '&' : '?') + 'action=getDemandTypes';
+    const resp = await fetch(url, { method: 'GET', redirect: 'follow' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if (data.ok && Array.isArray(data.demandTypes) && data.demandTypes.length) {
+      DEMAND_TYPES = data.demandTypes;
+      if (typeof allRows !== 'undefined' && allRows.length) renderResults();
+      populateSearchDemandTypeDropdown();
+    }
+  } catch (e) {
+    console.warn('Could not load demand types from sheet:', e);
+  }
+  renderDemandTypeManager();
+}
+
+function renderDemandTypeManager() {
+  const list = document.getElementById('dtList');
+  if (!list) return;
+  if (!DEMAND_TYPES.length) {
+    list.innerHTML = `<div class="hint" style="font-size:12px;">No demand types loaded yet.</div>`;
+    return;
+  }
+  list.innerHTML = DEMAND_TYPES.map((dt, i) => `
+    <div class="dt-row" id="dtRow-${i}">
+      <span class="dt-name" id="dtLabel-${i}">${escapeHtml(dt)}</span>
+      <button class="dt-edit-btn" onclick="startEditDemandType(${i})">✏️ Rename</button>
+    </div>
+  `).join('');
+}
+
+// NOTE: startEditDemandType/saveEditDemandType intentionally look the
+// current/old name up from DEMAND_TYPES[i] at click-time (by INDEX only)
+// rather than embedding the name text itself inside an onclick="..."
+// attribute string. Demand type names can contain apostrophes, quotes,
+// and Devanagari punctuation that's easy to get wrong when hand-escaping
+// into an HTML attribute — embedding only the numeric index sidesteps
+// that whole class of bug, which is what was silently breaking Save.
+function startEditDemandType(i) {
+  const row = document.getElementById('dtRow-' + i);
+  if (!row) return;
+  const current = DEMAND_TYPES[i];
+  row.innerHTML = `
+    <input type="text" id="dtEditInput-${i}" value="${escapeHtml(current)}">
+    <button class="dt-save-btn" onclick="saveEditDemandType(${i})">✔ Save</button>
+    <button class="dt-cancel-btn" onclick="renderDemandTypeManager()">✕ Cancel</button>
+    <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer;white-space:nowrap;">
+      <input type="checkbox" id="dtPropagate-${i}" style="width:auto;margin:0;">
+      also update existing rows
+    </label>
+  `;
+}
+
+async function saveEditDemandType(i) {
+  const oldName = DEMAND_TYPES[i]; // looked up by index, not re-parsed from markup
+  const input = document.getElementById('dtEditInput-' + i);
+  const propagateBox = document.getElementById('dtPropagate-' + i);
+  const newName = input.value.trim();
+  const status = document.getElementById('dtStatus');
+  if (!newName) { status.className = 'dt-status err'; status.textContent = 'Name cannot be empty.'; return; }
+  if (newName === oldName) { renderDemandTypeManager(); return; }
+  if (!SETTINGS.sheetUrl) { status.className = 'dt-status err'; status.textContent = 'Set your Google Sheet URL first.'; return; }
+
+  status.className = 'dt-status'; status.textContent = '⏳ Saving...';
+  try {
+    const resp = await fetch(SETTINGS.sheetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'editDemandType', oldName, newName, propagate: !!(propagateBox && propagateBox.checked) }),
+      redirect: 'follow'
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if (data.ok) {
+      DEMAND_TYPES = data.demandTypes || DEMAND_TYPES;
+      status.className = 'dt-status ok';
+      status.textContent = `✓ Renamed "${oldName}" → "${newName}". ${data.rowsUpdated ? data.rowsUpdated + ' existing row(s) updated.' : ''}`;
+      renderDemandTypeManager();
+      populateSearchDemandTypeDropdown();
+      if (allRows.length) renderResults();
+    } else {
+      status.className = 'dt-status err'; status.textContent = '✗ ' + (data.error || 'Failed to rename');
+      renderDemandTypeManager();
+    }
+  } catch (e) {
+    status.className = 'dt-status err'; status.textContent = '✗ ' + e.message;
+    renderDemandTypeManager();
+  }
+}
+
+async function addDemandType() {
+  const input = document.getElementById('dtNewName');
+  const name = input.value.trim();
+  const status = document.getElementById('dtStatus');
+  if (!name) { status.className = 'dt-status err'; status.textContent = 'Enter a name first.'; return; }
+  if (!SETTINGS.sheetUrl) { status.className = 'dt-status err'; status.textContent = 'Set your Google Sheet URL first.'; return; }
+
+  status.className = 'dt-status'; status.textContent = '⏳ Adding...';
+  try {
+    const resp = await fetch(SETTINGS.sheetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'addDemandType', name }),
+      redirect: 'follow'
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      DEMAND_TYPES = data.demandTypes || DEMAND_TYPES;
+      input.value = '';
+      status.className = 'dt-status ok';
+      status.textContent = `✓ Added "${name}".`;
+      renderDemandTypeManager();
+      populateSearchDemandTypeDropdown();
+    } else {
+      status.className = 'dt-status err'; status.textContent = '✗ ' + (data.error || 'Failed to add');
+    }
+  } catch (e) {
+    status.className = 'dt-status err'; status.textContent = '✗ ' + e.message;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SEARCH  (read-only — filters by Palika, Demand Type, Purpose word
+//  match, and Fiscal Year, reading live from the Google Sheet)
+// ═══════════════════════════════════════════════════════════════════
+
+function populateSearchPalikaDropdown() {
+  const sel = document.getElementById('searchPalika');
+  if (!sel) return;
+  const current = sel.value || 'all';
+  sel.innerHTML = `<option value="all">All Palikas</option>` +
+    PALIKAS.map(p => `<option value="${p}">${p}</option>`).join('');
+  sel.value = PALIKAS.includes(current) ? current : 'all';
+}
+
+function populateSearchDemandTypeDropdown() {
+  const sel = document.getElementById('searchDemandType');
+  if (!sel) return;
+  const current = sel.value || 'all';
+  sel.innerHTML = `<option value="all">All Types</option>` +
+    DEMAND_TYPES.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  sel.value = DEMAND_TYPES.includes(current) ? current : 'all';
+}
+
+async function loadFiscalYearsFromSheet() {
+  const sel = document.getElementById('searchFiscalYear');
+  if (!sel || !SETTINGS.sheetUrl) return;
+  try {
+    const url = SETTINGS.sheetUrl + (SETTINGS.sheetUrl.includes('?') ? '&' : '?') + 'action=getFiscalYears';
+    const resp = await fetch(url, { method: 'GET', redirect: 'follow' });
+    const data = await resp.json();
+    if (data.ok && Array.isArray(data.fiscalYears)) {
+      const current = sel.value || 'all';
+      sel.innerHTML = `<option value="all">All Years</option>` +
+        data.fiscalYears.map(fy => `<option value="${fy}">FY ${fy}</option>`).join('');
+      sel.value = data.fiscalYears.includes(current) ? current : 'all';
+    }
+  } catch (e) {
+    console.warn('Could not load fiscal years:', e);
+  }
+}
+
+function resetSearch() {
+  document.getElementById('searchPalika').value = 'all';
+  document.getElementById('searchDemandType').value = 'all';
+  document.getElementById('searchFiscalYear').value = 'all';
+  document.getElementById('searchWard').value = '';
+  document.getElementById('searchDartaNo').value = '';
+  document.getElementById('searchName').value = '';
+  document.getElementById('searchPurpose').value = '';
+  document.getElementById('searchResultsWrap').innerHTML = '';
+  document.getElementById('searchSummary').textContent = '';
+  document.getElementById('printSearchBtn').style.display = 'none';
+  lastSearchResults = [];
+}
+
+let lastSearchResults = []; // kept around so Print can re-render without re-fetching
+
+async function runSearch() {
+  if (!SETTINGS.sheetUrl) {
+    alert('Apps Script URL not set. Click "Setup" next to the Sheet URL field in Settings first.');
+    return;
+  }
+  const btn = document.getElementById('searchBtn');
+  const wrap = document.getElementById('searchResultsWrap');
+  const summary = document.getElementById('searchSummary');
+  const printBtn = document.getElementById('printSearchBtn');
+  const palika = document.getElementById('searchPalika').value;
+  const demandType = document.getElementById('searchDemandType').value;
+  const fiscalYear = document.getElementById('searchFiscalYear').value;
+  const ward = document.getElementById('searchWard').value.trim();
+  const dartaNo = document.getElementById('searchDartaNo').value.trim();
+  const name = document.getElementById('searchName').value.trim();
+  const purpose = document.getElementById('searchPurpose').value.trim();
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Searching...';
+  summary.textContent = '';
+  printBtn.style.display = 'none';
+  wrap.innerHTML = `<div class="empty-state"><div class="es-icon">⏳</div><p>Searching the register...</p></div>`;
+
+  try {
+    const qs = new URLSearchParams({ action: 'search', palika, demandType, fiscalYear, ward, dartaNo, name, purpose });
+    const url = SETTINGS.sheetUrl + (SETTINGS.sheetUrl.includes('?') ? '&' : '?') + qs.toString();
+    const resp = await fetch(url, { method: 'GET', redirect: 'follow' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Search failed');
+    lastSearchResults = data.rows || [];
+    renderSearchResults(lastSearchResults);
+    summary.textContent = `${data.count || 0} result(s)`;
+    printBtn.style.display = lastSearchResults.length ? 'inline-flex' : 'none';
+  } catch (err) {
+    wrap.innerHTML = `<div class="empty-state"><div class="es-icon">⚠️</div><p>${escapeHtml(err.message)}</p></div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔎 Search';
+  }
+}
+
+// Renders search results grouped by Palika. Per your feedback:
+//   • S.N. (serial number within the results, 1-based) instead of the raw
+//     sheet row number — row numbers aren't meaningful outside the Sheet.
+//   • Priority / Status / Remarks columns are hidden from this view.
+//   • Scan shows an inline thumbnail-style preview link that opens the
+//     actual image (via the Drive /preview iframe URL) right in a popup,
+//     instead of only a chip that jumps out to Google Sheets.
+function renderSearchResults(rows) {
+  const wrap = document.getElementById('searchResultsWrap');
+  if (!rows.length) {
+    wrap.innerHTML = `<div class="empty-state"><div class="es-icon">📭</div><p>No matching records.</p></div>`;
+    return;
+  }
+  const byPalika = {};
+  for (const r of rows) (byPalika[r.palika] || (byPalika[r.palika] = [])).push(r);
+
+  let html = '';
+  let sn = 0;
+  for (const palika of Object.keys(byPalika)) {
+    const group = byPalika[palika];
+    html += `
+      <div class="palika-group">
+        <div class="palika-header">
+          <span class="palika-name">🏛 ${escapeHtml(palika)}</span>
+          <span class="palika-count">${group.length}</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>S.N.</th><th>Letter Date</th><th>Applicant</th><th>Darta</th>
+              <th>Type</th><th>Qty</th><th>Location</th><th>Purpose</th><th>Scan</th>
+            </tr></thead>
+            <tbody>
+              ${group.map(r => {
+                sn++;
+                return `
+                <tr>
+                  <td>${sn}</td>
+                  <td>${escapeHtml(r.letterDate)}</td>
+                  <td>${escapeHtml(r.applicant)}</td>
+                  <td>${escapeHtml(r.dartaNo)}</td>
+                  <td>${escapeHtml(r.demandType)}</td>
+                  <td>${escapeHtml(r.quantity)}</td>
+                  <td>${escapeHtml(r.location)}</td>
+                  <td>${escapeHtml(r.purpose)}</td>
+                  <td style="text-align:center;">${scanCellHtml(r)}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+  wrap.innerHTML = html;
+}
+
+// Builds the Scan column's cell content: a clickable thumbnail-style link
+// that opens the actual scanned image inline (viewScanPopup), instead of
+// only linking out to Google Sheets. Falls back to a plain dash when there
+// is no scan, or to a Sheets link if for some reason we have hasScan=true
+// but no resolvable scanUrl (e.g. an older row with a non-standard note).
+// A ⚠ marker is shown when the server already knows link-sharing failed
+// for this file (scanRestricted) — the inline preview will very likely
+// come up blank, so the operator gets a heads-up instead of just a dead
+// popup, and the click still opens the working "Open in Drive" fallback.
+function scanCellHtml(r) {
+  if (r.scanUrl) {
+    const warn = r.scanRestricted ? '⚠️' : '📄';
+    const title = r.scanRestricted ? 'This scan may not preview inline — click to try, with a Drive fallback link.' : '';
+    return `<a href="#" class="scan-chip-link" title="${title}" onclick="viewScanPopup('${r.scanUrl}','${r.scanViewUrl||''}','${escapeHtml((r.dartaNo||'')).replace(/'/g,"&#39;")}',${r.scanRestricted?'true':'false'}); return false;">${warn} View</a>`;
+  }
+  if (r.hasScan) {
+    return `<span class="no-scan-dot" title="Scan exists but couldn't resolve a direct preview — open it in Google Sheets.">📄 (Sheets only)</span>`;
+  }
+  return `<span class="no-scan-dot">—</span>`;
+}
+
+// Opens a scanned image inline in a lightweight, dedicated popup using
+// Drive's /preview iframe embed — this shows the actual scanned file
+// directly inside the app instead of only handing the operator off to
+// Sheets. Kept as its own modal (not the scan-attach correction modal)
+// so opening a preview can never disturb an in-progress correction flow.
+//
+// IMPORTANT caveat this works around: Drive's /preview endpoint renders
+// a blank white box with NO error message when the file isn't actually
+// link-shared (a Workspace domain policy can silently block that at
+// attach-time). So every popup ALSO shows a directly-clickable "Open in
+// Drive" link/button up front — never only the iframe — and if the
+// server already flagged this file as restricted, that fallback is
+// highlighted instead of hidden behind a dead preview.
+function viewScanPopup(scanUrl, viewUrl, label, restricted) {
+  document.getElementById('scanViewTitle').textContent = '📄 ' + (label || 'Scanned Letter');
+  const fallback = viewUrl
+    ? `<a href="${viewUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="margin-bottom:10px; display:inline-flex;">↗ Open in Google Drive</a>`
+    : '';
+  const warnBox = restricted
+    ? `<div style="background:rgba(232,160,32,0.12); border:1px solid rgba(232,160,32,0.3); border-radius:8px; padding:10px 12px; font-size:12px; color:var(--text); margin-bottom:10px;">
+         ⚠️ This file's link-sharing didn't get set correctly when it was scanned, so the inline preview below may stay blank.
+         Use "Open in Google Drive" above — or in the Apps Script editor run <code>repairScanSharing</code> once to fix this
+         for every affected scan at once.
+       </div>`
+    : '';
+  document.getElementById('scanViewBody').innerHTML =
+    warnBox + fallback +
+    `<iframe src="${scanUrl}" style="width:100%; height:65vh; border:1px solid rgba(37,99,196,0.25); border-radius:10px; background:#fff; display:block;" allow="autoplay"></iframe>`;
+  document.getElementById('scanViewModal').classList.add('show');
+}
+
+function closeScanViewModal() {
+  document.getElementById('scanViewModal').classList.remove('show');
+  document.getElementById('scanViewBody').innerHTML = ''; // stop the iframe load
+}
+
+document.getElementById('scanViewModal').addEventListener('click', e => {
+  if (e.target.id === 'scanViewModal') closeScanViewModal();
+});
+
+// Opens a print-friendly window containing only the search results table
+// (grouped by Palika, same columns as on-screen), so the operator can hand
+// a physical copy to someone without printing the whole app chrome.
+function printSearchResults() {
+  if (!lastSearchResults.length) return;
+  const byPalika = {};
+  for (const r of lastSearchResults) (byPalika[r.palika] || (byPalika[r.palika] = [])).push(r);
+
+  const filterBits = [];
+  const fPalika = document.getElementById('searchPalika').value;
+  const fType = document.getElementById('searchDemandType').value;
+  const fFY = document.getElementById('searchFiscalYear').value;
+  const fWard = document.getElementById('searchWard').value.trim();
+  const fDarta = document.getElementById('searchDartaNo').value.trim();
+  const fName = document.getElementById('searchName').value.trim();
+  const fPurpose = document.getElementById('searchPurpose').value.trim();
+  if (fPalika !== 'all') filterBits.push('Palika: ' + fPalika);
+  if (fType !== 'all') filterBits.push('Demand Type: ' + fType);
+  if (fFY !== 'all') filterBits.push('Fiscal Year: ' + fFY);
+  if (fWard) filterBits.push('Ward: ' + fWard);
+  if (fDarta) filterBits.push('Darta No.: ' + fDarta);
+  if (fName) filterBits.push('Name: ' + fName);
+  if (fPurpose) filterBits.push('Purpose: ' + fPurpose);
+
+  let bodyHtml = '';
+  let sn = 0;
+  for (const palika of Object.keys(byPalika)) {
+    const group = byPalika[palika];
+    bodyHtml += `
+      <h3>${escapeHtml(palika)} (${group.length})</h3>
+      <table>
+        <thead><tr>
+          <th>S.N.</th><th>Letter Date</th><th>Applicant</th><th>Darta No.</th>
+          <th>Demand Type</th><th>Qty</th><th>Location</th><th>Purpose</th><th>Scan</th>
+        </tr></thead>
+        <tbody>
+          ${group.map(r => {
+            sn++;
+            return `<tr>
+              <td>${sn}</td><td>${escapeHtml(r.letterDate)}</td><td>${escapeHtml(r.applicant)}</td>
+              <td>${escapeHtml(r.dartaNo)}</td><td>${escapeHtml(r.demandType)}</td>
+              <td>${escapeHtml(r.quantity)}</td><td>${escapeHtml(r.location)}</td>
+              <td>${escapeHtml(r.purpose)}</td><td>${r.hasScan ? '✓' : '—'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  const win = window.open('', '_blank');
+  win.document.write(`
+    <html><head><title>NEA Taulihawa — Search Results</title>
+    <meta charset="utf-8">
+    <style>
+      body { font-family: 'Noto Sans Devanagari', Arial, sans-serif; padding: 24px; color: #111; }
+      h1 { font-size: 18px; margin-bottom: 2px; }
+      .meta { font-size: 12px; color: #555; margin-bottom: 14px; }
+      h3 { font-size: 14px; margin: 18px 0 6px; border-bottom: 1px solid #999; padding-bottom: 3px; }
+      table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+      th, td { border: 1px solid #999; padding: 4px 6px; font-size: 11px; text-align: left; }
+      th { background: #eee; }
+      @media print { body { padding: 8px; } }
+    </style>
+    </head><body>
+      <h1>NEA Taulihawa Distribution Center — Demand Register Search</h1>
+      <div class="meta">
+        Printed: ${new Date().toLocaleString()} ${filterBits.length ? '· Filters: ' + escapeHtml(filterBits.join(' | ')) : '· No filters (all records)'} · Total: ${lastSearchResults.length}
+      </div>
+      ${bodyHtml}
+    </body></html>
+  `);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SHEET VIEW / EDIT — live, directly-editable copy of each Palika tab
+// ═══════════════════════════════════════════════════════════════════
+//
+// Renders every data row of the selected Palika sheet as an editable
+// HTML table. Text/number fields become <input> on click; Demand Type /
+// Priority / Status become <select> dropdowns (so an off-list value can
+// never be typed in by accident). Every edit is sent immediately via the
+// 'updateCell' action and only that one cell is touched — nothing else
+// on the row, and no other row, is ever written.
+
+let sheetViewData = null; // last-loaded {palika, headers, rows} for print/reload
+
+function populateSheetViewPalikaDropdown() {
+  const sel = document.getElementById('sheetViewPalika');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = `<option value="">— Select a Palika —</option>` +
+    PALIKAS.map(p => `<option value="${p}">${p}</option>`).join('');
+  sel.value = PALIKAS.includes(current) ? current : '';
+}
+
+async function loadSheetView() {
+  const palika = document.getElementById('sheetViewPalika').value;
+  const status = document.getElementById('sheetViewStatus');
+  const wrap = document.getElementById('sheetViewWrap');
+  const printBtn = document.getElementById('printSheetBtn');
+  if (!palika) { wrap.innerHTML = ''; printBtn.style.display = 'none'; return; }
+  if (!SETTINGS.sheetUrl) {
+    status.className = 'dt-status err';
+    status.textContent = 'Apps Script URL not set. Open Settings and set the Google Sheet URL first.';
+    return;
+  }
+
+  status.className = 'dt-status'; status.textContent = '⏳ Loading ' + palika + '...';
+  wrap.innerHTML = `<div class="empty-state"><div class="es-icon">⏳</div><p>Loading sheet...</p></div>`;
+  printBtn.style.display = 'none';
+
+  try {
+    const qs = new URLSearchParams({ action: 'getSheetData', palika });
+    const url = SETTINGS.sheetUrl + (SETTINGS.sheetUrl.includes('?') ? '&' : '?') + qs.toString();
+    const resp = await fetch(url, { method: 'GET', redirect: 'follow' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Failed to load sheet');
+    sheetViewData = data;
+    renderSheetView(data);
+    status.className = 'dt-status ok';
+    status.textContent = `✓ ${data.rows.length} row(s) loaded — click any cell to edit.`;
+    printBtn.style.display = data.rows.length ? 'inline-flex' : 'none';
+  } catch (err) {
+    status.className = 'dt-status err';
+    status.textContent = '✗ ' + err.message;
+    wrap.innerHTML = `<div class="empty-state"><div class="es-icon">⚠️</div><p>${escapeHtml(err.message)}</p></div>`;
+  }
+}
+
+// Column config: which ROW_FIELD_KEYS field each editable column maps to,
+// its label, and — for the three constrained fields — the fixed option
+// list to render as a <select> instead of a free-text <input>.
+const SHEET_VIEW_COLUMNS = [
+  { key: 'letterDate',   label: 'Letter Date' },
+  { key: 'receivedDate', label: 'Received Date' },
+  { key: 'applicant',    label: 'Applicant' },
+  { key: 'dartaNo',      label: 'Darta No.' },
+  { key: 'demandType',   label: 'Demand Type', options: () => DEMAND_TYPES },
+  { key: 'quantity',     label: 'Qty' },
+  { key: 'location',     label: 'Location' },
+  { key: 'purpose',      label: 'Purpose' },
+  { key: 'priority',     label: 'Priority', options: () => PRIORITIES },
+  { key: 'status',       label: 'Status',   options: () => STATUSES },
+  { key: 'remarks',      label: 'Remarks' }
+];
+
+function renderSheetView(data) {
+  const wrap = document.getElementById('sheetViewWrap');
+  if (!data.rows.length) {
+    wrap.innerHTML = `<div class="empty-state"><div class="es-icon">📭</div><p>No rows yet in ${escapeHtml(data.palika)}.</p></div>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <div class="table-wrap">
+      <table id="sheetViewTable">
+        <thead><tr>
+          <th>S.N.</th>
+          ${SHEET_VIEW_COLUMNS.map(c => `<th>${escapeHtml(c.label)}</th>`).join('')}
+          <th>Scan</th>
+        </tr></thead>
+        <tbody>
+          ${data.rows.map((r, ri) => `
+            <tr data-row="${r.row}">
+              <td>${ri + 1}</td>
+              ${SHEET_VIEW_COLUMNS.map(c => sheetViewCellHtml(r, c)).join('')}
+              <td style="text-align:center;">${scanCellHtml(r)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function sheetViewCellHtml(r, col) {
+  const val = r.values[col.key] !== undefined && r.values[col.key] !== null ? r.values[col.key] : '';
+  return `<td class="sv-cell" data-row="${r.row}" data-field="${col.key}" onclick="startEditCell(this)">${escapeHtml(String(val))}</td>`;
+}
+
+// Turns one <td> into either a <select> (for the three constrained
+// fields) or a text <input>, focuses it, and wires up save-on-blur /
+// save-on-Enter / cancel-on-Escape. Clicking elsewhere while a DIFFERENT
+// cell is being edited auto-saves that cell first (via blur) so edits
+// never get silently discarded.
+function startEditCell(td) {
+  if (td.querySelector('input, select')) return; // already editing this cell
+  const field = td.dataset.field;
+  const row = td.dataset.row;
+  const original = td.textContent;
+  const colDef = SHEET_VIEW_COLUMNS.find(c => c.key === field);
+
+  let inputEl;
+  if (colDef && colDef.options) {
+    const opts = colDef.options();
+    inputEl = document.createElement('select');
+    inputEl.innerHTML = opts.map(o => `<option ${o === original ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('');
+    inputEl.style.cssText = 'width:100%; font-size:12px; padding:4px;';
+  } else {
+    inputEl = document.createElement('input');
+    inputEl.type = 'text';
+    inputEl.value = original;
+    inputEl.style.cssText = 'width:100%; font-size:12px; padding:4px; min-width:60px;';
+  }
+
+  td.textContent = '';
+  td.appendChild(inputEl);
+  inputEl.focus();
+  if (inputEl.select) inputEl.select();
+
+  const commit = () => saveCellEdit(td, row, field, inputEl.value, original);
+  inputEl.addEventListener('blur', commit, { once: true });
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); inputEl.blur(); }
+    if (e.key === 'Escape') { inputEl.removeEventListener('blur', commit); td.textContent = original; }
+  });
+  if (colDef && colDef.options) {
+    inputEl.addEventListener('change', () => inputEl.blur());
+  }
+}
+
+async function saveCellEdit(td, row, field, newValue, originalValue) {
+  if (newValue === originalValue) { td.textContent = originalValue; return; }
+  td.innerHTML = '<span class="spinner" style="width:12px;height:12px;"></span>';
+  try {
+    const resp = await fetch(SETTINGS.sheetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'updateCell', palika: sheetViewData.palika, row: parseInt(row, 10), field, value: newValue }),
+      redirect: 'follow'
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      td.textContent = newValue;
+      td.style.background = 'rgba(34,197,94,0.15)';
+      setTimeout(() => { td.style.background = ''; }, 900);
+      // keep the local cache in sync so a re-render (e.g. after editing
+      // another cell) doesn't show stale data
+      const rowObj = sheetViewData.rows.find(r => r.row === parseInt(row, 10));
+      if (rowObj) rowObj.values[field] = newValue;
+    } else {
+      td.textContent = originalValue;
+      alert('Could not save: ' + (data.error || 'unknown error'));
+    }
+  } catch (e) {
+    td.textContent = originalValue;
+    alert('Could not save: ' + e.message);
+  }
+}
+
+function printSheetView() {
+  if (!sheetViewData || !sheetViewData.rows.length) return;
+  const cols = SHEET_VIEW_COLUMNS;
+  const bodyHtml = `
+    <h3>${escapeHtml(sheetViewData.palika)} (${sheetViewData.rows.length})</h3>
+    <table>
+      <thead><tr><th>S.N.</th>${cols.map(c => `<th>${escapeHtml(c.label)}</th>`).join('')}<th>Scan</th></tr></thead>
+      <tbody>
+        ${sheetViewData.rows.map((r, ri) => `
+          <tr>
+            <td>${ri + 1}</td>
+            ${cols.map(c => `<td>${escapeHtml(String(r.values[c.key] ?? ''))}</td>`).join('')}
+            <td>${r.hasScan ? '✓' : '—'}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(`
+    <html><head><title>NEA Taulihawa — ${escapeHtml(sheetViewData.palika)}</title>
+    <meta charset="utf-8">
+    <style>
+      body { font-family: 'Noto Sans Devanagari', Arial, sans-serif; padding: 24px; color: #111; }
+      h1 { font-size: 18px; margin-bottom: 2px; }
+      .meta { font-size: 12px; color: #555; margin-bottom: 14px; }
+      h3 { font-size: 14px; margin: 18px 0 6px; border-bottom: 1px solid #999; padding-bottom: 3px; }
+      table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+      th, td { border: 1px solid #999; padding: 4px 6px; font-size: 11px; text-align: left; }
+      th { background: #eee; }
+      @media print { body { padding: 8px; } }
+    </style>
+    </head><body>
+      <h1>NEA Taulihawa Distribution Center — ${escapeHtml(sheetViewData.palika)}</h1>
+      <div class="meta">Printed: ${new Date().toLocaleString()}</div>
+      ${bodyHtml}
+    </body></html>
+  `);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SCAN-ONLY SYNC — attach scans to existing rows by Darta No.
+// ═══════════════════════════════════════════════════════════════════
+//
+// Used by syncToSheet() (see EXPORT — GOOGLE SHEET section above) when
+// SETTINGS.scanOnlyMode is on. Sends every reviewed row's scan image +
+// darta number + palika to the attachScansByDarta action. Rows that
+// matched exactly one existing row are attached immediately; anything
+// ambiguous or unmatched is shown in a correction popup so the operator
+// decides — nothing is guessed.
+
+let pendingUnresolved = []; // holds the unresolved list from the last scan-attach call
+
+async function syncScansOnly() {
+  if (!allRows.length) { alert('No data!'); return; }
+  if (!SETTINGS.sheetUrl) {
+    alert('Apps Script URL not set. Click "Setup" next to the Sheet URL field for instructions.');
+    return;
+  }
+  const btn = document.getElementById('gsheetBtn');
+  const status = document.getElementById('exportStatus');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Attaching scans...';
+
+  const items = allRows
+    .filter(r => r.dartaNo && (r.scanFull || r.thumb))
+    .map(r => ({ dartaNo: r.dartaNo, palika: r.palika, scanFull: r.scanFull || '', thumb: r.thumb || '' }));
+
+  if (!items.length) {
+    status.style.color = 'var(--warn)';
+    status.innerHTML = '⚠️ No rows have both a Darta No. and a scanned image — nothing to attach.';
+    updateGsheetButtonLabel(); btn.disabled = false;
+    return;
+  }
+
+  status.style.color = 'var(--muted)';
+  status.innerHTML = `⏳ Matching ${items.length} scan(s) by Darta No....`;
+
+  try {
+    const resp = await fetch(SETTINGS.sheetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'attachScansByDarta', items }),
+      redirect: 'follow'
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Server returned ok:false');
+
+    const attached = data.attached || [];
+    const unresolved = data.unresolved || [];
+
+    // "Unresolved" covers two very different situations: genuinely
+    // ambiguous (more than one candidate row — can't guess, needs the
+    // operator) and simply not found (zero matches — safe to add as a
+    // brand-new row automatically, since there's nothing to mismatch).
+    const ambiguous = unresolved.filter(u => u.candidates && u.candidates.length > 1);
+    const noMatch = unresolved.filter(u => !(u.candidates && u.candidates.length > 1));
+
+    let created = 0;
+    if (noMatch.length) {
+      status.innerHTML = `⏳ ${attached.length} attached — adding ${noMatch.length} new row(s) for unmatched Darta No.(s)...`;
+      created = await createRowsForUnmatchedScans(noMatch, items);
+    }
+
+    status.style.color = (attached.length || created) ? 'var(--success)' : 'var(--warn)';
+    status.innerHTML = `✅ <strong>${attached.length} scan(s) attached</strong>` +
+      (created ? `<br>➕ <strong>${created} new row(s) added</strong> (no matching Darta No. found)` : '') +
+      (ambiguous.length ? `<br>⚠️ ${ambiguous.length} need your confirmation — see popup.` : '');
+    btn.innerHTML = '✅ Done'; 
+    setTimeout(() => { updateGsheetButtonLabel(); btn.disabled = false; }, 5000);
+
+    if (ambiguous.length) {
+      pendingUnresolved = ambiguous;
+      openCorrectionModal(ambiguous, items);
+    }
+  } catch (err) {
+    status.style.color = 'var(--red)';
+    status.innerHTML = '❌ ' + err.message;
+    updateGsheetButtonLabel();
+    btn.disabled = false;
+  }
+}
+
+// For scan-only items whose Darta No. matched no existing row at all,
+// adds a fresh row with just the Darta No. and the scanned image —
+// everything else left blank for the operator to fill in later. Reuses
+// the same plain add-row payload/endpoint as the normal syncToSheet(),
+// just grouped by palika and sent in one request.
+async function createRowsForUnmatchedScans(noMatch, originalItems) {
+  const byPalika = {};
+  for (const u of noMatch) {
+    const original = originalItems.find(it => it.dartaNo === u.dartaNo && (it.palika || '') === (u.palika || '')) || {};
+    const palika = PALIKAS.includes(u.palika) ? u.palika : 'Kapilvastu';
+    if (!byPalika[palika]) byPalika[palika] = [];
+    byPalika[palika].push({
+      letterDate: '', receivedDate: new Date().toLocaleDateString('en-CA'),
+      applicant: '', dartaNo: u.dartaNo,
+      demandType: 'Other', quantity: '', location: '', purpose: '',
+      priority: 'Medium', status: 'Pending',
+      remarks: 'Scan-only attach — no matching Darta No. found, added as new entry',
+      thumb: original.thumb || '', scanFull: original.scanFull || ''
+    });
+  }
+  try {
+    const resp = await fetch(SETTINGS.sheetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(byPalika),
+      redirect: 'follow'
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Server returned ok:false');
+    return data.totalWritten || noMatch.length;
+  } catch (e) {
+    console.error('Failed to add new row(s) for unmatched scans:', e);
+    alert('⚠️ Some new rows could not be added: ' + e.message);
+    return 0;
+  }
+}
+
+// Builds the correction popup: one block per unresolved darta number, with
+// radio-button candidates (when ambiguous) or a manual darta-number
+// correction field (when not found), plus a per-item Skip.
+function openCorrectionModal(unresolved, originalItems) {
+  const list = document.getElementById('correctionList');
+  list.innerHTML = unresolved.map((u, i) => {
+    const original = originalItems.find(it => it.dartaNo === u.dartaNo && (it.palika || '') === (u.palika || '')) || {};
+    let body = '';
+    if (u.candidates && u.candidates.length > 1) {
+      body = `
+        <div class="ci-candidates">
+          ${u.candidates.map((c, ci) => `
+            <label class="ci-candidate">
+              <input type="radio" name="ci-choice-${i}" value="${c.palika}|${c.row}">
+              🏛 ${escapeHtml(c.palika)} — row ${c.row}
+            </label>
+          `).join('')}
+          <label class="ci-candidate">
+            <input type="radio" name="ci-choice-${i}" value="skip" checked>
+            Skip this one
+          </label>
+        </div>`;
+    } else {
+      body = `
+        <div class="ci-manual-row">
+          <span style="font-size:12px;color:var(--muted);">Correct Darta No.:</span>
+          <input type="text" id="ci-manual-${i}" placeholder="e.g. 452">
+          <span style="font-size:12px;color:var(--muted);">Palika:</span>
+          <select id="ci-manual-palika-${i}" style="max-width:140px;">
+            ${PALIKAS.map(p => `<option ${p === u.palika ? 'selected' : ''}>${p}</option>`).join('')}
+          </select>
+        </div>
+        <button class="ci-skip-btn" style="margin-top:8px;" onclick="markSkip(${i})" id="ci-skip-${i}">Skip this one</button>`;
+    }
+    return `
+      <div class="correction-item" id="ci-item-${i}" data-index="${i}" data-darta="${escapeHtml(u.dartaNo)}" data-palika="${escapeHtml(u.palika||'')}">
+        <div class="ci-title">📄 Darta No. "${escapeHtml(u.dartaNo || '(empty)')}" ${u.palika ? '— ' + escapeHtml(u.palika) : ''}</div>
+        <div class="ci-reason">Reason: ${escapeHtml(u.reason || 'unresolved')}</div>
+        ${body}
+      </div>`;
+  }).join('');
+  window._ciOriginalItems = originalItems;
+  window._ciSkipped = {};
+  document.getElementById('correctionModal').classList.add('show');
+}
+
+function markSkip(i) {
+  window._ciSkipped[i] = true;
+  const item = document.getElementById('ci-item-' + i);
+  if (item) { item.style.opacity = '0.4'; item.querySelector('.ci-skip-btn').textContent = '✓ Skipped'; }
+}
+
+function closeCorrectionModal() {
+  document.getElementById('correctionModal').classList.remove('show');
+}
+
+// Sends one attachScanToRow call per confirmed correction the operator made.
+async function applyCorrections() {
+  const applyBtn = document.getElementById('correctionApplyBtn');
+  applyBtn.disabled = true;
+  applyBtn.innerHTML = '<span class="spinner"></span> Applying...';
+
+  const items = document.querySelectorAll('.correction-item');
+  let okCount = 0, failCount = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    if (window._ciSkipped[i]) continue;
+    const el = items[i];
+    const dartaNo = el.dataset.darta;
+    const original = (window._ciOriginalItems || []).find(it => it.dartaNo === dartaNo) || {};
+
+    const radios = el.querySelectorAll(`input[name="ci-choice-${i}"]`);
+    let palika = null, row = null;
+
+    if (radios.length) {
+      const checked = el.querySelector(`input[name="ci-choice-${i}"]:checked`);
+      if (!checked || checked.value === 'skip') continue;
+      const [p, r] = checked.value.split('|');
+      palika = p; row = parseInt(r, 10);
+    } else {
+      const manualInput = document.getElementById('ci-manual-' + i);
+      const manualPalika = document.getElementById('ci-manual-palika-' + i);
+      const correctedDarta = manualInput ? manualInput.value.trim() : '';
+      if (!correctedDarta) continue; // left blank = implicit skip
+      // Re-resolve with the corrected darta number by asking the server to
+      // attach directly; we don't know the row number client-side, so we
+      // reuse attachScansByDarta with the corrected number scoped to the
+      // chosen palika, which will resolve if it's now unambiguous.
+      try {
+        const resp = await fetch(SETTINGS.sheetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'attachScansByDarta',
+            items: [{ dartaNo: correctedDarta, palika: manualPalika ? manualPalika.value : '', scanFull: original.scanFull || '', thumb: original.thumb || '' }]
+          }),
+          redirect: 'follow'
+        });
+        const data = await resp.json();
+        if (data.ok && data.attached && data.attached.length) okCount++;
+        else failCount++;
+      } catch (e) { failCount++; }
+      continue;
+    }
+
+    try {
+      const resp = await fetch(SETTINGS.sheetUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'attachScanToRow',
+          palika, row, dartaNo,
+          scanFull: original.scanFull || '', thumb: original.thumb || ''
+        }),
+        redirect: 'follow'
+      });
+      const data = await resp.json();
+      if (data.ok) okCount++; else failCount++;
+    } catch (e) { failCount++; }
+  }
+
+  applyBtn.disabled = false;
+  applyBtn.innerHTML = '✅ Apply Selected Matches';
+  alert(`${okCount} scan(s) attached.${failCount ? ' ' + failCount + ' failed — please check those rows manually.' : ''}`);
+  closeCorrectionModal();
+}
+
+document.getElementById('correctionModal').addEventListener('click', e => {
+  if (e.target.id === 'correctionModal') closeCorrectionModal();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════════
+
+window.addEventListener('DOMContentLoaded', loadSettings);
+</script>
+</body>
+</html>
