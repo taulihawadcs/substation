@@ -2139,10 +2139,22 @@ body.tlr-page-open #page-tlr{
 
   loadSdk(function(){
     window._authGateClient = supabase.createClient(SB_URL, SB_ANON_KEY);
+    // Keep the live user access token cached on window so the rest of the
+    // app's Supabase REST calls (sbHeaders(), elsewhere in this file) can
+    // send the real logged-in session instead of the static anon key —
+    // this is what lets Row Level Security tell staff apart from a random
+    // visitor with just the public anon key. Updated immediately on sign
+    // in / sign out / token refresh; falls back to the anon key (old
+    // behavior) whenever there's no active session, e.g. before login.
+    window._authGateAccessToken = null;
+    window._authGateClient.auth.onAuthStateChange(function(_event, session){
+      window._authGateAccessToken = (session && session.access_token) || null;
+    });
     showChecking(true);
     window._authGateClient.auth.getSession().then(function(res){
       showChecking(false);
       if(res.data && res.data.session){
+        window._authGateAccessToken = res.data.session.access_token;
         hideOverlay();
       }
       // else: leave the sign-in form showing (already the default state)
@@ -13883,10 +13895,22 @@ function updateRcvMuteUI(){
 }
 
 function sbHeaders(){
+  // Prefer the real logged-in user's session token (set by the auth gate
+  // at the top of this file via onAuthStateChange) so Supabase Row Level
+  // Security policies that check auth.role()='authenticated' actually see
+  // a genuine authenticated request. Only applies when the active project
+  // is the shared default one — a DCS with its own override sbUrl/sbKey
+  // (see activeSbCreds()) is a different Supabase project entirely, so the
+  // default project's session token would not be valid there and must not
+  // be sent. In every other case this falls back to the anon key —
+  // unchanged previous behavior.
+  const creds = activeSbCreds();
+  const isDefaultProject = creds.url === SB_URL_CONST;
+  const liveToken = isDefaultProject ? window._authGateAccessToken : null;
   return {
     'Content-Type':'application/json',
-    'apikey': getSbKey(),
-    'Authorization': 'Bearer '+getSbKey(),
+    'apikey': creds.key,
+    'Authorization': 'Bearer '+(liveToken || creds.key),
     'Prefer':'return=minimal'
   };
 }
