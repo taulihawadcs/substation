@@ -3432,8 +3432,44 @@ function persist(){
   _eqCloudPushTimer = setTimeout(eqCloudPush, 800);
 }
 
+// Mirrors every record into the real equipment_register table (see the
+// "TABLE 8" schema in the Supabase SQL block below) so the data is
+// actually visible/queryable there, not just buried as one JSON blob
+// inside app_config.value under EQ_CLOUD_KEY. Runs alongside the
+// existing app_config push (unchanged, still the fallback/legacy path)
+// rather than replacing it, so anything already reading the app_config
+// copy keeps working exactly as before.
+async function eqPushToRegisterTable(){
+  if(typeof getSbUrl!=='function') return;
+  try{
+    const url = getSbUrl()+'/rest/v1/equipment_register?on_conflict=id';
+    const payload = DATA.map(r => ({
+      id: r.id,
+      substation: r.substation,
+      canonical: r.canonical,
+      original: r.original || null,
+      parameter: r.parameter,
+      value: r.value != null ? String(r.value) : null,
+      edited: editedIds.has(r.id),
+      deleted: false
+    }));
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{...sbHeaders(),'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok){
+      const body = await res.text().catch(()=> '');
+      console.warn('Equipment register-table push rejected:', res.status, body);
+    }
+  }catch(e){
+    console.warn('Equipment register-table push failed:', e.message);
+  }
+}
+
 async function eqCloudPush(){
   if(typeof getSbUrl!=='function') return; // Supabase not configured on this build — silently skip
+  eqPushToRegisterTable();
   try{
     const url = getSbUrl()+'/rest/v1/app_config?on_conflict=key';
     const res = await fetch(url, {
@@ -4034,31 +4070,84 @@ eqCloudPullAndApply();
     }
   }catch(e){}
 
+  // Mirrors every row into the real transformer_load_register table (see
+  // the "TABLE 9" schema in the Supabase SQL block below) so the data is
+  // actually visible/queryable there, not just buried as one JSON blob
+  // inside app_config.value under the TL_CLOUD_KEY. This runs alongside
+  // the existing app_config push (kept as-is below, unchanged) rather
+  // than replacing it, so any device/tooling already reading the
+  // app_config copy keeps working exactly as before.
+  function tlPushToRegisterTable(){
+    if(typeof getSbUrl!=='function' || typeof sbHeaders!=='function') return;
+    var url = getSbUrl()+'/rest/v1/transformer_load_register?on_conflict=id';
+    var payload = rows.map(function(r){
+      return {
+        id: String(r.sn),
+        sn: r.sn,
+        location: r.location,
+        substation: r.substation,
+        feeder: r.feeder,
+        data: r,
+        deleted: false
+      };
+    });
+    fetch(url, {
+      method:'POST',
+      headers:Object.assign({}, sbHeaders(), {'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body: JSON.stringify(payload)
+    }).then(function(res){
+      if(!res.ok){
+        res.text().then(function(body){
+          console.warn('Transformer load register-table push rejected:', res.status, body);
+        }).catch(function(){});
+      }
+    }).catch(function(e){
+      console.warn('Transformer load register-table push failed:', e.message);
+    });
+  }
+
   function tlCloudPush(immediate){
     if(typeof getSbUrl!=='function' || typeof sbHeaders!=='function') return;
     try{ localStorage.setItem(TL_LOCAL_KEY, JSON.stringify(rows)); }catch(e){}
     function doPush(){
       var url = getSbUrl()+'/rest/v1/app_config?on_conflict=key';
       if(typeof toast==='function') toast('⏳ Syncing to cloud…');
+      tlPushToRegisterTable();
       fetch(url, {
         method:'POST',
-        headers:Object.assign({}, sbHeaders(), {'Prefer':'resolution=merge-duplicates,return=minimal'}),
+        headers:Object.assign({}, sbHeaders(), {'Prefer':'resolution=merge-duplicates,return=representation'}),
         body: JSON.stringify([{key:TL_CLOUD_KEY, value: JSON.stringify(rows), updated_at:new Date().toISOString()}])
       }).then(function(res){
-        // fetch() only rejects on network-level failure — an HTTP error
-        // status (401/403/etc, e.g. from a Row Level Security rule
-        // blocking the write) still resolves here and was previously
-        // treated as success. Checking res.ok catches that case and
-        // surfaces it, instead of the save silently not reaching the
-        // cloud while the UI shows nothing wrong.
-        if(!res.ok){
-          res.text().then(function(body){
+        // Prefer: return=representation (instead of return=minimal) makes
+        // Supabase send back the row it actually wrote, so we can confirm
+        // the write really landed instead of just trusting a 2xx status —
+        // a 2xx with return=minimal was previously reported as "Synced"
+        // even in a case where the row did not actually appear in the
+        // table, which this change is meant to catch and explain.
+        res.text().then(function(body){
+          if(!res.ok){
             console.warn('Transformer load cloud push rejected:', res.status, body);
-          }).catch(function(){});
-          if(typeof toast==='function') toast('⚠ Cloud sync failed (' + res.status + ') — saved on this device only');
-        } else {
-          if(typeof toast==='function') toast('✅ Synced to cloud');
-        }
+            if(typeof toast==='function') toast('⚠ Cloud sync failed (' + res.status + ') — saved on this device only');
+            return;
+          }
+          var savedLen = -1;
+          try{
+            var parsedBody = JSON.parse(body);
+            var savedRow = Array.isArray(parsedBody) ? parsedBody[0] : parsedBody;
+            if(savedRow && savedRow.value){
+              savedLen = JSON.parse(savedRow.value).length;
+            }
+          }catch(e){}
+          if(savedLen === rows.length){
+            if(typeof toast==='function') toast('✅ Synced to cloud (' + savedLen + ' rows confirmed)');
+          } else {
+            console.warn('Transformer load cloud push: response did not confirm the write. Status:', res.status, 'Body:', body);
+            if(typeof toast==='function') toast('⚠ Sync unconfirmed (status ' + res.status + ') — see console');
+          }
+        }).catch(function(e){
+          console.warn('Transformer load cloud push: could not read response body:', e.message);
+          if(typeof toast==='function') toast('⚠ Sync response unreadable — see console');
+        });
       }).catch(function(e){
         console.warn('Transformer load cloud push failed (kept locally, will retry on next edit):', e.message);
         if(typeof toast==='function') toast('⚠ Cloud sync failed — saved on this device only');
@@ -4177,6 +4266,18 @@ eqCloudPullAndApply();
   var loadMoreBtn = document.getElementById('tl-loadMoreBtn');
 
   function populateFilterOptions(){
+    // Rebuilt from scratch every time (initial load, after a cloud pull
+    // replaces `rows`, and after every "Add Transformer") instead of
+    // appending onto whatever options already exist. Appending-only used
+    // to leave every previous call's <option> elements in place, so the
+    // Substation/Feeder dropdowns filled up with duplicate entries and
+    // went out of sync with the current `rows` array — that's what made
+    // the filters feel unresponsive. Current selection is preserved
+    // across the rebuild so an active filter doesn't get silently reset.
+    var prevSubstation = substationFilter.value;
+    var prevFeeder = feederFilter.value;
+
+    substationFilter.innerHTML = '<option value="">All Substations</option>';
     var substations = Array.from(new Set(rows.map(function(r){ return r.substation; }))).sort();
     substations.forEach(function(s){
       var opt = document.createElement('option');
@@ -4185,6 +4286,7 @@ eqCloudPullAndApply();
       substationFilter.appendChild(opt);
     });
 
+    feederFilter.innerHTML = '<option value="">All Feeders</option>';
     var feeders = Array.from(new Set(rows.map(function(r){ return r.feeder; }))).sort();
     feeders.forEach(function(f){
       var opt = document.createElement('option');
@@ -4192,6 +4294,12 @@ eqCloudPullAndApply();
       opt.textContent = f;
       feederFilter.appendChild(opt);
     });
+
+    // Restore prior selection only if that value still exists in the
+    // rebuilt list (e.g. survives a cloud-pull refresh); otherwise fall
+    // back to "All" rather than silently keeping a now-invalid value.
+    if(prevSubstation && substations.indexOf(prevSubstation) !== -1) substationFilter.value = prevSubstation;
+    if(prevFeeder && feeders.indexOf(prevFeeder) !== -1) feederFilter.value = prevFeeder;
   }
 
   function rowMatchesQuery(row, q){
