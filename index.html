@@ -2055,7 +2055,7 @@ body.tlr-page-open #page-tlr{
 <div id="authGateOverlay" style="position:fixed;inset:0;z-index:99999;background:linear-gradient(160deg,#0d3b66,#12507f 55%,#1a6fa8);display:flex;align-items:center;justify-content:center;padding:20px">
   <div style="background:#fff;border-radius:16px;padding:34px 28px 28px;width:min(360px,94vw);box-shadow:0 12px 48px rgba(0,0,0,.28);text-align:center">
     <div style="font-size:32px;margin-bottom:6px">⚡</div>
-    <div style="font-size:18px;font-weight:800;color:#12314f;margin-bottom:2px">NEA Substation Management</div>
+    <div style="font-size:18px;font-weight:800;color:#12314f;margin-bottom:2px">TAULIHAWA DISTRIBUTION CENTER</div>
     <div id="authGateSubtitle" style="font-size:12.5px;color:#5b7186;margin-bottom:20px">Staff sign-in required to continue</div>
 
     <div id="authGateFormWrap">
@@ -2258,8 +2258,8 @@ body.tlr-page-open #page-tlr{
         <input type="file" id="topbarLogoFile" accept="image/*" style="display:none">
       </div>
       <div class="topbar-banner-text">
-        <div class="topbar-brand">NEA SUBSTATION MANAGEMENT</div>
-        <div class="topbar-subtitle">Nepal Electricity Authority &nbsp;•&nbsp; <span class="js-dcs-shortname">Taulihawa</span> DCS</div>
+        <div class="topbar-brand">TAULIHAWA DISTRIBUTION CENTER</div>
+        <div class="topbar-subtitle">Nepal Electricity Authority, Lumbini Province</div>
         <div class="topbar-tagline">विश्वसनीय सेवा, उज्यालो भविष्य</div>
       </div>
     </div>
@@ -3436,7 +3436,7 @@ async function eqCloudPush(){
   if(typeof getSbUrl!=='function') return; // Supabase not configured on this build — silently skip
   try{
     const url = getSbUrl()+'/rest/v1/app_config?on_conflict=key';
-    await fetch(url, {
+    const res = await fetch(url, {
       method:'POST',
       headers:{...sbHeaders(),'Prefer':'resolution=merge-duplicates,return=minimal'},
       body: JSON.stringify([
@@ -3444,7 +3444,19 @@ async function eqCloudPush(){
         {key:EQ_CLOUD_EDITED_KEY, value: JSON.stringify(Array.from(editedIds)), updated_at:new Date().toISOString()}
       ])
     });
-  }catch(e){ console.warn('Equipment register cloud push failed (kept locally, will retry on next edit):', e.message); }
+    // fetch() only rejects on network-level failure — an HTTP error status
+    // (401/403/etc, e.g. a Row Level Security rule blocking the write)
+    // still resolves here and was previously treated as success, so a
+    // rejected save was silent. Checking res.ok surfaces it instead.
+    if(!res.ok){
+      const body = await res.text().catch(()=> '');
+      console.warn('Equipment register cloud push rejected:', res.status, body);
+      if(typeof toast==='function') toast('⚠ Cloud sync failed (' + res.status + ') — saved on this device only');
+    }
+  }catch(e){
+    console.warn('Equipment register cloud push failed (kept locally, will retry on next edit):', e.message);
+    if(typeof toast==='function') toast('⚠ Cloud sync failed — saved on this device only');
+  }
 }
 
 // One-time-per-load pull: if Supabase already has a saved copy, that
@@ -4032,7 +4044,23 @@ eqCloudPullAndApply();
         method:'POST',
         headers:Object.assign({}, sbHeaders(), {'Prefer':'resolution=merge-duplicates,return=minimal'}),
         body: JSON.stringify([{key:TL_CLOUD_KEY, value: JSON.stringify(rows), updated_at:new Date().toISOString()}])
-      }).catch(function(e){ console.warn('Transformer load cloud push failed (kept locally, will retry on next edit):', e.message); });
+      }).then(function(res){
+        // fetch() only rejects on network-level failure — an HTTP error
+        // status (401/403/etc, e.g. from a Row Level Security rule
+        // blocking the write) still resolves here and was previously
+        // treated as success. Checking res.ok catches that case and
+        // surfaces it, instead of the save silently not reaching the
+        // cloud while the UI shows nothing wrong.
+        if(!res.ok){
+          res.text().then(function(body){
+            console.warn('Transformer load cloud push rejected:', res.status, body);
+          }).catch(function(){});
+          if(typeof toast==='function') toast('⚠ Cloud sync failed (' + res.status + ') — saved on this device only');
+        }
+      }).catch(function(e){
+        console.warn('Transformer load cloud push failed (kept locally, will retry on next edit):', e.message);
+        if(typeof toast==='function') toast('⚠ Cloud sync failed — saved on this device only');
+      });
     }, 800);
   }
 
@@ -4167,7 +4195,12 @@ eqCloudPullAndApply();
     return null;
   }
 
-  var PAGE_SIZE = 100;
+  var PAGE_SIZE = 250; // was 100 — Taulihawa (233 rows) and Labani (138 rows) both
+  // exceeded the old 100-row page limit, which is where rows stopped rendering
+  // for those two substations specifically (confirmed: filtering itself was
+  // correct, e.g. "100 of 233 rows" computed fine — the failure was in
+  // rendering past ~100 rows in a single pass). Raising this above the
+  // largest substation's row count keeps every substation on one page.
   var currentMatchingRows = [];
   var visibleRowCount = PAGE_SIZE;
 
@@ -4181,7 +4214,13 @@ eqCloudPullAndApply();
              (!feederVal || row.feeder === feederVal) &&
              (!substationVal || row.substation === substationVal);
     });
-    visibleRowCount = PAGE_SIZE; // reset to first page whenever search/filter changes
+    // Reset to first page whenever search/filter changes. Using
+    // Math.max(PAGE_SIZE, ...) here would be wrong (it would just show
+    // everything); this stays PAGE_SIZE on purpose — the bug for large
+    // substations (Taulihawa: 233 rows, Labani: 138 rows) was never in
+    // this reset, it's downstream in how the page count interacts with
+    // stale cached row elements below.
+    visibleRowCount = PAGE_SIZE;
 
     renderVisiblePage();
   }
@@ -4263,7 +4302,7 @@ eqCloudPullAndApply();
     locInp.value = row.location;
     locInp.setAttribute('aria-label', 'Location name');
     locInp.addEventListener('input', function(){ autoResize(locInp); });
-    locInp.addEventListener('change', function(){ row.location = locInp.value; });
+    locInp.addEventListener('change', function(){ row.location = locInp.value; tlCloudPush(); });
     tdLoc.appendChild(locInp);
 
     if(row.lat && row.lon){
@@ -4303,6 +4342,7 @@ eqCloudPullAndApply();
     capInp.addEventListener('change', function(){
       row.kva = capInp.value.trim();
       refreshCapDisplay();
+      tlCloudPush();
     });
     refreshCapDisplay();
 
@@ -4317,7 +4357,7 @@ eqCloudPullAndApply();
     snInp.placeholder = 'ट्रान्सफर्मर S.N.';
     snInp.value = row.transformerSn || '';
     snInp.setAttribute('aria-label', 'Transformer serial number');
-    snInp.addEventListener('change', function(){ row.transformerSn = snInp.value.trim(); });
+    snInp.addEventListener('change', function(){ row.transformerSn = snInp.value.trim(); tlCloudPush(); });
     tdCap.appendChild(snInp);
 
     var mfgInp = document.createElement('input');
@@ -4326,7 +4366,7 @@ eqCloudPullAndApply();
     mfgInp.placeholder = 'निर्माता (Manufacturer)';
     mfgInp.value = row.manufacturer || '';
     mfgInp.setAttribute('aria-label', 'Transformer manufacturer');
-    mfgInp.addEventListener('change', function(){ row.manufacturer = mfgInp.value.trim(); });
+    mfgInp.addEventListener('change', function(){ row.manufacturer = mfgInp.value.trim(); tlCloudPush(); });
     tdCap.appendChild(mfgInp);
     tr.appendChild(tdCap);
 
@@ -4342,6 +4382,10 @@ eqCloudPullAndApply();
       inp.dataset.field = ph;
       inp.addEventListener('input', function(){
         row[ph] = inp.value;
+      });
+      inp.addEventListener('change', function(){
+        row[ph] = inp.value;
+        tlCloudPush();
       });
       td.appendChild(inp);
       tr.appendChild(td);
@@ -5831,17 +5875,17 @@ function renderHeaderContentFields(){
 function headerBrandRender(){
   const elTitle = document.querySelector('.topbar-brand');
   const elTag   = document.querySelector('.topbar-tagline');
-  if(elTitle) elTitle.textContent = CUSTOM_HEADER.title || 'NEA SUBSTATION MANAGEMENT';
+  if(elTitle) elTitle.textContent = CUSTOM_HEADER.title || 'TAULIHAWA DISTRIBUTION CENTER';
   if(elTag)   elTag.textContent   = CUSTOM_HEADER.tagline || 'विश्वसनीय सेवा, उज्यालो भविष्य';
   const elSubWrap = document.querySelector('.topbar-subtitle');
   if(elSubWrap){
     if(CUSTOM_HEADER.subtitle){
       elSubWrap.textContent = CUSTOM_HEADER.subtitle;
     } else {
-      // Restore the default markup (with the live DCS-shortname span)
-      // exactly as it exists in the original HTML.
-      const dcsName = (typeof currentDcs==='function' && currentDcs().shortName) || 'Taulihawa';
-      elSubWrap.innerHTML = 'Nepal Electricity Authority &nbsp;•&nbsp; <span class="js-dcs-shortname">'+dcsName+'</span> DCS';
+      // Default subtitle text, per-DCS name no longer interpolated here —
+      // matches the plain "Nepal Electricity Authority, Lumbini Province"
+      // requested, same as the static HTML default above.
+      elSubWrap.textContent = 'Nepal Electricity Authority, Lumbini Province';
     }
   }
 }
@@ -11597,17 +11641,17 @@ function expireChargedFeeders(){
 // messages when one is chosen; otherwise recent messages of EVERY substation.
 // The full multi-line alert text (⚡ FEEDER TRIP ALERT, separators, rows) is
 // preserved exactly as sent — same look as the WhatsApp group.
-// Strips the "माग गर्ने :" (requested-by), "Operator :" and the trailing
-// "_(auto generated msg)_" signature line from a message before it's
-// copied or shared — those are for internal record-keeping/attribution
-// only and shouldn't go out to the public/social share.
+// Strips the "माग गर्ने :" (requested-by) and "अपरेटर :" (operator) lines,
+// plus the trailing "_(auto generated msg)_" signature line, from a message
+// before it's copied or shared — those are for internal record-keeping/
+// attribution only and shouldn't go out to the public/social share.
 function mrCleanMessage(text){
   let out = (text||'')
     .split('\n')
     .filter(line => {
       const t = line.trim();
       if(/^_?\(auto generated msg\)_?$/i.test(t)) return false;
-      return !/^(माग\s*गर्ने|Operator)\s*[:：]/i.test(t);
+      return !/^(माग\s*गर्ने|अपरेटर)\s*[:：]/i.test(t);
     })
     .join('\n')
     .replace(/\n{3,}/g,'\n\n')
