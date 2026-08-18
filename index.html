@@ -4034,12 +4034,12 @@ eqCloudPullAndApply();
     }
   }catch(e){}
 
-  function tlCloudPush(){
+  function tlCloudPush(immediate){
     if(typeof getSbUrl!=='function' || typeof sbHeaders!=='function') return;
     try{ localStorage.setItem(TL_LOCAL_KEY, JSON.stringify(rows)); }catch(e){}
-    clearTimeout(_tlCloudPushTimer);
-    _tlCloudPushTimer = setTimeout(function(){
+    function doPush(){
       var url = getSbUrl()+'/rest/v1/app_config?on_conflict=key';
+      if(typeof toast==='function') toast('⏳ Syncing to cloud…');
       fetch(url, {
         method:'POST',
         headers:Object.assign({}, sbHeaders(), {'Prefer':'resolution=merge-duplicates,return=minimal'}),
@@ -4056,12 +4056,25 @@ eqCloudPullAndApply();
             console.warn('Transformer load cloud push rejected:', res.status, body);
           }).catch(function(){});
           if(typeof toast==='function') toast('⚠ Cloud sync failed (' + res.status + ') — saved on this device only');
+        } else {
+          if(typeof toast==='function') toast('✅ Synced to cloud');
         }
       }).catch(function(e){
         console.warn('Transformer load cloud push failed (kept locally, will retry on next edit):', e.message);
         if(typeof toast==='function') toast('⚠ Cloud sync failed — saved on this device only');
       });
-    }, 800);
+    }
+    // The one-time initial cloud-seed push (called from
+    // tlCloudPullAndApply() when Supabase has no row yet) fires right
+    // away instead of sharing the debounce timer below. Previously it
+    // used the same 800ms timer as every keystroke/edit — if the person
+    // touched the page at all in that window, clearTimeout() below would
+    // cancel the pending seed push and reschedule it, over and over, so
+    // the very first cloud copy could be perpetually deferred and never
+    // actually sent. Regular edits still debounce normally.
+    if(immediate){ doPush(); return; }
+    clearTimeout(_tlCloudPushTimer);
+    _tlCloudPushTimer = setTimeout(doPush, 800);
   }
 
   // One-time-per-load pull. If Supabase already has a saved copy, it
@@ -4081,11 +4094,18 @@ eqCloudPullAndApply();
           try{ localStorage.setItem(TL_LOCAL_KEY, JSON.stringify(rows)); }catch(e){}
           populateFilterOptions();
           render();
+          if(typeof toast==='function') toast('☁ Loaded ' + rows.length + ' rows from cloud');
+        } else {
+          if(typeof toast==='function') toast('⚠ Cloud data unreadable — kept local copy');
         }
       } else {
-        tlCloudPush(); // nothing in the cloud yet — seed it from this device
+        if(typeof toast==='function') toast('☁ No cloud data yet — pushing this device\'s copy');
+        tlCloudPush(true); // nothing in the cloud yet — seed it from this device, right away
       }
-    }).catch(function(e){ console.warn('Transformer load cloud pull failed (using local copy):', e.message); });
+    }).catch(function(e){
+      console.warn('Transformer load cloud pull failed (using local copy):', e.message);
+      if(typeof toast==='function') toast('⚠ Cloud check failed: ' + e.message);
+    });
   }
 
   // ---------- Date/time normalization ----------
