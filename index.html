@@ -4019,14 +4019,30 @@ eqCloudPullAndApply();
 
   // ---------- State ----------
   // Each row: { sn, location, substation, feeder, kva, originalKva, transformerSn, manufacturer, remarks, lat, lon, R, Y, B, N, date, time, history: [{date,time,R,Y,B,N,savedAt}] }
-  var rows = INITIAL_ROWS.map(function(r){
+  //
+  // normalizeRow() guarantees every field buildRowEl()/render() rely on is
+  // always present and the right type — history as an array above all,
+  // since buildRowEl reads row.history.length unconditionally. Without
+  // this guarantee, a row missing `history` (e.g. one that reached `rows`
+  // via the localStorage cache or a Supabase pull, both of which used to
+  // assign straight from parsed JSON with no pass through this shape)
+  // throws inside buildRowEl's per-row loop in renderVisiblePage(). That
+  // throw aborts the loop before tbody.appendChild(frag) runs, while the
+  // "X of Y rows" count text above the table was already written — so the
+  // header stays and the table body goes blank, exactly the failure this
+  // fixes. Applied to every entry point that can populate `rows`: the
+  // hardcoded seed, the localStorage instant-paint cache, and every
+  // Supabase pull — not just the initial seed as before.
+  function normalizeRow(r){
+    r = r || {};
+    var hasHistory = Array.isArray(r.history);
     return {
       sn: r.sn,
       location: r.location,
       substation: r.substation || "Unknown Substation",
       feeder: r.feeder || "Unknown Feeder",
       kva: r.kva,
-      originalKva: r.kva,
+      originalKva: (r.originalKva !== undefined && r.originalKva !== null) ? r.originalKva : r.kva,
       transformerSn: r.transformerSn || "",
       manufacturer: r.manufacturer || "",
       remarks: r.remarks || "",
@@ -4039,14 +4055,18 @@ eqCloudPullAndApply();
       N: r.N || "",
       date: normalizeDateForInput(r.date),
       time: normalizeTimeForInput(r.time),
-      history: (r.R || r.date || r.time) ? [{
+      history: hasHistory ? r.history : ((r.R || r.date || r.time) ? [{
         date: normalizeDateForInput(r.date),
         time: normalizeTimeForInput(r.time),
         R: r.R || "", Y: r.Y || "", B: r.B || "", N: r.N || "",
         savedAt: "initial"
-      }] : []
+      }] : [])
     };
-  });
+  }
+  function normalizeRows(list){
+    return (Array.isArray(list) ? list : []).map(normalizeRow);
+  }
+  var rows = normalizeRows(INITIAL_ROWS);
 
   // ── CLOUD PERSISTENCE (Supabase app_config) ──────────────────────────
   // This module previously had NO persistence at all: every R/Y/B/N
@@ -4066,7 +4086,7 @@ eqCloudPullAndApply();
     var _tlCached = localStorage.getItem(TL_LOCAL_KEY);
     if(_tlCached){
       var _tlParsed = JSON.parse(_tlCached);
-      if(Array.isArray(_tlParsed) && _tlParsed.length) rows = _tlParsed;
+      if(Array.isArray(_tlParsed) && _tlParsed.length) rows = normalizeRows(_tlParsed);
     }
   }catch(e){}
 
@@ -4179,7 +4199,7 @@ eqCloudPullAndApply();
         var parsed;
         try{ parsed = JSON.parse(row.value); }catch(e){ parsed = null; }
         if(Array.isArray(parsed) && parsed.length){
-          rows = parsed;
+          rows = normalizeRows(parsed);
           try{ localStorage.setItem(TL_LOCAL_KEY, JSON.stringify(rows)); }catch(e){}
           populateFilterOptions();
           render();
@@ -4359,16 +4379,58 @@ eqCloudPullAndApply();
 
     visibleCountEl.textContent = showCount + " of " + total + " rows";
 
+    // Each row is built (or reused from cache) inside its own try/catch —
+    // a bad single row (e.g. one that reached `rows` through some future
+    // path that skips normalizeRow) logs a warning and is skipped instead
+    // of throwing out of the loop entirely, which previously left tbody
+    // empty for every row — including the good ones — while the "X of Y
+    // rows" count above had already been written moments earlier. That
+    // mismatch (header updated, body empty) is the exact failure this
+    // guards against; skipping only the offending row keeps the rest of
+    // the table intact and visible.
     var frag = document.createDocumentFragment();
+    var builtCount = 0;
     for(var i = 0; i < showCount; i++){
       var row = currentMatchingRows[i];
-      if(!row._tr){
-        row._tr = buildRowEl(row, row.sn);
+      try{
+        if(!row._tr){
+          row._tr = buildRowEl(row, row.sn);
+        }
+        frag.appendChild(row._tr);
+        builtCount++;
+      }catch(err){
+        console.warn('Transformer load: skipped one row that failed to render (sn=' + (row && row.sn) + '):', err.message);
       }
-      frag.appendChild(row._tr);
     }
     tbody.innerHTML = "";
-    tbody.appendChild(frag);
+    if(builtCount > 0){
+      tbody.appendChild(frag);
+    } else if(total > 0){
+      // Rows exist but every one of them failed to render — surface that
+      // plainly instead of leaving a silently blank body under a nonzero
+      // count.
+      var errTr = document.createElement('tr');
+      var errTd = document.createElement('td');
+      errTd.colSpan = 20;
+      errTd.style.textAlign = 'center';
+      errTd.style.padding = '20px';
+      errTd.style.color = 'var(--red, #c0392b)';
+      errTd.textContent = '⚠ Rows found but could not be displayed — see console for details.';
+      errTr.appendChild(errTd);
+      tbody.appendChild(errTr);
+    } else {
+      // Genuinely no matching rows for the current search/filter — the
+      // existing "no data" state (distinct from the error state above).
+      var emptyTr = document.createElement('tr');
+      var emptyTd = document.createElement('td');
+      emptyTd.colSpan = 20;
+      emptyTd.style.textAlign = 'center';
+      emptyTd.style.padding = '20px';
+      emptyTd.style.color = 'var(--dim2, #888)';
+      emptyTd.textContent = 'No transformers match the current search/filter.';
+      emptyTr.appendChild(emptyTd);
+      tbody.appendChild(emptyTr);
+    }
 
     loadMoreBtn.style.display = (showCount < total) ? '' : 'none';
     loadMoreBtn.textContent = 'थप देखाउनुहोस् (Load ' + Math.min(PAGE_SIZE, total - showCount) + ' more, ' + (total - showCount) + ' remaining)';
@@ -7933,7 +7995,7 @@ function buildTemplate(f){
 
   if(f.condition==='trip'){
     if(currentLang==='ne'){
-      let m=`⚡ FEEDER TRIP ALERT\n${sep}\n`;
+      let m=`⚡ FEEDER TRIP ALERT ${stationOutageCountText(f.station, f.feeders)}\n${sep}\n`;
       m+=fmtLine('Substation', f.station);
       m+=fmtF('Feeder    ', f.feeders);
       if(f.tripReasons&&f.tripReasons.length) m+=fmtF('Reason    ', f.tripReasons);
@@ -7951,7 +8013,7 @@ function buildTemplate(f){
       m+=`\n${footer}\n_(auto generated msg)_`;
       return m;
     } else {
-      let m=`⚡ FEEDER TRIP ALERT\n${sep}\n`;
+      let m=`⚡ FEEDER TRIP ALERT ${stationOutageCountText(f.station, f.feeders)}\n${sep}\n`;
       m+=fmtLine('Substation', f.station);
       m+=fmtF('Feeder    ', f.feeders);
       if(f.tripReasons&&f.tripReasons.length) m+=fmtF('Reason    ', f.tripReasons);
@@ -7973,7 +8035,7 @@ function buildTemplate(f){
 
   // Shutdown
   if(currentLang==='ne'){
-    let m=`🟥 POWER SHUTDOWN NOTICE\n${sep}\n`;
+    let m=`🟥 POWER SHUTDOWN NOTICE ${stationOutageCountText(f.station, f.feeders)}\n${sep}\n`;
     m+=fmtLine('Substation', f.station);
     m+=fmtF('Feeder    ', f.feeders);
     if(f.reasons&&f.reasons.length) m+=fmtF('Reason    ', f.reasons);
@@ -7990,7 +8052,7 @@ function buildTemplate(f){
     m+=`\n\n${footer}\n_(auto generated msg)_`;
     return m;
   } else {
-    let m=`🟥 POWER SHUTDOWN NOTICE\n${sep}\n`;
+    let m=`🟥 POWER SHUTDOWN NOTICE ${stationOutageCountText(f.station, f.feeders)}\n${sep}\n`;
     m+=fmtLine('Substation', f.station);
     m+=fmtF('Feeder    ', f.feeders);
     if(f.reasons&&f.reasons.length) m+=fmtF('Reason    ', f.reasons);
@@ -10331,6 +10393,36 @@ var dtReminderShownFor = '';
 
 function dtStationOf(feeder){ const f=DATA.feeders.find(x=>x.name===feeder); return f?f.station:''; }
 
+// ── Feeder Trip/Shutdown alert message — tripped-count indicator ────
+// Returns "(x/y)" for a substation: x = feeders currently in ANY outage
+// state (trip/shutdown/system-gone/incomer-failed/kv33 — same
+// DT_OUTAGE_TYPES list used everywhere else for "is this feeder
+// currently out"), y = total feeders configured for that substation.
+// Used only to add a short count beside the alert heading in
+// buildTemplate() and the quick-panel trip/shutdown message below —
+// does not affect any other alert content.
+//
+// `alsoOutFeeders` (optional array of feeder names) — the message text
+// is always assembled BEFORE feederStatusMap is actually written for
+// the feeder(s) this exact dispatch is about (see dispatchToAll and the
+// quick-panel handler), so without this the just-tripped feeder would
+// be missing from the count shown in its own alert. Callers pass the
+// feeder(s) they are about to set to trip/shutdown here so the count
+// matches the state the message describes.
+function stationOutageCountText(station, alsoOutFeeders){
+  if(!station) return '';
+  const total = DATA.feeders.filter(f=>f.station===station).length;
+  if(!total) return '';
+  const pending = new Set(alsoOutFeeders||[]);
+  const out = DATA.feeders.filter(f=>{
+    if(f.station!==station) return false;
+    if(pending.has(f.name)) return true;
+    const st = feederStatusMap[f.name] && feederStatusMap[f.name].status;
+    return st && DT_OUTAGE_TYPES.includes(st);
+  }).length;
+  return `(${out}/${total})`;
+}
+
 // Ask the operator for the ACTUAL time an outage/restore happened (these are
 // usually noticed a few minutes late). Returns 'HH:MM', or null if cancelled.
 function dtAskTime(labelNe, def){
@@ -12435,10 +12527,16 @@ async function onFeederStatusAction(feederName,sel){
     const footer = `${currentDcs().name || currentDcs().shortName || 'DCS'}, NEA`;
     const tEN = t;
     const tNE = t + ' बजे';
+    // Same "count the feeder about to change status" timing note as
+    // buildTemplate() above — feederStatusMap for this feeder is only
+    // written further down (after msg is built), so it must be passed
+    // explicitly here or the count would exclude the very feeder this
+    // alert is about.
+    const _countTxt = stationOutageCountText(station, [feederName]);
     let msg;
     if(action==='trip'){
       if(typeof currentLang!=='undefined' && currentLang==='ne'){
-        msg = `⚡ FEEDER TRIP ALERT\n${sep}\n`
+        msg = `⚡ FEEDER TRIP ALERT ${_countTxt}\n${sep}\n`
             + fmtLine('Substation', station)
             + fmtLine('Feeder    ', feederName)
             + fmtLine('Reason    ', reason)
@@ -12447,7 +12545,7 @@ async function onFeederStatusAction(feederName,sel){
             + `माथि उल्लेखित फिडर ट्रिप भई विद्युत आपूर्ति अवरुद्ध भएको व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। असुविधाका लागि क्षमाप्रार्थी छौं।`
             + `\n${footer}\n_(auto generated msg)_`;
       } else {
-        msg = `⚡ FEEDER TRIP ALERT\n${sep}\n`
+        msg = `⚡ FEEDER TRIP ALERT ${_countTxt}\n${sep}\n`
             + fmtLine('Substation', station)
             + fmtLine('Feeder    ', feederName)
             + fmtLine('Reason    ', reason)
@@ -12458,7 +12556,7 @@ async function onFeederStatusAction(feederName,sel){
       }
     } else {
       if(typeof currentLang!=='undefined' && currentLang==='ne'){
-        msg = `🟥 POWER SHUTDOWN NOTICE\n${sep}\n`
+        msg = `🟥 POWER SHUTDOWN NOTICE ${_countTxt}\n${sep}\n`
             + fmtLine('Substation', station)
             + fmtLine('Feeder    ', feederName)
             + fmtLine('Reason    ', reason)
@@ -12467,7 +12565,7 @@ async function onFeederStatusAction(feederName,sel){
             + `उक्त फिडर अन्तर्गत मर्मत कार्यका लागि केही समय विद्युत आपूर्ति बन्द हुने व्यहोरा सम्बन्धित सबैलाई जानकारी गराइन्छ। असुविधाका लागि क्षमाप्रार्थी छौं।`
             + `\n\n${footer}\n_(auto generated msg)_`;
       } else {
-        msg = `🟥 POWER SHUTDOWN NOTICE\n${sep}\n`
+        msg = `🟥 POWER SHUTDOWN NOTICE ${_countTxt}\n${sep}\n`
             + fmtLine('Substation', station)
             + fmtLine('Feeder    ', feederName)
             + fmtLine('Reason    ', reason)
