@@ -4343,7 +4343,14 @@ eqCloudPullAndApply();
     }
     function doPush(){
       var url = getSbUrl()+'/rest/v1/app_config?on_conflict=key';
-      if(typeof toast==='function') toast('⏳ Syncing to cloud…');
+      // No "⏳ Syncing to cloud…" toast here anymore — this fires on
+      // every debounced edit AND every immediate Save/Replace, which on
+      // an active multi-device setup meant a toast popping up roughly
+      // every few seconds. Sync itself is unchanged (still runs exactly
+      // as before, on the same triggers, with the same guards); only the
+      // routine "it's happening" notification was silenced. console.log
+      // keeps a trace for debugging without showing the user anything.
+      console.log('Transformer load: syncing to cloud…');
       var registerPromise = tlPushToRegisterTable();
       var configPromise = fetch(url, {
         method:'POST',
@@ -4359,6 +4366,11 @@ eqCloudPullAndApply();
         return res.text().then(function(body){
           if(!res.ok){
             console.warn('Transformer load cloud push rejected:', res.status, body);
+            // Failure toasts are DELIBERATELY kept (unlike the routine
+            // success/in-progress toasts above/below) — a failed sync
+            // means this device's just-saved reading may only exist
+            // locally, which the person needs to actually know about,
+            // not have silently swallowed into the console.
             if(typeof toast==='function') toast('⚠ Cloud sync failed (' + res.status + ') — saved on this device only');
             return {ok:false};
           }
@@ -4371,7 +4383,8 @@ eqCloudPullAndApply();
             }
           }catch(e){}
           if(savedLen === rows.length){
-            if(typeof toast==='function') toast('✅ Synced to cloud (' + savedLen + ' rows confirmed)');
+            // Routine success — silenced (see doPush's opening comment).
+            console.log('Transformer load: synced to cloud (' + savedLen + ' rows confirmed)');
           } else {
             console.warn('Transformer load cloud push: response did not confirm the write. Status:', res.status, 'Body:', body);
             if(typeof toast==='function') toast('⚠ Sync unconfirmed (status ' + res.status + ') — see console');
@@ -4442,7 +4455,10 @@ eqCloudPullAndApply();
           populateFilterOptions();
           render();
           _tlHasRenderedOnce = true;
-          if(typeof toast==='function') toast('☁ Loaded ' + rows.length + ' rows from cloud');
+          // Routine success — silenced (was toast('☁ Loaded N rows from
+          // cloud'), firing on every page load AND every catch-up pull;
+          // console.log keeps the trace without surfacing a toast).
+          console.log('Transformer load: loaded ' + rows.length + ' rows from cloud');
           _tlLastCloudTimestamp = row.updated_at || '';
         } else {
           if(typeof toast==='function') toast('⚠ Cloud data unreadable — kept local copy');
@@ -4454,11 +4470,19 @@ eqCloudPullAndApply();
           // "row exists but unreadable" as "already in sync".
         }
       } else {
-        if(typeof toast==='function') toast('☁ No cloud data yet — pushing this device\'s copy');
+        // Routine (first-ever run for this project only) — silenced.
+        console.log('Transformer load: no cloud data yet — pushing this device\'s copy');
         tlCloudPush(true); // nothing in the cloud yet — seed it from this device, right away
       }
     }).catch(function(e){
       console.warn('Transformer load cloud pull failed (using local copy):', e.message);
+      // Kept as a toast (unlike the routine paths above) — a failed
+      // pull means this device may be showing stale/local-only data
+      // indefinitely (see the long comment on _tlLastCloudTimestamp
+      // below for exactly why), which is worth surfacing rather than
+      // leaving silent. It will keep retrying in the background either
+      // way; this toast is just visibility into that, not a change in
+      // behavior.
       if(typeof toast==='function') toast('⚠ Cloud check failed: ' + e.message);
       // _tlLastCloudTimestamp is deliberately left at null here too — see
       // the long comment on its declaration below. A failed initial pull
