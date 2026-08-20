@@ -3905,6 +3905,25 @@ eqCloudPullAndApply();
 
 <!-- ==================== PAGE: TRANSFORMER LOAD REGISTER ==================== -->
 <div class="page" id="page-tlr">
+<!-- Page-wide sync lock overlay: shown from the moment सुरक्षित गर्नुहोस्
+     (Save) is clicked on any row until that row's data has actually been
+     confirmed written to Supabase (both the app_config JSON blob and the
+     transformer_load_register table — see tlBeginSyncLock/tlEndSyncLock
+     and the saveBtn click handler in renderExtraArea). This is separate
+     from the existing _tlEditingNew/grace-window guard, which only stops
+     *background* pulls/pushes from stepping on an open, unsaved form —
+     it does nothing once Save is actually clicked and the request is in
+     flight. Without this overlay the person could keep editing (open
+     another row's form, change a capacity, etc.) while the just-saved
+     row's write was still in flight, and a slow/failed request could
+     race a subsequent edit. Reuses the app's existing overlay/spinner
+     look (.fs-panel-overlay) for visual consistency. -->
+<div class="fs-panel-overlay" id="tlSyncLockOverlay" style="position:fixed;z-index:5000;border-radius:0;">
+  <div class="fs-panel-overlay-card">
+    <div class="fs-panel-overlay-spin"></div>
+    <div class="fs-panel-overlay-label" id="tlSyncLockLabel">⏳ Syncing… please wait</div>
+  </div>
+</div>
 <div class="toolbar">
   <input type="search" id="tl-searchBox" placeholder="Search location, feeder, substation…">
   <select id="tl-substationFilter" class="filter-select">
@@ -4036,6 +4055,44 @@ eqCloudPullAndApply();
   function normalizeRow(r){
     r = r || {};
     var hasHistory = Array.isArray(r.history);
+    // BUG THIS FIXES: normalizeDateForInput/normalizeTimeForInput below
+    // reformat the top-level date/time (e.g. "9:05" -> "09:05", padding
+    // added) — but until this fix, history[] entries were passed through
+    // completely raw, never run through the same two functions. The
+    // dropdown selects a row's current reading by string-matching
+    // `date+"|"+time` (historyKey, in the module below) between the
+    // row's own top-level date/time and each history entry's date/time.
+    // On the SAME device those two copies are written from the same raw
+    // input at the same instant, so they always matched. But once a row
+    // round-trips through Supabase to ANOTHER device, this normalizeRow
+    // function runs again — normalizing the top-level fields a second
+    // time (a no-op, they're already normalized) while the history
+    // entries, having never been normalized even once, could still
+    // carry the original unpadded/slash-style raw text. If the ORIGINAL
+    // save happened to be unpadded ("9:05" instead of "09:05", a very
+    // reachable case since the new-entry time input has no enforced
+    // padding), the two sides of that string match now permanently
+    // disagree — the dropdown can never find its own newest entry, the
+    // R/Y/B/N "load this reading into view" step in renderExtraArea
+    // silently never runs, and the cells keep showing whatever the OLD
+    // selected reading was, even though the correct new reading already
+    // arrived from Supabase and is sitting right there in row.history.
+    // Normalizing every history entry's date/time here — on every
+    // device, every time a row is normalized (page load AND every
+    // background sync merge) — guarantees both sides of that comparison
+    // are always in the same canonical form, on every device, forever.
+    var normalizedHistory = hasHistory ? r.history.map(function(h){
+      h = h || {};
+      return Object.assign({}, h, {
+        date: normalizeDateForInput(h.date),
+        time: normalizeTimeForInput(h.time)
+      });
+    }) : ((r.R || r.date || r.time) ? [{
+      date: normalizeDateForInput(r.date),
+      time: normalizeTimeForInput(r.time),
+      R: r.R || "", Y: r.Y || "", B: r.B || "", N: r.N || "",
+      savedAt: "initial"
+    }] : []);
     return {
       sn: r.sn,
       location: r.location,
@@ -4055,18 +4112,65 @@ eqCloudPullAndApply();
       N: r.N || "",
       date: normalizeDateForInput(r.date),
       time: normalizeTimeForInput(r.time),
-      history: hasHistory ? r.history : ((r.R || r.date || r.time) ? [{
-        date: normalizeDateForInput(r.date),
-        time: normalizeTimeForInput(r.time),
-        R: r.R || "", Y: r.Y || "", B: r.B || "", N: r.N || "",
-        savedAt: "initial"
-      }] : [])
+      history: normalizedHistory
     };
   }
   function normalizeRows(list){
     return (Array.isArray(list) ? list : []).map(normalizeRow);
   }
   var rows = normalizeRows(INITIAL_ROWS);
+
+  // mergeRowsInPlace() vs. plain `rows = normalizeRows(x)`:
+  //
+  // Every input in a row's <tr> (buildRowEl) closes over that exact row
+  // OBJECT, not a lookup by sn/index — e.g. the R input's change handler
+  // is literally `row.R = inp.value; tlCloudPush()` for the specific
+  // `row` buildRowEl was called with. A plain wholesale replacement
+  // (rows = normalizeRows(parsed)) swaps in entirely new row objects, so
+  // if that replacement happens while a user is actively typing into an
+  // already-rendered row — which the periodic background sync
+  // (tlSyncCheck) makes newly possible, since previously `rows` was only
+  // ever set once at page load, before anyone had a chance to be
+  // mid-edit — their edit lands on the now-detached OLD object. rows
+  // itself was already pointing at the NEW object by then, so
+  // tlCloudPush()'s JSON.stringify(rows) silently omits that edit even
+  // though the push still succeeds and still shows "Synced" (it's
+  // pushing a real snapshot — just one missing the just-typed value).
+  // That is what was making R/Y/B/N specifically come back blank/stale
+  // on another device: the row itself (built fresh) always arrives, but
+  // an edit that raced a background sync on the SENDING device never
+  // made it into the payload in the first place.
+  //
+  // Mutating existing row objects in place instead of replacing them
+  // keeps every already-wired closure pointing at a live, current
+  // object, so this race can't drop data. Used by the background sync
+  // path (tlSyncCheck); the initial page-load pull (tlCloudPullAndApply)
+  // still does a plain replace since no rows/closures exist to preserve
+  // identity against at that point.
+  function mergeRowsInPlace(newList){
+    var bySn = {};
+    rows.forEach(function(r){ bySn[r.sn] = r; });
+    var merged = newList.map(function(nr){
+      var existing = bySn[nr.sn];
+      if(existing){
+        // Skip this row entirely while it has an unsaved "add new
+        // reading" form open (see row._tlEditingNew in renderExtraArea
+        // above) — merging here would overwrite row.R/Y/B/N/date/time
+        // and force the <tr> to rebuild mid-entry, silently discarding
+        // whatever the person has typed but not yet clicked सुरक्षित
+        // गर्नुहोस् (Save) on. The remote update for this row is simply
+        // not applied yet; it will be picked up on a later sync cycle
+        // once _tlEditingNew clears (Save committed, or the dropdown was
+        // switched away without saving).
+        if(existing._tlEditingNew) return existing;
+        Object.keys(nr).forEach(function(k){ existing[k] = nr[k]; });
+        existing._tr = null; // force buildRowEl to rebuild with the fresh values
+        return existing; // same object identity — existing closures stay valid
+      }
+      return nr; // brand-new row (e.g. added on another device) — nothing to preserve
+    });
+    rows = merged;
+  }
 
   // ── CLOUD PERSISTENCE (Supabase app_config) ──────────────────────────
   // This module previously had NO persistence at all: every R/Y/B/N
@@ -4079,6 +4183,81 @@ eqCloudPullAndApply();
   var TL_CLOUD_KEY = 'transformer_load_rows';
   var TL_LOCAL_KEY = 'nea_tl_rows_cache_v1';
   var _tlCloudPushTimer = null;
+  var _tlPendingPush = false; // set when a push was held back because entry was in progress somewhere on the page
+  var _tlDeferredPushTimer = null;
+  // Last time ANY row's Add-new form was opened or saved — not per-row.
+  // Reading readings for a substation is normally done row after row in
+  // one sitting (open row 1's form, save it, open row 2's form, save it,
+  // ...), and a sync landing in the short gap BETWEEN two rows — after
+  // one save, before the next row's form is even open — is just as
+  // disruptive as one landing mid-row, since it can still repaint a row
+  // the person is about to open next. Tracking one shared timestamp
+  // across the whole page (instead of only rows._tlEditingNew) means the
+  // grace window below covers the whole back-to-back entry session, not
+  // just whichever single row currently has its form open.
+  var _tlLastEntryActivity = 0;
+  var TL_ENTRY_GRACE_MS = 5000; // stay quiet for 5s after the last open/save before resuming sync
+  function _tlEntryInProgress(){
+    if(rows.some(function(r){ return r._tlEditingNew; })) return true;
+    return (Date.now() - _tlLastEntryActivity) < TL_ENTRY_GRACE_MS;
+  }
+  function _tlScheduleDeferredPushCheck(){
+    if(_tlDeferredPushTimer) return; // already watching
+    _tlDeferredPushTimer = setInterval(function(){
+      if(!_tlPendingPush) return;
+      if(_tlEntryInProgress()) return; // keep waiting — still mid-row, or still inside the grace window
+      clearInterval(_tlDeferredPushTimer);
+      _tlDeferredPushTimer = null;
+      _tlPendingPush = false;
+      tlCloudPush(); // normal debounced push, now that entry has genuinely paused
+    }, 1000);
+  }
+
+  // ── Page-wide sync lock (disable editing while a save is in flight) ──
+  // _tlEntryInProgress/the grace window above only protect an OPEN,
+  // unsaved form from being clobbered by a background sync. They say
+  // nothing about what happens the instant सुरक्षित गर्नुहोस् (Save) is
+  // actually clicked: at that point the row's data is handed to
+  // tlCloudPush(true) and the network request is in flight, but every
+  // other control on the page (other rows' dropdowns, capacity fields,
+  // the Add Transformer button, etc.) was still fully interactive during
+  // that round-trip. tlBeginSyncLock/tlEndSyncLock close that gap by
+  // disabling every input/select/button on #page-tlr the moment Save is
+  // clicked, and only re-enabling them once tlCloudPush's returned
+  // Promise confirms the write actually finished (success or failure —
+  // either way the person needs to be able to act again, e.g. to retry
+  // after a failure).
+  var _tlSyncLockDepth = 0; // supports overlapping saves (e.g. two rows saved in quick succession) without one finishing early and unlocking the page while the other is still in flight
+  var _tlSyncLockedEls = null;
+  function tlBeginSyncLock(label){
+    _tlSyncLockDepth++;
+    var overlay = document.getElementById('tlSyncLockOverlay');
+    var lbl = document.getElementById('tlSyncLockLabel');
+    if(lbl) lbl.textContent = label || '⏳ Syncing… please wait';
+    if(overlay) overlay.classList.add('show');
+    if(_tlSyncLockDepth === 1){
+      // Only compute/disable on the first (outermost) lock — nested
+      // locks during overlapping saves just bump the depth counter so
+      // the elements already-disabled by the first lock aren't touched
+      // again (which would otherwise lose track of which ones were
+      // already disabled for some OTHER reason before the lock began).
+      var page = document.getElementById('page-tlr');
+      _tlSyncLockedEls = page ? Array.prototype.slice.call(
+        page.querySelectorAll('input, select, button, textarea')
+      ).filter(function(el){ return !el.disabled; }) : [];
+      _tlSyncLockedEls.forEach(function(el){ el.disabled = true; });
+    }
+  }
+  function tlEndSyncLock(){
+    _tlSyncLockDepth = Math.max(0, _tlSyncLockDepth - 1);
+    if(_tlSyncLockDepth > 0) return; // an overlapping save is still in flight — stay locked
+    var overlay = document.getElementById('tlSyncLockOverlay');
+    if(overlay) overlay.classList.remove('show');
+    if(_tlSyncLockedEls){
+      _tlSyncLockedEls.forEach(function(el){ el.disabled = false; });
+      _tlSyncLockedEls = null;
+    }
+  }
 
   // Instant local paint from a same-device cache, if this device has one
   // (e.g. it made edits before this migration, or before a network hiccup).
@@ -4098,7 +4277,15 @@ eqCloudPullAndApply();
   // than replacing it, so any device/tooling already reading the
   // app_config copy keeps working exactly as before.
   function tlPushToRegisterTable(){
-    if(typeof getSbUrl!=='function' || typeof sbHeaders!=='function') return;
+    // Returns a Promise that always resolves (never rejects) once the
+    // request has settled, so callers that need to know when the write
+    // is truly done (tlCloudPush's doPush, and the sync-lock overlay in
+    // the Save button handler below) can Promise.all() it alongside the
+    // app_config push instead of firing-and-forgetting it. A network/HTTP
+    // failure here still resolves (with ok:false) rather than rejecting,
+    // so one table failing doesn't prevent the caller from finding out
+    // the other one succeeded/failed too.
+    if(typeof getSbUrl!=='function' || typeof sbHeaders!=='function') return Promise.resolve({ok:false, skipped:true});
     var url = getSbUrl()+'/rest/v1/transformer_load_register?on_conflict=id';
     var payload = rows.map(function(r){
       return {
@@ -4111,7 +4298,7 @@ eqCloudPullAndApply();
         deleted: false
       };
     });
-    fetch(url, {
+    return fetch(url, {
       method:'POST',
       headers:Object.assign({}, sbHeaders(), {'Prefer':'resolution=merge-duplicates,return=minimal'}),
       body: JSON.stringify(payload)
@@ -4121,19 +4308,44 @@ eqCloudPullAndApply();
           console.warn('Transformer load register-table push rejected:', res.status, body);
         }).catch(function(){});
       }
+      return {ok: res.ok, status: res.status};
     }).catch(function(e){
       console.warn('Transformer load register-table push failed:', e.message);
+      return {ok:false, error: e.message};
     });
   }
 
   function tlCloudPush(immediate){
-    if(typeof getSbUrl!=='function' || typeof sbHeaders!=='function') return;
+    // Returns a Promise. For the debounced (non-immediate) path this
+    // resolves right away — that path is the existing "fire and let the
+    // 800ms debounce handle it" behavior for routine field edits, and
+    // nothing currently needs to await it. For the immediate path (used
+    // by the सुरक्षित गर्नुहोस्/Save and बदल्नुहोस्/Replace button handlers
+    // below) the returned Promise resolves only once BOTH the app_config
+    // write and the transformer_load_register write have actually
+    // settled (success or failure), which is what tlBeginSyncLock's
+    // caller needs to know the page can safely be unlocked again.
+    if(typeof getSbUrl!=='function' || typeof sbHeaders!=='function') return Promise.resolve();
     try{ localStorage.setItem(TL_LOCAL_KEY, JSON.stringify(rows)); }catch(e){}
+    // Hold off entirely while entry is in progress anywhere on the page —
+    // either a row's "+ नयाँ मिति/समय थप्नुहोस्" form is open right now, or
+    // we're still inside the grace window after the last open/save (see
+    // _tlEntryInProgress above), which is what keeps back-to-back
+    // row-after-row entry covered as one session instead of leaving a gap
+    // between rows for a sync to slip through. The edit that triggered
+    // this call isn't dropped: it's already in `rows`/localStorage above,
+    // and _tlScheduleDeferredPushCheck below retries on a short interval
+    // and fires the real push once entry has genuinely paused.
+    if(_tlEntryInProgress() && !immediate){
+      _tlPendingPush = true;
+      _tlScheduleDeferredPushCheck();
+      return Promise.resolve();
+    }
     function doPush(){
       var url = getSbUrl()+'/rest/v1/app_config?on_conflict=key';
       if(typeof toast==='function') toast('⏳ Syncing to cloud…');
-      tlPushToRegisterTable();
-      fetch(url, {
+      var registerPromise = tlPushToRegisterTable();
+      var configPromise = fetch(url, {
         method:'POST',
         headers:Object.assign({}, sbHeaders(), {'Prefer':'resolution=merge-duplicates,return=representation'}),
         body: JSON.stringify([{key:TL_CLOUD_KEY, value: JSON.stringify(rows), updated_at:new Date().toISOString()}])
@@ -4144,11 +4356,11 @@ eqCloudPullAndApply();
         // a 2xx with return=minimal was previously reported as "Synced"
         // even in a case where the row did not actually appear in the
         // table, which this change is meant to catch and explain.
-        res.text().then(function(body){
+        return res.text().then(function(body){
           if(!res.ok){
             console.warn('Transformer load cloud push rejected:', res.status, body);
             if(typeof toast==='function') toast('⚠ Cloud sync failed (' + res.status + ') — saved on this device only');
-            return;
+            return {ok:false};
           }
           var savedLen = -1;
           try{
@@ -4164,14 +4376,20 @@ eqCloudPullAndApply();
             console.warn('Transformer load cloud push: response did not confirm the write. Status:', res.status, 'Body:', body);
             if(typeof toast==='function') toast('⚠ Sync unconfirmed (status ' + res.status + ') — see console');
           }
+          return {ok:true, savedLen:savedLen};
         }).catch(function(e){
           console.warn('Transformer load cloud push: could not read response body:', e.message);
           if(typeof toast==='function') toast('⚠ Sync response unreadable — see console');
+          return {ok:false};
         });
       }).catch(function(e){
         console.warn('Transformer load cloud push failed (kept locally, will retry on next edit):', e.message);
         if(typeof toast==='function') toast('⚠ Cloud sync failed — saved on this device only');
+        return {ok:false};
       });
+      // Promise.all (not a race): the lock must hold until the SLOWER of
+      // the two writes finishes, not the faster one.
+      return Promise.all([configPromise, registerPromise]);
     }
     // The one-time initial cloud-seed push (called from
     // tlCloudPullAndApply() when Supabase has no row yet) fires right
@@ -4181,9 +4399,10 @@ eqCloudPullAndApply();
     // cancel the pending seed push and reschedule it, over and over, so
     // the very first cloud copy could be perpetually deferred and never
     // actually sent. Regular edits still debounce normally.
-    if(immediate){ doPush(); return; }
+    if(immediate){ return doPush(); }
     clearTimeout(_tlCloudPushTimer);
     _tlCloudPushTimer = setTimeout(doPush, 800);
+    return Promise.resolve();
   }
 
   // One-time-per-load pull. If Supabase already has a saved copy, it
@@ -4191,21 +4410,48 @@ eqCloudPullAndApply();
   // once fetched). If Supabase has nothing yet, this device's current
   // `rows` (local cache if any, else the hardcoded tl-rows-data seed) is
   // pushed up as the first cloud copy.
+  var _tlHasRenderedOnce = false; // set true after the very first render() call below (page-load path); tells this function whether a plain replace is still safe or whether it must preserve object identity via mergeRowsInPlace instead
   function tlCloudPullAndApply(){
     if(typeof sbFetch!=='function') return;
-    sbFetch('app_config?key=eq.'+TL_CLOUD_KEY+'&select=value').then(function(res){
+    sbFetch('app_config?key=eq.'+TL_CLOUD_KEY+'&select=value,updated_at').then(function(res){
+      // This function can now be called a second (or later) time — from
+      // tlSyncCheck() below, when no confirmed baseline exists yet — not
+      // just once at page load as originally written. If entry started
+      // on this device in the time between that call being issued and
+      // this response arriving, apply the same guard mergeRowsInPlace
+      // uses: don't stomp on an open, unsaved form.
+      if(_tlEntryInProgress()) return;
       var row = res && res[0];
       if(row && row.value){
         var parsed;
         try{ parsed = JSON.parse(row.value); }catch(e){ parsed = null; }
         if(Array.isArray(parsed) && parsed.length){
-          rows = normalizeRows(parsed);
+          if(_tlHasRenderedOnce){
+            // A later catch-up pull (triggered from tlSyncCheck, not the
+            // original page-load call) — rows/closures already exist by
+            // now, so this must preserve object identity the same way
+            // the periodic background sync does, instead of a plain
+            // replace (see the long comment on mergeRowsInPlace's
+            // declaration above for exactly why a plain replace can
+            // silently drop an in-flight edit).
+            mergeRowsInPlace(normalizeRows(parsed));
+          } else {
+            rows = normalizeRows(parsed);
+          }
           try{ localStorage.setItem(TL_LOCAL_KEY, JSON.stringify(rows)); }catch(e){}
           populateFilterOptions();
           render();
+          _tlHasRenderedOnce = true;
           if(typeof toast==='function') toast('☁ Loaded ' + rows.length + ' rows from cloud');
+          _tlLastCloudTimestamp = row.updated_at || '';
         } else {
           if(typeof toast==='function') toast('⚠ Cloud data unreadable — kept local copy');
+          // _tlLastCloudTimestamp is deliberately left at null here (see
+          // its declaration below) — the cloud row exists but couldn't be
+          // read, so this device has NOT actually adopted whatever is
+          // there. Leaving the baseline unset means the next tlSyncCheck
+          // cycle will retry the full pull instead of wrongly treating
+          // "row exists but unreadable" as "already in sync".
         }
       } else {
         if(typeof toast==='function') toast('☁ No cloud data yet — pushing this device\'s copy');
@@ -4214,8 +4460,112 @@ eqCloudPullAndApply();
     }).catch(function(e){
       console.warn('Transformer load cloud pull failed (using local copy):', e.message);
       if(typeof toast==='function') toast('⚠ Cloud check failed: ' + e.message);
+      // _tlLastCloudTimestamp is deliberately left at null here too — see
+      // the long comment on its declaration below. A failed initial pull
+      // (network hiccup, timeout, cold Supabase project, device not yet
+      // approved, etc.) must NOT be treated as "caught up"; this device
+      // is still running on whatever was in localStorage/INITIAL_ROWS,
+      // which could be arbitrarily stale or from a different device
+      // entirely. The next background sync cycle needs to try a REAL
+      // pull, not just quietly start watching for future changes from
+      // this unknown starting point.
     });
   }
+
+
+  // ── Periodic background re-pull ───────────────────────────────────
+  // Previously tlCloudPullAndApply() only ran once, at page load. An
+  // edit made on Device A reached app_config fine (confirmed working),
+  // but Device B — if it was already sitting on this page, or even
+  // after a cache clear that didn't include a full page reload — had no
+  // mechanism to ever ask Supabase again, so it kept showing whatever
+  // was loaded at its own last page load indefinitely. That was the
+  // actual cause of "edits don't sync to another device even after
+  // clearing cache": clearing cache alone doesn't reload the page or
+  // its running JavaScript.
+  //
+  // _tlLastCloudTimestamp lets tlSyncCheck() do a cheap updated_at-only
+  // comparison first (mirroring the existing app_settings 2nd-cycle
+  // pattern above in _syncFromCloudInner) and only re-parse/re-render
+  // the full row set when something has actually changed — so idle
+  // devices aren't repeatedly re-fetching and re-rendering the full
+  // dataset every cycle for no reason.
+  //
+  // IMPORTANT — this stays null (not '') until tlCloudPullAndApply()
+  // has ACTUALLY applied a real cloud row successfully. This used to be
+  // set unconditionally on tlSyncCheck's first call, on the assumption
+  // that "the initial pull already ran at load" — but "ran" and
+  // "succeeded" are different things: a timeout, a momentary network
+  // drop, or the device's Supabase connection still being paused at
+  // that exact moment all make tlCloudPullAndApply() finish without
+  // ever setting this. If tlSyncCheck then adopted the CURRENT remote
+  // timestamp as its baseline anyway, this device would look "in sync"
+  // to itself from that point on — showing whatever stale data it
+  // already had — and would only ever notice a FUTURE change, never the
+  // one it silently missed. That is precisely a "some devices never
+  // catch up" bug: the device isn't stuck forever, it just never
+  // performs the one real catch-up pull it actually needs, because it
+  // wrongly believes it already has one.
+  var _tlLastCloudTimestamp = null;
+  function tlSyncCheck(){
+    if(typeof sbFetch!=='function') return Promise.resolve();
+    // Skip the check entirely while entry is in progress or inside the
+    // post-entry grace window (_tlEntryInProgress — shared with
+    // tlCloudPush's outgoing guard above, covering a whole back-to-back
+    // row-after-row session, not just whichever single row is currently
+    // open). _tlLastCloudTimestamp simply isn't advanced this cycle, so
+    // whatever changed remotely during the pause is picked up in full on
+    // the next check once entry has actually stopped — nothing is missed,
+    // it's only delayed until it's safe to repaint the table.
+    if(_tlEntryInProgress()) return Promise.resolve();
+    return sbFetch('app_config?key=eq.'+TL_CLOUD_KEY+'&select=updated_at').then(function(res){
+      var row = res && res[0];
+      var remoteTs = (row && row.updated_at) || '';
+      if(!remoteTs) return;
+      if(_tlLastCloudTimestamp === null){
+        // No confirmed baseline yet — the initial load-time pull either
+        // hasn't run, or ran and failed/came back unreadable (see the
+        // long comment above). Do a REAL pull now instead of just
+        // recording today's timestamp and hoping this device already
+        // has matching data; call tlCloudPullAndApply() itself so both
+        // paths share one success/failure definition of "caught up".
+        tlCloudPullAndApply();
+        return;
+      }
+      if(remoteTs === _tlLastCloudTimestamp) return; // unchanged — nothing to do
+      _tlLastCloudTimestamp = remoteTs;
+      return sbFetch('app_config?key=eq.'+TL_CLOUD_KEY+'&select=value').then(function(res2){
+        var row2 = res2 && res2[0];
+        if(!row2 || !row2.value) return;
+        var parsed;
+        try{ parsed = JSON.parse(row2.value); }catch(e){ parsed = null; }
+        if(Array.isArray(parsed) && parsed.length){
+          mergeRowsInPlace(normalizeRows(parsed));
+          try{ localStorage.setItem(TL_LOCAL_KEY, JSON.stringify(rows)); }catch(e){}
+          populateFilterOptions();
+          render();
+          // Silent — this runs on every background poll cycle, so a
+          // toast here would fire constantly on a multi-device setup.
+          // The one-time initial load above still shows its toast.
+        }
+      });
+    }).catch(function(e){
+      console.warn('Transformer load background sync check failed:', e.message);
+      // Deliberately NOT touching _tlLastCloudTimestamp here. If it was
+      // already primed (a real success previously happened), one failed
+      // check just means we retry next cycle with the same known-good
+      // baseline — correct as-is. If it was still null, it stays null,
+      // so the "no confirmed baseline yet" branch above keeps retrying
+      // the real pull on every future cycle until one actually succeeds,
+      // rather than this catch silently letting it slip through unset
+      // and unretried.
+    });
+  }
+  // Exposed so the app's existing central polling loop (syncFromCloud,
+  // ~30s cadence alongside app_settings) can reach this module's private
+  // state — this whole block is wrapped in its own IIFE, so nothing
+  // outside it could call tlSyncCheck() without this.
+  window.tlSyncCheck = tlSyncCheck;
 
   // ---------- Date/time normalization ----------
   // Source data has mixed formats: "2083-08-06" (BS, already y-m-d), "2081/8/12" (BS y/m/d),
@@ -4574,8 +4924,18 @@ eqCloudPullAndApply();
         row[ph] = inp.value;
       });
       inp.addEventListener('change', function(){
+        // Deliberately does NOT push to Supabase here. R/Y/B/N is only
+        // synced when सुरक्षित गर्नुहोस् (Save) or बदल्नुहोस् (Replace) is
+        // clicked below — those are the actual commit actions for a
+        // reading. Pushing on every blur while someone is still entering
+        // R, then Y, then B, then N meant a background sync landing in
+        // that exact window (see mergeRowsInPlace's note above) could
+        // interleave with mid-entry data. Waiting for the explicit save
+        // action means there's a single well-defined moment the reading
+        // is complete and ready to sync, instead of every keystroke's
+        // blur being its own sync trigger. row[ph] is still updated
+        // immediately so the value is there when Save is clicked.
         row[ph] = inp.value;
-        tlCloudPush();
       });
       td.appendChild(inp);
       tr.appendChild(td);
@@ -4629,6 +4989,18 @@ eqCloudPullAndApply();
 
       if(select.value === ADD_NEW_VALUE){
         select.classList.add('is-new');
+        // Marks this row as having an unsaved "add new reading" form open
+        // so a background sync landing in this window (see
+        // mergeRowsInPlace below) leaves this row alone instead of
+        // rebuilding its <tr> mid-entry — which would silently reset the
+        // dropdown back to its last saved reading and wipe out whatever
+        // date/time/R/Y/B/N had already been typed but not yet saved.
+        // Cleared below once सुरक्षित गर्नुहोस् (Save) actually commits the
+        // entry, and also if the person switches the dropdown away
+        // without saving (the change listener re-runs renderExtraArea,
+        // landing in the else branch below, which clears it).
+        row._tlEditingNew = true;
+        _tlLastEntryActivity = Date.now(); // opening the form counts as entry activity — starts/extends the shared grace window
         var wrap = document.createElement('div');
         wrap.className = 'new-entry-row';
 
@@ -4675,12 +5047,25 @@ eqCloudPullAndApply();
           };
           row.history.push(newEntry);
           row.date = d; row.time = t;
+          row._tlEditingNew = false; // this row is done, but...
+          _tlLastEntryActivity = Date.now(); // ...saving still counts as entry activity, so the grace window keeps covering the pause before the NEXT row's form opens — that's the gap between rows in a back-to-back entry session, not just inside one row's open form
           populateSelect(historyKey(newEntry));
           renderExtraArea();
           tr.classList.add('row-flash');
           setTimeout(function(){ tr.classList.remove('row-flash'); }, 1200);
           if(histBtn) histBtn.textContent = 'Old Record (' + row.history.length + ')';
-          tlCloudPush();
+          // Lock the whole page the instant Save is clicked, and only
+          // unlock it once this row's R/Y/B/N/date/time have actually
+          // been confirmed written to Supabase (both app_config and
+          // transformer_load_register — see tlCloudPush(true) above,
+          // which now returns a Promise.all of both writes). immediate=
+          // true bypasses the debounce timer so the push starts right
+          // away instead of waiting up to 800ms, matching "as soon as
+          // सुरक्षित गर्नुहोस् is clicked" from the requirement.
+          tlBeginSyncLock('⏳ Syncing to cloud…');
+          tlCloudPush(true).then(function(){
+            tlEndSyncLock();
+          });
         });
 
         wrap.appendChild(newDate);
@@ -4689,6 +5074,7 @@ eqCloudPullAndApply();
         extraArea.appendChild(wrap);
 
       } else {
+        row._tlEditingNew = false; // dropdown moved away from "Add new" without saving
         var h = currentSelectedHistory();
         if(h){
           select.classList.add('is-existing');
@@ -4707,9 +5093,16 @@ eqCloudPullAndApply();
           replaceBtn.addEventListener('click', function(){
             h.R = row.R; h.Y = row.Y; h.B = row.B; h.N = row.N;
             h.savedAt = new Date().toISOString();
+            row._tlEditingNew = false; // entry committed — safe for background sync to touch this row again
             tr.classList.add('row-flash');
             setTimeout(function(){ tr.classList.remove('row-flash'); }, 1200);
-            tlCloudPush();
+            // Same page-lock treatment as सुरक्षित गर्नुहोस् (Save) above —
+            // Replace also commits R/Y/B/N to a record and pushes it, so
+            // it needs the same "no editing until confirmed synced" guard.
+            tlBeginSyncLock('⏳ Syncing to cloud…');
+            tlCloudPush(true).then(function(){
+              tlEndSyncLock();
+            });
           });
           replaceWrap.appendChild(replaceBtn);
           extraArea.appendChild(replaceWrap);
@@ -16237,6 +16630,21 @@ async function _syncFromCloudInner(){
       if(typeof checkRemoteDataPurge==='function') checkRemoteDataPurge(remoteMarker);
     }catch(e){
       console.warn('Purge marker check error:', e.message);
+    }
+    // Same ~10s cadence (2 sync cycles at 5s each) — pick up Transformer
+    // (Load) page edits made on another device. That page previously only pulled from Supabase
+    // once, at its own page load, so a device that was already open (or
+    // even freshly reloaded after a cache clear, since a cache clear
+    // alone re-runs the same one-time pull and would only help if the
+    // OTHER device's edit happened to land before this reload) had no
+    // way to ever see a later edit from elsewhere without a further
+    // manual reload timed after that edit. tlSyncCheck (defined inside
+    // the Transformer Load module's own IIFE, exposed here as
+    // window.tlSyncCheck) does a cheap updated_at check first and only
+    // re-pulls the full dataset when it actually changed.
+    if(typeof window.tlSyncCheck==='function'){
+      try{ await window.tlSyncCheck(); }
+      catch(e){ console.warn('Transformer load sync check error:', e.message); }
     }
   }
 
