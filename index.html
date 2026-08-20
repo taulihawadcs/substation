@@ -1993,6 +1993,17 @@ body.tlr-page-open #page-tlr{
     border-radius:3px;
     cursor:pointer;
   }#page-tlr .use-btn:hover{background:var(--accent-soft);}
+  #page-tlr .del-hist-btn{
+    border:1px solid var(--danger);
+    background:#fff;
+    color:var(--danger);
+    font-size:10.5px;
+    font-weight:700;
+    padding:3px 7px;
+    border-radius:3px;
+    cursor:pointer;
+    margin-left:6px;
+  }#page-tlr .del-hist-btn:hover{background:#fdecea;}
 #page-tlr .add-form-row{margin-bottom:12px;}
 #page-tlr .add-form-row label{
     display:block;
@@ -4196,9 +4207,32 @@ eqCloudPullAndApply();
   // grace window below covers the whole back-to-back entry session, not
   // just whichever single row currently has its form open.
   var _tlLastEntryActivity = 0;
-  var TL_ENTRY_GRACE_MS = 5000; // stay quiet for 5s after the last open/save before resuming sync
+  // Widened from 5000 to 15000 (see also the extra
+  // _tlSyncLockDepth check just below, which is the real fix — this
+  // wider window is a second layer of safety on top of it, per the
+  // request to also increase the Supabase sync timing margin for this
+  // page. On a slow/mobile connection, 5s often wasn't enough time for
+  // a Save's cloud round-trip to actually finish; if the background
+  // sync cycle (tlSyncCheck, ~10s) landed in that gap, it could pull
+  // and re-apply a snapshot from BEFORE the save — silently reverting
+  // the just-entered R/Y/B/N/date/time back to stale/empty values a few
+  // seconds after Save, which is exactly the bug this fixes.
+  var TL_ENTRY_GRACE_MS = 15000;
   function _tlEntryInProgress(){
     if(rows.some(function(r){ return r._tlEditingNew; })) return true;
+    // THE ACTUAL FIX: previously this function only knew about an OPEN
+    // form (_tlEditingNew) and a fixed timestamp window starting at the
+    // moment Save was clicked — it had no idea whether that Save's
+    // network round-trip was still in flight. tlBeginSyncLock/
+    // tlEndSyncLock (used by the Save/Replace button handlers) already
+    // track exactly that via _tlSyncLockDepth, so checking it here means
+    // a background pull can NEVER land while a save this device
+    // initiated hasn't been confirmed yet — regardless of how long the
+    // network actually takes, no fixed timeout to outrun. Once the sync
+    // lock clears (push confirmed, success or failure), this stops
+    // blocking and the timestamp-window check below still applies as
+    // before for the brief pause immediately after.
+    if(typeof _tlSyncLockDepth !== 'undefined' && _tlSyncLockDepth > 0) return true;
     return (Date.now() - _tlLastEntryActivity) < TL_ENTRY_GRACE_MS;
   }
   function _tlScheduleDeferredPushCheck(){
@@ -5337,6 +5371,54 @@ eqCloudPullAndApply();
         render();
       });
       div.appendChild(useBtn);
+      // ── Delete this old reading ──────────────────────────────────
+      // New: lets old/empty/stale/duplicate history entries be removed
+      // permanently from a row, from any device, syncing the deletion
+      // to every other device the same way a normal save does. Doesn't
+      // touch सुरक्षित गर्नुहोस्/बदल्नुहोस्/यो लोड गर्नुहोस् — those keep
+      // working exactly as before; this only adds a way to remove an
+      // entry nobody wants kept.
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'del-hist-btn';
+      delBtn.textContent = '🗑 मेटाउनुहोस्';
+      delBtn.title = 'यो पुरानो रिडिङ स्थायी रूपमा मेटाउनुहोस्';
+      delBtn.addEventListener('click', function(){
+        var ok = confirm('के तपाईं ' + whenText + ' को यो रिडिङ स्थायी रूपमा मेटाउन चाहनुहुन्छ? यो कारबाही फिर्ता गर्न सकिँदैन।');
+        if(!ok) return;
+        var key = historyKey(h);
+        var idx = activeRow.history.findIndex(function(x){ return historyKey(x) === key; });
+        if(idx === -1) return; // already gone (e.g. removed from another device moments ago)
+        activeRow.history.splice(idx, 1);
+        // If the entry just deleted was the one currently shown in the
+        // row's R/Y/B/N cells (matched by the same date/time key the
+        // dropdown itself uses — see historyKey/currentSelectedHistory
+        // above), fall back to the newest remaining entry so the row
+        // never displays values with no corresponding history record
+        // backing them. If history is now empty, clear the cells.
+        if(historyKey({date: activeRow.date, time: activeRow.time}) === key){
+          var newest = activeRow.history[activeRow.history.length - 1];
+          if(newest){
+            activeRow.R = newest.R; activeRow.Y = newest.Y; activeRow.B = newest.B; activeRow.N = newest.N;
+            activeRow.date = newest.date; activeRow.time = newest.time;
+          } else {
+            activeRow.R = ''; activeRow.Y = ''; activeRow.B = ''; activeRow.N = '';
+            activeRow.date = ''; activeRow.time = '';
+          }
+        }
+        activeRow._tr = null; // force the row's <tr> to rebuild with the updated dropdown/cells
+        renderHistoryList(); // refresh the drawer list itself
+        render();
+        // Deletions sync the same way Save/Replace do — immediate push,
+        // page locked until Supabase confirms — so a deletion made on
+        // one device reliably reaches every other device, the same
+        // guarantee that already applies to adding/editing a reading.
+        tlBeginSyncLock('⏳ Syncing deletion to cloud…');
+        tlCloudPush(true).then(function(){
+          tlEndSyncLock();
+        });
+      });
+      div.appendChild(delBtn);
       drawerBody.appendChild(div);
     });
   }
@@ -13315,6 +13397,7 @@ async function applySystemGone(t, stations){
 
   // ── STEP 1: Apply locally IMMEDIATELY (synchronous) so the UI updates
   // before any async/network call.
+  const affectedByStation={}; // st -> feeder names just set to 'system-gone' here — captured for the (x/y) count below, so it doesn't need a second groupAffectedFeeders() pass per station
   targets.forEach(st=>{
     const stFeeders=groupAffectedFeeders(st,'system-gone');
     if(!stFeeders.length) return;
@@ -13326,6 +13409,7 @@ async function applySystemGone(t, stations){
     systemGoneMap[st]={snapshot, time};
     stFeeders.forEach(name=>{ feederStatusMap[name]={status:'system-gone',time}; });
     affected.push(...stFeeders);
+    affectedByStation[st]=stFeeders;
   });
   if(!affected.length){ toast('No feeders configured for the selected substation(s)'); return; }
   renderFeederStatus();   // instant UI update
@@ -13337,9 +13421,26 @@ async function applySystemGone(t, stations){
   const isAll = targets.length===allStations.length && allStations.every(s=>targets.includes(s));
   const eta = ($('outageEta')?.value||'').trim();
   const etaSuffix = eta ? ` (Est. restore: ${eta})` : '';
+  // (x/y) count added for consistency with the Trip/Shutdown alert
+  // headers — see stationOutageCountText's own comment. System Gone can
+  // target several substations in one message (unlike Trip/Shutdown/33KV/
+  // 11KV, which are always exactly one), so a single "(x/y)" doesn't fit
+  // when more than one substation is involved: build one "(x/y)" per
+  // affected substation instead, e.g. "(4/4, 6/6)" for two stations, so
+  // each substation's own total is still visible rather than an
+  // ambiguous combined number. affectedByStation was captured in STEP 1
+  // above (the exact feeder set just marked 'system-gone' per station),
+  // so this reuses that instead of recomputing it.
+  const _sysGoneStations = Object.keys(affectedByStation);
+  const _sysGoneCountTxt = _sysGoneStations.length === 1
+    ? stationOutageCountText(_sysGoneStations[0], affectedByStation[_sysGoneStations[0]])
+    : '(' + _sysGoneStations.map(function(st){
+        var t = stationOutageCountText(st, affectedByStation[st]);
+        return t.slice(1, -1); // strip this station's own ( ) before joining into one combined ( )
+      }).join(', ') + ')';
   const msg = (isAll
-    ? `System Gone at ${time}`
-    : `System of ${targets.join(', ')} Gone at ${time}`) + etaSuffix + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+    ? `System Gone ${_sysGoneCountTxt} at ${time}`
+    : `System of ${targets.join(', ')} Gone ${_sysGoneCountTxt} at ${time}`) + etaSuffix + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   const alreadyCloud = await cloudAlreadyInState(affected, 'system-gone');
   if(alreadyCloud){
     // Another device already sent the outbound notice — don't duplicate the
@@ -13516,7 +13617,20 @@ async function applyKv33Failed(t){
   for(const name of all){ await sbPushOneFeedStatus(name,{status:'kv33',time}); }
 
   const eta33 = ($('outageEta')?.value||'').trim();
-  const msg=`33 KV Incomer of ${st} Failed at ${time}` + (eta33 ? ` (Est. restore: ${eta33})` : '') + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+  // (x/y) count added for consistency with the Trip/Shutdown alert headers
+  // (see stationOutageCountText's own comment above) — x/y will always
+  // read as (total/total) here since 33 KV Incomer Failed trips every
+  // feeder of the substation at once, but showing it keeps this message
+  // format consistent with every other outage alert instead of being the
+  // odd one out, and confirms at a glance that the full feeder count was
+  // actually affected. `all` (every feeder just set to 'kv33' above) is
+  // passed as alsoOutFeeders for the same reason buildTemplate() passes
+  // f.feeders: feederStatusMap was written before this line, so a plain
+  // call without it would already count correctly here — but passing it
+  // explicitly keeps this in lockstep with the same pattern used
+  // everywhere else in case that ordering ever changes.
+  const _kv33CountTxt = stationOutageCountText(st, all);
+  const msg=`33 KV Incomer of ${st} Failed ${_kv33CountTxt} at ${time}` + (eta33 ? ` (Est. restore: ${eta33})` : '') + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   dispatchBulkMsg(msg,'33KV Incomer Failed',st,time);
   toast('⚡ 33 KV Incomer Failed — all feeders of '+st+' tripped. Click "33 KV Incomer Restored" to revert.',3500);
   } finally { delete outageOpLock[st]; }
@@ -13617,7 +13731,11 @@ async function applyIncomerFailed(t){
   for(const name of all){ await sbPushOneFeedStatus(name,{status:'incomer-failed',time}); }
 
   const eta11 = ($('outageEta')?.value||'').trim();
-  const msg=`11 KV Incomer of ${st} Failed at ${time}` + (eta11 ? ` (Est. restore: ${eta11})` : '') + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
+  // Same (x/y) count addition as 33 KV Incomer Failed above — see that
+  // comment for why. `all` = every feeder of this substation, already
+  // set to 'incomer-failed' by the loop just above.
+  const _incFailCountTxt = stationOutageCountText(st, all);
+  const msg=`11 KV Incomer of ${st} Failed ${_incFailCountTxt} at ${time}` + (eta11 ? ` (Est. restore: ${eta11})` : '') + outageSiteNoteSuffix() + `\nअसुविधाका लागि क्षमाप्रार्थी छौं।`;
   if(alreadyCloud){
     // Another device already sent the notice — don't duplicate the message,
     // but this failure genuinely happened on THIS device too and must still
