@@ -330,6 +330,12 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 .ev-live-chip.ev-live-stuck .ev-live-dot{background:var(--red);animation:none}
 .ev-live-chip.ev-live-stuck .ev-live-close{border-color:var(--red);color:var(--red)}
 .ev-live-chip.ev-live-stuck .ev-live-close:hover{background:#fff}
+/* Delete button for a confirmed-stuck outage only (see isStuck check in
+   renderEvLive) — visually distinct (solid red) from ✕ Close so an operator
+   can't mistake "permanently remove this record" for "log its closing". */
+.ev-live-delete{background:var(--red);border:1px solid var(--red);color:#fff;font-size:10.5px;font-weight:700;
+  padding:3px 9px;border-radius:20px;cursor:pointer;font-family:'Archivo',sans-serif;flex:none;margin-left:2px;transition:opacity .15s}
+.ev-live-delete:hover{opacity:.85}
 
 .ev-day{margin-bottom:10px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden;box-shadow:var(--shadow)}
 .ev-day-head{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
@@ -9935,10 +9941,18 @@ function renderEvLive(){
     const closeBtn = (canEdit && !isPending)
       ? `<button class="ev-live-close" onclick="event.stopPropagation();closeStuckOutage(${i})" title="Mark this as resolved — logs a matching Restored/Charged entry so it pairs and closes properly">✕ Close</button>`
       : '';
+    // Delete is only offered once an event is confirmed "stuck" (same
+    // EV_STALE_OPEN_MS threshold as the ⚠ badge/red styling) — a normal,
+    // genuinely-still-open outage stays close-only so it can't be wiped by
+    // mistake. See deleteStuckOutage() below.
+    const deleteBtn = (canEdit && !isPending && isStuck)
+      ? `<button class="ev-live-delete" onclick="event.stopPropagation();deleteStuckOutage(${i})" title="Permanently delete this stuck outage record — no closing entry is logged; removes it locally and from the cloud for every device">🗑 Delete</button>`
+      : '';
     return `<div class="ev-live-chip${isStuck?' ev-live-stuck':''}" title="${esc(EV_TYPE_LABEL[e.type])} since ${esc(hmFromMs(e.startMs))}${isPending?' — saving…':''}${isStuck?' — open unusually long; its Charged/Restored notice was likely never logged':''}">
       <span class="ev-live-dot"></span>
       <span>${isStuck?'⚠ ':''}${EV_TYPE_ICON[e.type]} <b>${esc(e.feeder)}</b> — ${esc(EV_TYPE_LABEL[e.type])} · ${fmtDur(mins)}${isPending?' · ⏳':''}</span>
       ${closeBtn}
+      ${deleteBtn}
     </div>`;
   }).join('');
 }
@@ -10020,6 +10034,51 @@ async function closeStuckOutage(i){
   sbPushOneFeedStatus(e.feeder, feederStatusMap[e.feeder]);
 
   toast('Closing outage…', 2000);
+}
+
+// Permanently delete a stuck live outage instead of closing it — unlike
+// closeStuckOutage() above (which logs a NEW Charged/Restored row so the
+// pair still exists in history), this removes the stuck outage's own start
+// row entirely, locally and from Supabase, so it just disappears from the
+// Live strip with no closing entry left behind. Same delete-cloud-first
+// pattern as deleteEvEntry() (paired-event delete, further below) so a
+// failed/offline delete can never look like it worked. Only reachable for
+// events the UI has already flagged "stuck" (see isStuck/deleteBtn in
+// renderEvLive) — a normal, genuinely-still-open outage has no delete
+// button at all, so it can't be wiped by mistake.
+async function deleteStuckOutage(i){
+  if(typeof monitorMode!=='undefined' && monitorMode){ toast('Monitoring access is view-only'); return; }
+  const e = _evLiveList[i]; if(!e) return;
+  const isStuck = (Date.now()-e.startMs) > EV_STALE_OPEN_MS;
+  if(!isStuck){ toast('Only a stuck (long-open) outage can be deleted — use ✕ Close for one that\'s genuinely still ongoing'); return; }
+
+  if(!confirm(
+    `Permanently delete this stuck outage?\n\n${e.feeder} — ${EV_TYPE_LABEL[e.type]}\nStarted ${hmFromMs(e.startMs)} (${fmtDur(Math.round((Date.now()-e.startMs)/60000))} ago)\n\n`+
+    `This removes the record entirely — locally and from the cloud, for every device. No closing entry is logged.\n\n`+
+    `If this outage actually happened and you just need to record when it ended, use "✕ Close" instead. This cannot be undone.`
+  )) return;
+
+  syncBlockShow('Deleting…');
+  try{
+    const r = e.startRow;
+    // Delete from Supabase FIRST and wait for confirmation — same
+    // ts/station/feeder match as deleteEvEntry() — so the local row is
+    // only removed once the cloud has actually agreed it's gone.
+    if(sbReady() && r && r.ts){
+      let path='message_log?ts=eq.'+encodeURIComponent(r.ts);
+      if(r.station) path+='&station=eq.'+encodeURIComponent(r.station);
+      if(r.feeder)  path+='&feeder=eq.'+encodeURIComponent(r.feeder);
+      await sbFetch(path,'DELETE');   // throws on failure — caught below
+    }
+    const idx = LOG.indexOf(r); if(idx>=0) LOG.splice(idx,1);
+    renderLogPage();
+    toast(sbReady() ? '🗑 Stuck outage deleted (confirmed in Supabase)' : '🗑 Stuck outage deleted (this device — no Supabase configured)');
+  }catch(err){
+    console.warn('Stuck outage delete failed:', err.message);
+    toast('⚠ Delete failed — nothing was removed. Check your connection and try again. ('+err.message+')', 6000);
+  }finally{
+    syncBlockHide();
+  }
 }
 
 function hmFromMs(ms){
